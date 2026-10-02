@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-stop-saved-fava"
+description = "Enables the stop_saved_fava command without any pre-configured scope."
+commands.allow = ["stop_saved_fava"]
+
+[[permission]]
+identifier = "deny-stop-saved-fava"
+description = "Denies the stop_saved_fava command without any pre-configured scope."
+commands.deny = ["stop_saved_fava"]

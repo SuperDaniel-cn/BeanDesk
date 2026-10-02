@@ -1,0 +1,33 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "BeanDesk window. HTTP is limited to http and https; the app only calls the saved Fava origin.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "store:default",
+    "log:default",
+    "updater:default",
+    "process:allow-restart",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://beancount.github.io/*" },
+        { "url": "https://furius.ca/*" }
+      ]
+    },
+    "allow-start-saved-fava",
+    "allow-stop-saved-fava",
+    "allow-fava-status",
+    "allow-fava-installed",
+    "allow-system-locales",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "http://*:*/*" },
+        { "url": "https://*:*/*" }
+      ]
+    }
+  ]
+}
