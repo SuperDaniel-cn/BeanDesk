@@ -4,7 +4,7 @@ A modern financial workbench for Beancount and Fava, built with React 19, TypeSc
 
 The architecture is analogous to MetaCubeXD for Clash or AriaNg for Aria2: Fava serves as the underlying accounting engine, while BeanDesk acts as an independent presentation and workbench layer communicating directly with a local, private, or remote Fava instance without custom backend services or databases.
 
-**English** | [简体中文](./README.zh-CN.md)
+**English** | [简体中文](README.zh-CN.md)
 
 ![BeanDesk Trial Balance Preview](./docs/images/en/trial-balance.png)
 

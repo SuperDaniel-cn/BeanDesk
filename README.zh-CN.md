@@ -4,7 +4,7 @@ Beancount 与 Fava 的现代财务工作台，基于 React 19、TypeScript、Tai
 
 架构类似于 Clash 体系中的 MetaCubeXD 或 Aria2 体系中的 AriaNg：Fava 作为底层财务计算引擎，BeanDesk 作为独立的展现与工作台层，直接与本地、局域网或私有网络中的 Fava 服务通信，不设自建后端与数据库。
 
-[English](./README.md) | **简体中文**
+[English](README.md) | **简体中文**
 
 ![BeanDesk 界面预览](./docs/images/zh/trial-balance.png)
 
