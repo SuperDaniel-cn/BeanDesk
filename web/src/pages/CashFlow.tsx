@@ -1,15 +1,22 @@
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCwIcon, TriangleAlertIcon } from 'lucide-react'
 
+import {
+  ComparePanel,
+  PeriodAmountCells,
+  PeriodColumnHeads,
+  PeriodTotals,
+  PriorUnavailableAlert,
+  StatementTable,
+  amountTone,
+} from '@/components/period-compare'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
@@ -29,6 +36,7 @@ import {
 import { priorPeriod } from '@/lib/ledger-model'
 import { explainFavaError } from '@/lib/fava-error'
 import { displayAccountName } from '@/lib/format'
+import { formatPeriodLabel } from '@/lib/period-label'
 import { useTimeFilter } from '@/lib/time-context'
 import { cn } from '@/lib/utils'
 
@@ -63,106 +71,106 @@ const LINE_LABEL: Record<CashFlowLineId, MessageKey> = {
   dividends: 'cashFlow.lines.dividends',
 }
 
-function TotalLine({
-  label,
-  amount,
-  prior,
-  delta,
-  tone,
-}: {
-  label: string
-  amount: string
-  prior?: string
-  delta?: string
-  tone?: string
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3 pe-4 text-[0.8rem]">
-      <span className="min-w-0 text-muted-foreground">{label}</span>
-      <span className="flex shrink-0 gap-3">
-        <span className={cn('font-medium tabular-nums', tone)}>{amount}</span>
-        {prior != null ? <span className="w-24 text-right font-medium tabular-nums">{prior}</span> : null}
-        {delta != null ? <span className={cn('w-24 text-right font-medium tabular-nums', tone)}>{delta}</span> : null}
-      </span>
-    </div>
-  )
-}
-
 function AmountTable({
   rows,
   comparing,
+  currentLabel,
+  priorLabel,
 }: {
   rows: { key: string; label: string; amount: string; prior?: string; delta?: string }[]
   comparing: boolean
+  currentLabel: string
+  priorLabel: string
 }) {
   const { t } = useI18n()
   if (rows.length === 0) return null
 
   return (
-    <div className="overflow-x-auto rounded-lg border bg-card [&_td:last-child]:pe-4 [&_th:last-child]:pe-4">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t('cashFlow.item')}</TableHead>
-            <TableHead className="w-28 text-right">
-              {comparing ? t('compare.current') : t('cashFlow.amount')}
-            </TableHead>
-            {comparing ? (
-              <>
-                <TableHead className="w-28 text-right">{t('compare.prior')}</TableHead>
-                <TableHead className="w-28 text-right">{t('compare.delta')}</TableHead>
-              </>
-            ) : null}
+    <StatementTable comparing={comparing}>
+      <TableHeader>
+        <PeriodColumnHeads
+          first={t('cashFlow.item')}
+          amountLabel={t('cashFlow.amount')}
+          currentLabel={currentLabel}
+          priorLabel={priorLabel}
+          comparing={comparing}
+        />
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow key={row.key}>
+            <TableCell className="min-w-0 whitespace-normal break-words">{row.label}</TableCell>
+            <PeriodAmountCells
+              current={row.amount}
+              prior={row.prior}
+              delta={row.delta}
+              comparing={comparing}
+            />
           </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.key}>
-              <TableCell className="whitespace-normal">{row.label}</TableCell>
-              <TableCell className="text-right whitespace-nowrap tabular-nums">{row.amount}</TableCell>
-              {comparing ? (
-                <>
-                  <TableCell className="text-right whitespace-nowrap tabular-nums">{row.prior}</TableCell>
-                  <TableCell className="text-right whitespace-nowrap tabular-nums">{row.delta}</TableCell>
-                </>
-              ) : null}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+        ))}
+      </TableBody>
+    </StatementTable>
   )
 }
 
 function Statement({
   data,
   comparison,
+  currentLabel,
+  priorLabel,
 }: {
   data: CashFlowStatement
   comparison: CashFlowComparison | null
+  currentLabel: string
+  priorLabel: string
 }) {
   const { t, formatCurrency, formatSignedCurrency } = useI18n()
   const currency = data.operating_currency
-  const net = comparison ? comparison.net : { current: data.net, prior: 0 }
-  const netTone = net.current > 0 ? 'text-positive' : net.current < 0 ? 'text-destructive' : undefined
-  const unassigned = comparison
-    ? comparison.unassigned
-    : data.unassigned.map((row) => ({ account: row.account, current: row.amount, prior: 0 }))
-  const unassignedTotal = comparison
-    ? comparison.unassignedTotal
-    : { current: data.unassignedTotal, prior: 0 }
+  const comparing = comparison != null
+  const unassignedRows = comparison
+    ? comparison.unassigned.map((row) => ({
+        key: row.account,
+        label: displayAccountName(row.account),
+        amount: formatSignedCurrency(row.current, currency),
+        prior: formatSignedCurrency(row.prior, currency),
+        delta: formatSignedCurrency(row.current - row.prior, currency),
+      }))
+    : data.unassigned.map((row) => ({
+        key: row.account,
+        label: displayAccountName(row.account),
+        amount: formatSignedCurrency(row.amount, currency),
+      }))
+  const netCurrent = comparison ? comparison.net.current : data.net
+  const unassignedCurrent = comparison ? comparison.unassignedTotal.current : data.unassignedTotal
+  const netTotals = (
+    <ComparePanel>
+      <PeriodTotals
+        label={t('cashFlow.netIncrease')}
+        current={formatSignedCurrency(netCurrent, currency)}
+        prior={comparison ? formatSignedCurrency(comparison.net.prior, currency) : undefined}
+        delta={comparison
+          ? formatSignedCurrency(netCurrent - comparison.net.prior, currency)
+          : undefined}
+        tone={amountTone(netCurrent)}
+      />
+    </ComparePanel>
+  )
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
+      <div className={cn('grid grid-cols-1 items-start gap-6', !comparing && 'lg:grid-cols-3')}>
         {CASH_FLOW_SECTIONS.map((section) => {
-          const sectionAmounts = comparison
-            ? comparison.sections[section]
-            : { current: data.sections[section], prior: 0 }
           const rows = linesIn(section).flatMap((line) => {
-            const amounts = comparison
-              ? comparison.lines[line.id]
-              : { current: data.lines[line.id], prior: 0 }
+            if (!comparison) {
+              const current = presentedLineAmount(line.id, data.lines[line.id])
+              if (current === 0) return []
+              return [{
+                key: line.id,
+                label: t(LINE_LABEL[line.id]),
+                amount: formatCurrency(current, currency),
+              }]
+            }
+            const amounts = comparison.lines[line.id]
             if (amounts.current === 0 && amounts.prior === 0) return []
             const current = presentedLineAmount(line.id, amounts.current)
             const prior = presentedLineAmount(line.id, amounts.prior)
@@ -174,54 +182,59 @@ function Statement({
               delta: formatSignedCurrency(current - prior, currency),
             }]
           })
+          const compared = comparison?.sections[section]
+          const currentNet = compared ? compared.current : data.sections[section]
           return (
             <section key={section} className="flex min-w-0 flex-col gap-2">
               <h2 className="text-[0.8rem] font-medium">{t(SECTION_TITLE[section])}</h2>
-              <AmountTable rows={rows} comparing={comparison != null} />
-              <TotalLine
-                label={t(SECTION_NET[section])}
-                amount={formatSignedCurrency(sectionAmounts.current, currency)}
-                prior={comparison ? formatSignedCurrency(sectionAmounts.prior, currency) : undefined}
-                delta={comparison ? formatSignedCurrency(sectionAmounts.current - sectionAmounts.prior, currency) : undefined}
-              />
+              <ComparePanel>
+                <AmountTable
+                  rows={rows}
+                  comparing={comparing}
+                  currentLabel={currentLabel}
+                  priorLabel={priorLabel}
+                />
+                <PeriodTotals
+                  label={t(SECTION_NET[section])}
+                  current={formatSignedCurrency(currentNet, currency)}
+                  prior={compared ? formatSignedCurrency(compared.prior, currency) : undefined}
+                  delta={compared
+                    ? formatSignedCurrency(currentNet - compared.prior, currency)
+                    : undefined}
+                />
+              </ComparePanel>
             </section>
           )
         })}
       </div>
 
-      {unassigned.length > 0 ? (
+      {unassignedRows.length > 0 ? (
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-[0.8rem] font-medium">{t('cashFlow.unassigned')}</h2>
-          <AmountTable
-            comparing={comparison != null}
-            rows={unassigned.map((row) => ({
-              key: row.account,
-              label: displayAccountName(row.account),
-              amount: formatSignedCurrency(row.current, currency),
-              prior: formatSignedCurrency(row.prior, currency),
-              delta: formatSignedCurrency(row.current - row.prior, currency),
-            }))}
-          />
-          <TotalLine
-            label={t('cashFlow.unassigned')}
-            amount={formatSignedCurrency(unassignedTotal.current, currency)}
-            prior={comparison ? formatSignedCurrency(unassignedTotal.prior, currency) : undefined}
-            delta={comparison ? formatSignedCurrency(unassignedTotal.current - unassignedTotal.prior, currency) : undefined}
-          />
+          <ComparePanel>
+            <AmountTable
+              comparing={comparing}
+              currentLabel={currentLabel}
+              priorLabel={priorLabel}
+              rows={unassignedRows}
+            />
+            <PeriodTotals
+              label={t('cashFlow.unassigned')}
+              current={formatSignedCurrency(unassignedCurrent, currency)}
+              prior={comparison ? formatSignedCurrency(comparison.unassignedTotal.prior, currency) : undefined}
+              delta={comparison
+                ? formatSignedCurrency(unassignedCurrent - comparison.unassignedTotal.prior, currency)
+                : undefined}
+            />
+          </ComparePanel>
         </section>
       ) : null}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 lg:gap-6">
-        <div className="lg:col-start-3">
-          <TotalLine
-            label={t('cashFlow.netIncrease')}
-            amount={formatSignedCurrency(net.current, currency)}
-            prior={comparison ? formatSignedCurrency(net.prior, currency) : undefined}
-            delta={comparison ? formatSignedCurrency(net.current - net.prior, currency) : undefined}
-            tone={netTone}
-          />
+      {comparing ? netTotals : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 lg:gap-6">
+          <div className="lg:col-start-3">{netTotals}</div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -241,23 +254,16 @@ export function CashFlow() {
     enabled: priorKey != null,
   })
 
-  if (query.isError || (priorKey != null && priorQuery.isError)) {
-    const error = query.isError ? query.error : priorQuery.error
+  if (query.isError) {
     return (
       <Alert variant="destructive">
         <TriangleAlertIcon />
         <AlertTitle>{t('cashFlow.errorTitle')}</AlertTitle>
         <AlertDescription>
-          {explainFavaError(error, t)}
+          {explainFavaError(query.error, t)}
         </AlertDescription>
         <AlertAction>
-          <Button
-            variant="outline"
-            onClick={() => {
-              void query.refetch()
-              if (priorKey) void priorQuery.refetch()
-            }}
-          >
+          <Button variant="outline" onClick={() => void query.refetch()}>
             {t('common.retry')}
           </Button>
         </AlertAction>
@@ -270,6 +276,7 @@ export function CashFlow() {
   }
 
   const data = query.data
+  const priorFailed = priorKey != null && priorQuery.isError
   const comparison = priorKey != null && priorQuery.data ? compareCashFlow(data, priorQuery.data) : null
   const fetching = query.isFetching || priorQuery.isFetching
 
@@ -301,6 +308,10 @@ export function CashFlow() {
         </Button>
       </div>
 
+      {priorFailed ? (
+        <PriorUnavailableAlert onRetry={() => void priorQuery.refetch()} />
+      ) : null}
+
       {data.unconverted_currencies.length > 0 ? (
         <Alert variant="warning">
           <TriangleAlertIcon />
@@ -314,7 +325,12 @@ export function CashFlow() {
         </Alert>
       ) : null}
 
-      <Statement data={data} comparison={comparison} />
+      <Statement
+        data={data}
+        comparison={comparison}
+        currentLabel={formatPeriodLabel(timeFilter, t)}
+        priorLabel={priorKey ? formatPeriodLabel(priorKey, t) : ''}
+      />
     </div>
   )
 }

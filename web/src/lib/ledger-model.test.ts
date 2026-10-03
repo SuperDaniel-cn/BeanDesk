@@ -7,6 +7,7 @@ import {
   buildIncomeStatement,
   buildTrialBalance,
   compareAccounts,
+  periodParts,
   priorPeriod,
   type AccountNode,
   readInventory,
@@ -303,6 +304,20 @@ describe('buildTrialBalance', () => {
 function account(account: string, total: number, children: AccountNode[] = []): AccountNode {
   return { name: account, account, total, children, label_key: null }
 }
+
+describe('periodParts', () => {
+  test('reads a year, quarter, and month', () => {
+    expect(periodParts('2026')).toEqual({ kind: 'year', year: '2026' })
+    expect(periodParts('2026-Q2')).toEqual({ kind: 'quarter', year: '2026', quarter: '2' })
+    expect(periodParts('2026-03')).toEqual({ kind: 'month', year: '2026', month: '03' })
+  })
+
+  test('rejects all-time and an unknown filter', () => {
+    expect(periodParts('')).toBeNull()
+    expect(periodParts('2026-Q5')).toBeNull()
+    expect(periodParts('2026-13')).toBeNull()
+  })
+})
 
 describe('priorPeriod', () => {
   test('steps a year, quarter, and month back to the same period last year', () => {

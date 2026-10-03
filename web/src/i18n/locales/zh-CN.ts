@@ -32,9 +32,9 @@ export const zhCN = {
   },
 
   compare: {
-    current: '本期',
-    prior: '去年同期',
     delta: '差额',
+    priorUnavailableTitle: '去年同期没有加载成功',
+    priorUnavailable: '本期数字仍在。',
   },
 
   time: {
@@ -42,6 +42,9 @@ export const zhCN = {
     year: '年度',
     quarter: '季度',
     month: '月份',
+    periodYear: '{year}年',
+    periodQuarter: '{year}年{quarter}季',
+    periodMonth: '{year}年{month}月',
     filterLabel: '期间',
     yearAndQuarter: '年度和季度',
     selectPeriod: '选择期间',

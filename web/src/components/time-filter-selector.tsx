@@ -14,20 +14,12 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useTimeFilter } from '@/lib/time-context'
 import { useI18n } from '@/i18n'
+import { formatPeriodLabel } from '@/lib/period-label'
 import { cn } from '@/lib/utils'
 
 export function TimeFilterSelector({ className }: { className?: string }) {
   const { timeFilter, setTimeFilter, availableYears, clearFilter, isAllTime } = useTimeFilter()
   const { t } = useI18n()
-
-  const formatFilterDisplay = (val: string) => {
-    if (!val) return t('time.allTime')
-    if (val.includes('-Q')) {
-      const [y, q] = val.split('-')
-      return `${y} ${q}`
-    }
-    return val
-  }
 
   return (
     <div className={cn('flex items-center gap-1', className)}>
@@ -38,7 +30,7 @@ export function TimeFilterSelector({ className }: { className?: string }) {
           >
             <Calendar className="hidden text-muted-foreground sm:block" data-icon="inline-start" />
             <span className="max-w-[100px] truncate sm:max-w-none">
-              {formatFilterDisplay(timeFilter)}
+              {formatPeriodLabel(timeFilter, t)}
             </span>
             <ChevronDown className="hidden text-muted-foreground opacity-70 sm:block" data-icon="inline-end" />
           </Button>
@@ -74,7 +66,7 @@ export function TimeFilterSelector({ className }: { className?: string }) {
                       <span>
                         {year} ({t('time.year')})
                       </span>
-                      {timeFilter === year && <Check />}
+                      {timeFilter === year ? <Check /> : null}
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
 
@@ -85,10 +77,8 @@ export function TimeFilterSelector({ className }: { className?: string }) {
                       const val = `${year}-${q}`
                       return (
                         <DropdownMenuItem key={val} onClick={() => setTimeFilter(val)}>
-                          <span>
-                            {year} {q}
-                          </span>
-                          {timeFilter === val && <Check />}
+                          <span>{formatPeriodLabel(val, t)}</span>
+                          {timeFilter === val ? <Check /> : null}
                         </DropdownMenuItem>
                       )
                     })}

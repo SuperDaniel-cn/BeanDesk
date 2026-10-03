@@ -1,8 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 import { ChevronRightIcon, ExternalLinkIcon, RefreshCwIcon, TriangleAlertIcon } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 
+import {
+  ComparePanel,
+  PeriodAmountCells,
+  PeriodColumnHeads,
+  PeriodTotals,
+  PriorUnavailableAlert,
+  StatementTable,
+  amountTone,
+} from '@/components/period-compare'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,10 +22,8 @@ import {
 } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
@@ -30,6 +37,7 @@ import {
 import { compareAccounts, priorPeriod, type ComparedAccount } from '@/lib/ledger-model'
 import { explainFavaError } from '@/lib/fava-error'
 import { displayAccountName, toDisplay } from '@/lib/format'
+import { formatPeriodLabel } from '@/lib/period-label'
 import { cn } from '@/lib/utils'
 
 type FlowSection = IncomeStatementSection['section']
@@ -39,9 +47,8 @@ function present(section: FlowSection, raw: number): number {
   return section === 'income' ? toDisplay(raw) : raw
 }
 
-function includeNode(section: FlowSection, node: ComparedAccount, comparing: boolean): boolean {
-  if (present(section, node.current) !== 0) return true
-  return comparing && present(section, node.prior) !== 0
+function includeNode(section: FlowSection, node: ComparedAccount): boolean {
+  return present(section, node.current) !== 0 || present(section, node.prior) !== 0
 }
 
 interface AccountLine {
@@ -59,29 +66,28 @@ function flatten(
   nodes: ComparedAccount[],
   expanded: Set<string>,
   section: FlowSection,
-  comparing: boolean,
   depth = 0,
 ): AccountLine[] {
   const rows: AccountLine[] = []
   for (const node of nodes) {
-    if (!includeNode(section, node, comparing)) continue
+    if (!includeNode(section, node)) continue
     const expandedNode = expanded.has(node.account)
-    const childRows = expandedNode ? flatten(node.children, expanded, section, comparing, depth + 1) : []
+    const childRows = expandedNode ? flatten(node.children, expanded, section, depth + 1) : []
     const hasChildren = expandedNode
       ? childRows.length > 0
-      : node.children.some((child) => includeNode(section, child, comparing))
+      : node.children.some((child) => includeNode(section, child))
     rows.push({ node, depth, open: hasChildren && expandedNode, hasChildren })
     if (hasChildren && expandedNode) rows.push(...childRows)
   }
   return rows
 }
 
-function defaultExpanded(nodes: ComparedAccount[], section: FlowSection, comparing: boolean): Set<string> {
+function defaultExpanded(nodes: ComparedAccount[], section: FlowSection): Set<string> {
   const open = new Set<string>()
   const walk = (children: ComparedAccount[]): boolean => {
     let shown = false
     for (const node of children) {
-      if (!includeNode(section, node, comparing)) continue
+      if (!includeNode(section, node)) continue
       shown = true
       if (walk(node.children)) open.add(node.account)
     }
@@ -111,9 +117,9 @@ function LineRow({
 
   return (
     <TableRow>
-      <TableCell className="whitespace-normal">
+      <TableCell>
         <span
-          className="flex min-w-0 items-center gap-1"
+          className="flex items-center gap-1"
           style={{ paddingInlineStart: `${line.depth * 1.25}rem` }}
         >
           {line.hasChildren ? (
@@ -132,8 +138,8 @@ function LineRow({
           ) : (
             <span className="size-6 shrink-0" aria-hidden />
           )}
-          <span className={cn('flex min-w-0 items-center gap-1.5', line.hasChildren && 'font-medium')}>
-            <span className="min-w-0 break-words">{title}</span>
+          <span className={cn('flex items-center gap-1.5', line.hasChildren && 'font-medium')}>
+            <span>{title}</span>
             <Button variant="ghost" size="icon-xs" asChild>
               <Link
                 to={`/journal?account=${encodeURIComponent(line.node.account)}`}
@@ -145,45 +151,13 @@ function LineRow({
           </span>
         </span>
       </TableCell>
-      <TableCell className="w-28 text-right tabular-nums whitespace-nowrap">
-        {formatCurrency(current, currency)}
-      </TableCell>
-      {comparing ? (
-        <>
-          <TableCell className="w-28 text-right tabular-nums whitespace-nowrap">
-            {formatCurrency(prior, currency)}
-          </TableCell>
-          <TableCell className="w-28 text-right tabular-nums whitespace-nowrap">
-            {formatSignedCurrency(current - prior, currency)}
-          </TableCell>
-        </>
-      ) : null}
+      <PeriodAmountCells
+        current={formatCurrency(current, currency)}
+        prior={comparing ? formatCurrency(prior, currency) : undefined}
+        delta={comparing ? formatSignedCurrency(current - prior, currency) : undefined}
+        comparing={comparing}
+      />
     </TableRow>
-  )
-}
-
-function TotalLine({
-  label,
-  amount,
-  prior,
-  delta,
-  tone,
-}: {
-  label: string
-  amount: string
-  prior?: string
-  delta?: string
-  tone?: string
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 pe-4 text-[0.8rem]">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="flex shrink-0 gap-4">
-        <span className={cn('font-medium tabular-nums', tone)}>{amount}</span>
-        {prior != null ? <span className="w-28 text-right font-medium tabular-nums">{prior}</span> : null}
-        {delta != null ? <span className={cn('w-28 text-right font-medium tabular-nums', tone)}>{delta}</span> : null}
-      </span>
-    </div>
   )
 }
 
@@ -193,44 +167,45 @@ function AccountSection({
   lines,
   currency,
   comparing,
+  currentLabel,
+  priorLabel,
   onToggle,
   totalLabel,
   total,
   priorTotal,
   delta,
+  children,
 }: {
   title: string
   section: FlowSection
   lines: AccountLine[]
   currency: string
   comparing: boolean
+  currentLabel: string
+  priorLabel: string
   onToggle: (account: string) => void
   totalLabel: string
   total: string
   priorTotal?: string
   delta?: string
+  children?: ReactNode
 }) {
   const { t } = useI18n()
 
   return (
     <section className="flex min-w-0 flex-col gap-2">
       <h2 className="text-[0.8rem] font-medium">{title}</h2>
-      {lines.length > 0 ? (
-        <div className="overflow-x-auto rounded-lg border bg-card [&_td:last-child]:pe-4 [&_th:last-child]:pe-4">
-          <Table>
+      <ComparePanel>
+        {lines.length > 0 ? (
+          <StatementTable comparing={comparing}>
             <TableHeader>
-              <TableRow>
-                <TableHead>{t('balanceSheet.account')}</TableHead>
-                <TableHead className="w-28 text-right">
-                  {comparing ? t('compare.current') : t('balanceSheet.amount')}
-                </TableHead>
-                {comparing ? (
-                  <>
-                    <TableHead className="w-28 text-right">{t('compare.prior')}</TableHead>
-                    <TableHead className="w-28 text-right">{t('compare.delta')}</TableHead>
-                  </>
-                ) : null}
-              </TableRow>
+              <PeriodColumnHeads
+                first={t('balanceSheet.account')}
+                amountLabel={t('balanceSheet.amount')}
+                currentLabel={currentLabel}
+                priorLabel={priorLabel}
+                comparing={comparing}
+              />
             </TableHeader>
             <TableBody>
               {lines.map((line) => (
@@ -244,10 +219,16 @@ function AccountSection({
                 />
               ))}
             </TableBody>
-          </Table>
-        </div>
-      ) : null}
-      <TotalLine label={totalLabel} amount={total} prior={priorTotal} delta={delta} />
+          </StatementTable>
+        ) : null}
+        <PeriodTotals
+          label={totalLabel}
+          current={total}
+          prior={priorTotal}
+          delta={delta}
+        />
+        {children}
+      </ComparePanel>
     </section>
   )
 }
@@ -271,18 +252,22 @@ function flowView(data: IncomeStatementData, prior: IncomeStatementData | null, 
 function Statement({
   currency,
   comparing,
+  currentLabel,
+  priorLabel,
   income,
   expenses,
 }: {
   currency: string
   comparing: boolean
+  currentLabel: string
+  priorLabel: string
   income: FlowView
   expenses: FlowView
 }) {
   const { t, formatCurrency, formatSignedCurrency } = useI18n()
   const [expanded, setExpanded] = useState<Set<string>>(() => {
-    const open = defaultExpanded(income.nodes, 'income', comparing)
-    for (const account of defaultExpanded(expenses.nodes, 'expenses', comparing)) open.add(account)
+    const open = defaultExpanded(income.nodes, 'income')
+    for (const account of defaultExpanded(expenses.nodes, 'expenses')) open.add(account)
     return open
   })
   const revenue = present('income', income.current)
@@ -293,12 +278,12 @@ function Statement({
   const priorProfit = priorRevenue - priorExpenseTotal
 
   const incomeLines = useMemo(
-    () => flatten(income.nodes, expanded, 'income', comparing),
-    [income.nodes, expanded, comparing],
+    () => flatten(income.nodes, expanded, 'income'),
+    [income.nodes, expanded],
   )
   const expenseLines = useMemo(
-    () => flatten(expenses.nodes, expanded, 'expenses', comparing),
-    [expenses.nodes, expanded, comparing],
+    () => flatten(expenses.nodes, expanded, 'expenses'),
+    [expenses.nodes, expanded],
   )
 
   function toggle(account: string) {
@@ -310,44 +295,44 @@ function Statement({
     })
   }
 
-  const profitTone =
-    profit > 0 ? 'text-positive' : profit < 0 ? 'text-destructive' : undefined
-
   return (
-    <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2">
+    <div className={cn('grid grid-cols-1 items-start gap-6', !comparing && 'md:grid-cols-2')}>
       <AccountSection
         title={t('income.revenueTitle')}
         section="income"
         lines={incomeLines}
         currency={currency}
         comparing={comparing}
+        currentLabel={currentLabel}
+        priorLabel={priorLabel}
         onToggle={toggle}
         totalLabel={t('income.totalRevenue')}
         total={formatCurrency(revenue, currency)}
         priorTotal={comparing ? formatCurrency(priorRevenue, currency) : undefined}
         delta={comparing ? formatSignedCurrency(revenue - priorRevenue, currency) : undefined}
       />
-      <div className="flex min-w-0 flex-col gap-2">
-        <AccountSection
-          title={t('income.expensesTitle')}
-          section="expenses"
-          lines={expenseLines}
-          currency={currency}
-          comparing={comparing}
-          onToggle={toggle}
-          totalLabel={t('income.totalExpenses')}
-          total={formatCurrency(expenseTotal, currency)}
-          priorTotal={comparing ? formatCurrency(priorExpenseTotal, currency) : undefined}
-          delta={comparing ? formatSignedCurrency(expenseTotal - priorExpenseTotal, currency) : undefined}
-        />
-        <TotalLine
+      <AccountSection
+        title={t('income.expensesTitle')}
+        section="expenses"
+        lines={expenseLines}
+        currency={currency}
+        comparing={comparing}
+        currentLabel={currentLabel}
+        priorLabel={priorLabel}
+        onToggle={toggle}
+        totalLabel={t('income.totalExpenses')}
+        total={formatCurrency(expenseTotal, currency)}
+        priorTotal={comparing ? formatCurrency(priorExpenseTotal, currency) : undefined}
+        delta={comparing ? formatSignedCurrency(expenseTotal - priorExpenseTotal, currency) : undefined}
+      >
+        <PeriodTotals
           label={t('income.profitTitle')}
-          amount={formatSignedCurrency(profit, currency)}
+          current={formatSignedCurrency(profit, currency)}
           prior={comparing ? formatSignedCurrency(priorProfit, currency) : undefined}
           delta={comparing ? formatSignedCurrency(profit - priorProfit, currency) : undefined}
-          tone={profitTone}
+          tone={amountTone(profit)}
         />
-      </div>
+      </AccountSection>
     </div>
   )
 }
@@ -367,23 +352,16 @@ export function IncomeStatement() {
     enabled: priorKey != null,
   })
 
-  if (query.isError || (priorKey != null && priorQuery.isError)) {
-    const error = query.isError ? query.error : priorQuery.error
+  if (query.isError) {
     return (
       <Alert variant="destructive">
         <TriangleAlertIcon />
         <AlertTitle>{t('income.errorTitle')}</AlertTitle>
         <AlertDescription>
-          {explainFavaError(error, t)}
+          {explainFavaError(query.error, t)}
         </AlertDescription>
         <AlertAction>
-          <Button
-            variant="outline"
-            onClick={() => {
-              void query.refetch()
-              if (priorKey) void priorQuery.refetch()
-            }}
-          >
+          <Button variant="outline" onClick={() => void query.refetch()}>
             {t('common.retry')}
           </Button>
         </AlertAction>
@@ -396,13 +374,14 @@ export function IncomeStatement() {
   }
 
   const data = query.data
-  const prior = priorKey != null ? (priorQuery.data ?? null) : null
+  const priorFailed = priorKey != null && priorQuery.isError
+  const prior = priorKey != null && priorQuery.data ? priorQuery.data : null
   const income = flowView(data, prior, 'income')
   const expenses = flowView(data, prior, 'expenses')
   const comparing = prior != null
   const active =
-    income.nodes.some((node) => includeNode('income', node, comparing)) ||
-    expenses.nodes.some((node) => includeNode('expenses', node, comparing))
+    income.nodes.some((node) => includeNode('income', node)) ||
+    expenses.nodes.some((node) => includeNode('expenses', node))
   const fetching = query.isFetching || priorQuery.isFetching
 
   return (
@@ -433,11 +412,17 @@ export function IncomeStatement() {
         </Button>
       </div>
 
+      {priorFailed ? (
+        <PriorUnavailableAlert onRetry={() => void priorQuery.refetch()} />
+      ) : null}
+
       {active ? (
         <Statement
-          key={`${timeFilter}:${priorKey ?? ''}`}
+          key={`${timeFilter}:${comparing ? 'y' : 'n'}`}
           currency={data.operating_currency}
           comparing={comparing}
+          currentLabel={formatPeriodLabel(timeFilter, t)}
+          priorLabel={priorKey ? formatPeriodLabel(priorKey, t) : ''}
           income={income}
           expenses={expenses}
         />

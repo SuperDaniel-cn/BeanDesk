@@ -421,22 +421,37 @@ export function buildTrialBalance(input: {
   }
 }
 
+export type PeriodParts =
+  | { kind: 'year'; year: string }
+  | { kind: 'quarter'; year: string; quarter: string }
+  | { kind: 'month'; year: string; month: string }
+
+/** Year, quarter, or month token. All-time and anything else are `null`. */
+export function periodParts(time: string): PeriodParts | null {
+  const year = /^(\d{4})$/.exec(time)
+  if (year) return { kind: 'year', year: year[1] }
+  const quarter = /^(\d{4})-Q([1-4])$/.exec(time)
+  if (quarter) return { kind: 'quarter', year: quarter[1], quarter: quarter[2] }
+  const month = /^(\d{4})-(\d{2})$/.exec(time)
+  if (month) {
+    const value = Number(month[2])
+    if (value < 1 || value > 12) return null
+    return { kind: 'month', year: month[1], month: month[2] }
+  }
+  return null
+}
+
 /**
  * Same period last year. `2026` → `2025`, `2026-Q2` → `2025-Q2`, `2026-03` → `2025-03`.
  * All-time and anything else have no prior column.
  */
 export function priorPeriod(time: string): string | null {
-  const year = /^(\d{4})$/.exec(time)
-  if (year) return String(Number(year[1]) - 1)
-  const quarter = /^(\d{4})-Q([1-4])$/.exec(time)
-  if (quarter) return `${Number(quarter[1]) - 1}-Q${quarter[2]}`
-  const month = /^(\d{4})-(\d{2})$/.exec(time)
-  if (month) {
-    const value = Number(month[2])
-    if (value < 1 || value > 12) return null
-    return `${Number(month[1]) - 1}-${month[2]}`
-  }
-  return null
+  const parts = periodParts(time)
+  if (!parts) return null
+  const year = String(Number(parts.year) - 1)
+  if (parts.kind === 'year') return year
+  if (parts.kind === 'quarter') return `${year}-Q${parts.quarter}`
+  return `${year}-${parts.month}`
 }
 
 export interface ComparedAccount {

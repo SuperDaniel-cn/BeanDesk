@@ -28,9 +28,9 @@ export const en = {
   },
 
   compare: {
-    current: 'This period',
-    prior: 'Same period last year',
     delta: 'Change',
+    priorUnavailableTitle: 'Last year could not be loaded',
+    priorUnavailable: 'This period is still shown.',
   },
 
   time: {
@@ -38,6 +38,9 @@ export const en = {
     year: 'Year',
     quarter: 'Quarter',
     month: 'Month',
+    periodYear: '{year}',
+    periodQuarter: '{year} Q{quarter}',
+    periodMonth: '{year}-{month}',
     filterLabel: 'Period',
     yearAndQuarter: 'Year and quarter',
     selectPeriod: 'Select period',
