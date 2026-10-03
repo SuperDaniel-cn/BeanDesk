@@ -1,16 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router'
-import {
-  Banknote,
-  BookOpen,
-  FileSpreadsheet,
-  Landmark,
-  Menu,
-  Scale,
-  Settings,
-  Terminal,
-} from 'lucide-react'
+import { Menu, Settings } from 'lucide-react'
 
+import { REPORT_PAGES } from '@/app-pages'
 import { BrandMark } from '@/components/brand-mark'
 import { LedgerErrors } from '@/components/ledger-errors'
 import { TimeFilterSelector } from '@/components/time-filter-selector'
@@ -25,22 +17,6 @@ import {
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
-const LINKS = [
-  { to: '/', key: 'trialBalance.title', icon: Scale },
-  { to: '/balance-sheet', key: 'balanceSheet.title', icon: Landmark },
-  { to: '/income-statement', key: 'income.title', icon: FileSpreadsheet },
-  { to: '/cash-flow', key: 'cashFlow.title', icon: Banknote },
-  { to: '/journal', key: 'journal.title', icon: BookOpen },
-  { to: '/query', key: 'query.title', icon: Terminal },
-] as const
-
-function currentModule(pathname: string) {
-  return (
-    LINKS.find((link) => (link.to === '/' ? pathname === '/' : pathname.startsWith(link.to))) ??
-    LINKS[0]
-  )
-}
-
 function useDocumentTitle(title: string) {
   useEffect(() => {
     document.title = title
@@ -51,10 +27,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useI18n()
   const { pathname } = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const current = currentModule(pathname)
-  const pageKey = pathname === '/settings' ? 'settings.title' : current.key
+  const pageKey =
+    REPORT_PAGES.find((page) => page.path === pathname)?.key
+    ?? (pathname === '/settings' ? 'settings.title' : REPORT_PAGES[0].key)
   const brand = t('brand.short')
   useDocumentTitle(`${t(pageKey)} - ${brand}`)
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
 
   return (
     <div className="min-h-svh bg-background">
@@ -80,11 +60,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </SheetTitle>
                 </SheetHeader>
                 <nav className="flex flex-col gap-1 p-3">
-                  {LINKS.map(({ to, key, icon: Icon }) => (
+                  {REPORT_PAGES.map(({ path, key, icon: Icon }) => (
                     <NavLink
-                      key={to}
-                      to={to}
-                      end={to === '/'}
+                      key={path}
+                      to={path}
+                      end={path === '/'}
                       onClick={() => setMobileOpen(false)}
                       className={({ isActive }) =>
                         cn(
@@ -113,11 +93,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <nav className="hidden md:flex items-center gap-0.5">
-            {LINKS.map(({ to, key }) => (
+            {REPORT_PAGES.map(({ path, key }) => (
               <NavLink
-                key={to}
-                to={to}
-                end={to === '/'}
+                key={path}
+                to={path}
+                end={path === '/'}
                 className={({ isActive }) =>
                   cn(
                     buttonVariants({
