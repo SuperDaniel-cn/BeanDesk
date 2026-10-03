@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import type { MessageKey } from '@/i18n/locales/en'
 import { runBQLQuery, type BQLQueryResult } from '@/lib/api'
+import { explainFavaError } from '@/lib/fava-error'
 import { presentQueryCell, querySortValue } from '@/lib/format'
 import { useTimeFilter } from '@/lib/time-context'
 import { cn } from '@/lib/utils'
@@ -205,7 +206,7 @@ export function QueryPlayground() {
           <TriangleAlertIcon />
           <AlertTitle>{t('query.errorTitle')}</AlertTitle>
           <AlertDescription>
-            {result.error instanceof Error ? result.error.message : t('query.errorFallback')}
+            {explainFavaError(result.error, t, 'query.errorFallback')}
           </AlertDescription>
           <AlertAction>
             <Button variant="outline" onClick={() => void result.refetch()}>

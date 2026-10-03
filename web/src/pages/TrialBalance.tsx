@@ -32,6 +32,7 @@ import {
 import { useI18n } from '@/i18n'
 import type { MessageKey } from '@/i18n/locales/en'
 import { fetchTrialBalance, type AccountNode, type TrialBalanceSection } from '@/lib/api'
+import { explainFavaError } from '@/lib/fava-error'
 import { displayAccountName } from '@/lib/format'
 import { isDebitNormal, splitSignedBalance, type TrialBalanceRoot } from '@/lib/ledger-model'
 import { useTimeFilter } from '@/lib/time-context'
@@ -355,7 +356,7 @@ export function TrialBalance() {
         <TriangleAlertIcon />
         <AlertTitle>{t('trialBalance.errorTitle')}</AlertTitle>
         <AlertDescription>
-          {query.error instanceof Error ? query.error.message : t('common.errorFallback')}
+          {explainFavaError(query.error, t)}
         </AlertDescription>
         <AlertAction>
           <Button variant="outline" onClick={() => void query.refetch()}>

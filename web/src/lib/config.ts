@@ -8,6 +8,8 @@
  * is what `bun run dev` relies on via the Vite proxy.
  */
 
+import { FAVA_SLUG_INVALID } from './fava-error'
+
 declare global {
   interface Window {
     __APP_CONFIG__?: {
@@ -42,7 +44,7 @@ export function readLedgerSlug(): string {
   const slug = configured.trim()
   if (!slug) return ''
   if (!/^[A-Za-z0-9_-]+$/.test(slug)) {
-    throw new Error('Invalid ledger slug in config.js')
+    throw new Error(FAVA_SLUG_INVALID)
   }
   return slug
 }

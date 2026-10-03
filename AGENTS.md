@@ -2,7 +2,7 @@
 
 BeanDesk 前端与桌面端工程规范。
 
-记账引导见 skills/fava-beancount-guide/SKILL.md。该技能引导用户自建账本；本仓库不附带账本，也不记录任何账本路径。
+记账引导见 skills/fava-beancount-guide/SKILL.md。该技能引导用户自建账本；本仓库不附带账本，也不记录任何账本路径、科目、分录、凭证或备份信息。
 
 ## 1. 架构定位与职责边界
 
@@ -52,11 +52,4 @@ BeanDesk 前端与桌面端工程规范。
 
 ## 7. 质量校验与交付标准
 
-代码提交前在 web 目录下执行并通过：
-
-```bash
-bun test
-bun run build
-```
-
-改过 `src-tauri` 时再执行 `cargo test --manifest-path src-tauri/Cargo.toml`。要求测试通过，类型检查与构建无报错。
+代码提交前在仓库根执行并通过 `make test`。它会跑 oxlint、测试文件的类型检查、`bun test` 和 `cargo test`。`make build` 会类型检查页面代码和测试，再构建前端。推送到 `main` 的检查与此相同。

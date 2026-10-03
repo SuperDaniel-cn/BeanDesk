@@ -50,7 +50,7 @@ const CLOSED_SHEET: FavaTreeReport = {
       balance_children: { CNY: -70 },
       children: [
         {
-          account: 'Equity:PaidInCapital',
+          account: 'Equity:Capital',
           balance: { CNY: -50 },
           balance_children: { CNY: -50 },
           children: [],

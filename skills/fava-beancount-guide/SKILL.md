@@ -1,6 +1,6 @@
 ---
 name: fava-beancount-guide
-description: 引导用户在本机自建 Beancount 账本，再用 Fava 对接本前端。本仓库不附带账本，也不记录任何账本路径。适用于新建目录、开立科目、记分录、bean-check、启动 Fava，以及一人公司财产独立与凭证归档。不要假设已经存在某个账本仓库。
+description: 引导用户在本机自建 Beancount 账本，再用 Fava 对接本前端。本仓库不附带账本，也不记录任何账本路径、科目、分录或凭证。适用于新建目录、开立科目、记分录、bean-check、启动 Fava，以及一人公司财产独立与凭证归档。不要假设已经存在某个账本仓库。
 ---
 
 # Fava 与 Beancount 账本使用与记账指南
@@ -65,21 +65,18 @@ description: 引导用户在本机自建 Beancount 账本，再用 Fava 对接�
 
 `main.bean` 显式 `include` 配置和年度索引。年度索引 `data/YYYY/YYYY.bean` 显式 `include` 每个 `YYYY-MM.bean`。漏掉 `include` 时，入口文件不会读到该月。
 
-`config/accounts.bean` 先 `open` 科目，再写分录。下面是一人公司可用的起步科目，复制进新账本之前仍要由用户确认。已有账本不要用这套名字覆盖已经开立的科目。
+`config/accounts.bean` 先 `open` 科目，再写分录。下面的名字只是空账本示例，不对应任何现有账本。复制前由用户确认。已有账本不要用这套名字覆盖已经开立的科目。
 
 ```
-2020-01-01 open Assets:Bank-银行存款:Basic-基本户 CNY
-2020-01-01 open Liabilities:ShareholderLoan-股东往来:Principal-法人垫资借款 CNY
-2020-01-01 open Equity:PaidInCapital-实收资本 CNY
-2020-01-01 open Income:Service-主营业务:Tech-软件技术开发 CNY
-2020-01-01 open Income:Service-主营业务:Consulting-咨询顾问服务 CNY
-2020-01-01 open Expenses:Operating-运营成本:CloudServices-云服务器算力 CNY
+2020-01-01 open Assets:Bank:Checking CNY
+2020-01-01 open Liabilities:Owner:Advance CNY
+2020-01-01 open Equity:Capital CNY
+2020-01-01 open Income:Services:Delivery CNY
+2020-01-01 open Income:Services:Advice CNY
+2020-01-01 open Expenses:Operations:Hosting CNY
 ```
 
-经营收入建议：
-
-- 软件部署与定制开发：`Income:Service-主营业务:Tech-软件技术开发`
-- 咨询培训与实施带教：`Income:Service-主营业务:Consulting-咨询顾问服务`
+经营收入可以按业务拆开，例如交付和顾问各一个收入科目。名字以用户账本里 `open` 的为准。
 
 需要别的科目时，先在 `config/accounts.bean` 里 `open`，再引用。不要写未声明的科目。
 
@@ -122,10 +119,7 @@ macOS 隔空播放接收默认占用 5000。关闭该功能，或换端口：`fa
 公司账户只记经营收支。股东个人消费不入账。
 
 ### 法人借款与股东往来
-垫资和借款用负债科目，并与实收资本分开。新账本可采用：
-
-- 借款：`Liabilities:ShareholderLoan-股东往来:Principal-法人垫资借款`
-- 实缴资本：`Equity:PaidInCapital-实收资本`
+垫资和借款用负债科目，并与实收资本分开。新账本可采用示例名 `Liabilities:Owner:Advance` 和 `Equity:Capital`。
 
 还款摘要注明「还股东借款」或「还垫付款」。已有账本沿用它已经 `open` 的对应科目。股东不得无业务实质占用公户资金。
 
@@ -142,7 +136,7 @@ macOS 隔空播放接收默认占用 5000。关闭该功能，或换端口：`fa
 
 示例（仅当该科目已在用户账本中 `open`）：
 
-`documents/Assets/Bank-银行存款/Basic-基本户/2026-01-05.开办费刻章发票.pdf`
+`documents/Assets/Bank/Checking/2020-01-15.sample-invoice.pdf`
 
 Fava 按账户路径和日期关联单据，前端在明细里预览。
 
@@ -150,7 +144,7 @@ Fava 按账户路径和日期关联单据，前端在明细里预览。
 `balance` 在指定日期的零点生效。校验月末余额时，日期填次月首日。示例：
 
 ```
-2026-02-01 balance Assets:Bank-银行存款:Basic-基本户 100000.00 CNY
+2020-02-01 balance Assets:Bank:Checking 0.00 CNY
 ```
 
 账户名换成用户账本里实际 `open` 的银行科目。

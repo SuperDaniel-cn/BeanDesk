@@ -30,6 +30,7 @@ import {
   type BalanceSheetSection,
   type StatementSection,
 } from '@/lib/api'
+import { explainFavaError } from '@/lib/fava-error'
 import { displayAccountName, toDisplay } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -315,7 +316,7 @@ export function BalanceSheet() {
         <TriangleAlertIcon />
         <AlertTitle>{t('balanceSheet.errorTitle')}</AlertTitle>
         <AlertDescription>
-          {query.error instanceof Error ? query.error.message : t('common.errorFallback')}
+          {explainFavaError(query.error, t)}
         </AlertDescription>
         <AlertAction>
           <Button variant="outline" onClick={() => void query.refetch()}>

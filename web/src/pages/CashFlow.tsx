@@ -23,6 +23,7 @@ import {
   type CashFlowLineId,
   type CashFlowSection,
 } from '@/lib/cash-flow'
+import { explainFavaError } from '@/lib/fava-error'
 import { displayAccountName } from '@/lib/format'
 import { useTimeFilter } from '@/lib/time-context'
 import { cn } from '@/lib/utils'
@@ -171,7 +172,7 @@ export function CashFlow() {
         <TriangleAlertIcon />
         <AlertTitle>{t('cashFlow.errorTitle')}</AlertTitle>
         <AlertDescription>
-          {query.error instanceof Error ? query.error.message : t('common.errorFallback')}
+          {explainFavaError(query.error, t)}
         </AlertDescription>
         <AlertAction>
           <Button variant="outline" onClick={() => void query.refetch()}>

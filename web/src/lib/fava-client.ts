@@ -9,6 +9,7 @@
  */
 
 import { apiUrl, readLedgerSlug } from './config'
+import { FAVA_SLUG, FAVA_UNREACHABLE } from './fava-error'
 import {
   operatingCurrency,
   quoteCommodity,
@@ -77,7 +78,7 @@ export type OriginProbe =
   | { kind: 'closed' }
   | { kind: 'occupied'; server: string }
 
-class FavaClient {
+export class FavaClient {
   private slug: string | null = null
   private slugResolved = false
   private inflightLedger: Promise<FavaLedgerData> | null = null
@@ -150,9 +151,7 @@ class FavaClient {
     try {
       probe = await this.request(`${this.prefix()}/${candidate}/api/ledger_data`)
     } catch {
-      throw new Error(
-        'Cannot reach Fava. Start it on 127.0.0.1:5000 or set apiBaseUrl in config.js.',
-      )
+      throw new Error(FAVA_UNREACHABLE)
     }
     if (probe.ok) {
       this.slug = candidate
@@ -187,7 +186,7 @@ class FavaClient {
       }
     }
 
-    throw new Error('Cannot determine the Fava ledger slug. Set slug in public/config.js.')
+    throw new Error(FAVA_SLUG)
   }
 
   private async fetchJson(url: string, signal?: AbortSignal): Promise<{ data?: unknown; error?: string }> {

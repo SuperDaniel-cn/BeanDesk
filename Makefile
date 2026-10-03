@@ -9,7 +9,7 @@ help:
 	@echo "  make dev      - Start the browser app on http://127.0.0.1:$(PORT)"
 	@echo "  make desktop  - Start the Tauri window (Bun starts Vite; not npm run tauri dev)"
 	@echo "  make build    - Build static production bundle"
-	@echo "  make test     - Run frontend unit and integration tests"
+	@echo "  make test     - Lint, typecheck tests, and run frontend and desktop tests"
 	@echo "  make clean    - Remove node_modules and dist artifacts"
 
 install:
@@ -27,7 +27,10 @@ build:
 	cd web && bun run build
 
 test:
+	cd web && bun run lint
+	cd web && bunx tsc -p tsconfig.test.json --noEmit
 	cd web && bun test
+	cargo test --manifest-path src-tauri/Cargo.toml
 
 clean:
 	rm -rf web/node_modules web/dist

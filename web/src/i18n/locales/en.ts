@@ -14,6 +14,12 @@ export const en = {
     errorFallback: 'The backend did not return a usable response.',
   },
 
+  fava: {
+    unreachable: 'Cannot reach Fava. Start it on 127.0.0.1:5000, or set apiBaseUrl in config.js.',
+    slug: 'Cannot determine the ledger slug. Set slug in config.js.',
+    slugInvalid: 'The ledger slug in config.js is not valid.',
+  },
+
   time: {
     allTime: 'All time',
     year: 'Year',

@@ -100,6 +100,7 @@ describe('readConnectionFile', () => {
       },
       remote: { origin: 'https://books.example' },
     })
+    if (previous == null) throw new Error('expected a saved connection')
     expect(withDrafts('remote', null, { origin: 'https://books.example' }, previous)).toEqual(
       previous,
     )

@@ -12,7 +12,7 @@ import {
 
 describe('displayAccountName', () => {
   test('uses the Chinese segment after the last hyphen', () => {
-    expect(displayAccountName('Tech-软件技术开发')).toBe('软件技术开发')
+    expect(displayAccountName('Delivery-交付')).toBe('交付')
     expect(displayAccountName('Opening-Balances-期初平衡')).toBe('期初平衡')
     expect(displayAccountName('Earnings')).toBe('Earnings')
   })
@@ -92,7 +92,7 @@ describe('formatQueryValue', () => {
   })
 
   test('shows the Chinese leaf of an account path', () => {
-    expect(presentQueryCell('Assets:Bank-银行存款:Basic-基本户', 'zh-CN')).toBe('基本户')
+    expect(presentQueryCell('Assets:Bank:Operating-经营户', 'zh-CN')).toBe('经营户')
     expect(presentQueryCell('2026-01-31', 'zh-CN')).toBe('2026-01-31')
   })
 

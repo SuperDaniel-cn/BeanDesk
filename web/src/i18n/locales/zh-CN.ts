@@ -19,6 +19,12 @@ export const zhCN = {
     errorFallback: '没有拿到可用的数据。',
   },
 
+  fava: {
+    unreachable: '连不上 Fava。请在 127.0.0.1:5000 启动，或在 config.js 里设置 apiBaseUrl。',
+    slug: '无法确定账套 slug。请在 config.js 里设置 slug。',
+    slugInvalid: 'config.js 里的账套 slug 无效。',
+  },
+
   time: {
     allTime: '全部时期',
     year: '年度',
