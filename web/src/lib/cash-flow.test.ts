@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   classifyCashFlow,
+  compareCashFlow,
   presentedLineAmount,
   readAccountCashMeta,
   type AccountCashMeta,
@@ -140,6 +141,39 @@ describe('classifyCashFlow', () => {
     expect(result.unconverted_currencies).toEqual(['USD'])
     expect(result.lines.sales).toBe(0)
     expect(result.period).toBeNull()
+  })
+})
+
+describe('compareCashFlow', () => {
+  test('keeps both amounts on the same catalogue line', () => {
+    const current = statement([
+      posting('now', '2026-01-31', 'Assets:Bank', 100),
+      posting('now', '2026-01-31', 'Income:Service', -100),
+    ])
+    const prior = statement([
+      posting('then', '2025-01-31', 'Assets:Bank', 40),
+      posting('then', '2025-01-31', 'Income:Service', -40),
+    ])
+    const compared = compareCashFlow(current, prior)
+    expect(compared.lines.sales.current).toBeCloseTo(100)
+    expect(compared.lines.sales.prior).toBeCloseTo(40)
+  })
+
+  test('a prior-only unassigned account contributes zero this period', () => {
+    const current = statement([
+      posting('now', '2026-01-31', 'Assets:Bank', 10),
+      posting('now', '2026-01-31', 'Income:Service', -10),
+    ])
+    const prior = statement(
+      [
+        posting('then', '2025-01-31', 'Assets:Bank', 5),
+        posting('then', '2025-01-31', 'Expenses:Mystery', -5),
+      ],
+      [{ account: 'Expenses:Mystery', cash: false, cashflow: null, cashflowIn: null, cashflowOut: null }],
+    )
+    const row = compareCashFlow(current, prior).unassigned.find((item) => item.account === 'Expenses:Mystery')
+    expect(row).toEqual({ account: 'Expenses:Mystery', current: 0, prior: expect.any(Number) })
+    expect(row?.prior).not.toBe(0)
   })
 })
 

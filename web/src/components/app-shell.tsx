@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 
 import { BrandMark } from '@/components/brand-mark'
+import { LedgerErrors } from '@/components/ledger-errors'
 import { TimeFilterSelector } from '@/components/time-filter-selector'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
@@ -146,6 +147,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <LedgerErrors />
         {children}
       </main>
     </div>

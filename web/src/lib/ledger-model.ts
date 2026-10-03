@@ -420,3 +420,64 @@ export function buildTrialBalance(input: {
     },
   }
 }
+
+/**
+ * Same period last year. `2026` → `2025`, `2026-Q2` → `2025-Q2`, `2026-03` → `2025-03`.
+ * All-time and anything else have no prior column.
+ */
+export function priorPeriod(time: string): string | null {
+  const year = /^(\d{4})$/.exec(time)
+  if (year) return String(Number(year[1]) - 1)
+  const quarter = /^(\d{4})-Q([1-4])$/.exec(time)
+  if (quarter) return `${Number(quarter[1]) - 1}-Q${quarter[2]}`
+  const month = /^(\d{4})-(\d{2})$/.exec(time)
+  if (month) {
+    const value = Number(month[2])
+    if (value < 1 || value > 12) return null
+    return `${Number(month[1]) - 1}-${month[2]}`
+  }
+  return null
+}
+
+export interface ComparedAccount {
+  account: string
+  name: string
+  label_key: string | null
+  current: number
+  prior: number
+  children: ComparedAccount[]
+}
+
+/** Align two account trees by path. A side that lacks the account contributes zero. */
+export function compareAccounts(current: AccountNode[], prior: AccountNode[]): ComparedAccount[] {
+  const priorByAccount = new Map(prior.map((node) => [node.account, node]))
+  const seen = new Set<string>()
+  const merged: ComparedAccount[] = []
+
+  for (const node of current) {
+    seen.add(node.account)
+    const other = priorByAccount.get(node.account)
+    merged.push({
+      account: node.account,
+      name: node.name,
+      label_key: node.label_key,
+      current: node.total,
+      prior: other?.total ?? 0,
+      children: compareAccounts(node.children, other?.children ?? []),
+    })
+  }
+
+  for (const node of prior) {
+    if (seen.has(node.account)) continue
+    merged.push({
+      account: node.account,
+      name: node.name,
+      label_key: node.label_key,
+      current: 0,
+      prior: node.total,
+      children: compareAccounts([], node.children),
+    })
+  }
+
+  return merged
+}

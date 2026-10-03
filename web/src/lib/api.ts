@@ -4,7 +4,7 @@
  */
 
 import { classifyCashFlow, readAccountCashMeta, type CashPosting } from './cash-flow'
-import { favaClient, type FavaAccountDetail, type LedgerDocument, type TransactionEntry } from './fava-client'
+import { favaClient, type FavaAccountDetail, type LedgerDocument } from './fava-client'
 import {
   asOfFromDateRange,
   buildBalanceSheet,
@@ -143,8 +143,8 @@ function accountMetaList(details: Record<string, FavaAccountDetail> | undefined)
   )
 }
 
-export async function fetchTransactions(limit = 100, time?: string): Promise<TransactionEntry[]> {
-  return favaClient.getTransactions(limit, time)
+export async function fetchTransactions(time?: string) {
+  return favaClient.getTransactions(time)
 }
 
 export async function fetchAccounts(): Promise<string[]> {

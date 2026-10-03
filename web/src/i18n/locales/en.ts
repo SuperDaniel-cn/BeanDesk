@@ -20,6 +20,19 @@ export const en = {
     slugInvalid: 'The ledger slug in config.js is not valid.',
   },
 
+  ledger: {
+    errorsTitle: {
+      one: '{count} ledger error',
+      other: '{count} ledger errors',
+    },
+  },
+
+  compare: {
+    current: 'This period',
+    prior: 'Same period last year',
+    delta: 'Change',
+  },
+
   time: {
     allTime: 'All time',
     year: 'Year',
@@ -249,6 +262,7 @@ export const en = {
     tagsLabel: 'Tags',
     allTags: 'All tags',
     emptyTitle: 'No transactions match',
+    truncated: 'These results were cut off. Narrow the period to see the rest.',
     viewDocument: 'View the source document',
     date: 'Date',
     payee: 'Payee',

@@ -24,10 +24,10 @@ import { useI18n } from '@/i18n'
 import { useTimeFilter } from '@/lib/time-context'
 import {
   fetchIncomeStatement,
-  type AccountNode,
   type IncomeStatement as IncomeStatementData,
   type IncomeStatementSection,
 } from '@/lib/api'
+import { compareAccounts, priorPeriod, type ComparedAccount } from '@/lib/ledger-model'
 import { explainFavaError } from '@/lib/fava-error'
 import { displayAccountName, toDisplay } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -39,55 +39,55 @@ function present(section: FlowSection, raw: number): number {
   return section === 'income' ? toDisplay(raw) : raw
 }
 
-function includeNode(section: FlowSection, node: AccountNode): boolean {
-  return present(section, node.total) !== 0
+function includeNode(section: FlowSection, node: ComparedAccount, comparing: boolean): boolean {
+  if (present(section, node.current) !== 0) return true
+  return comparing && present(section, node.prior) !== 0
 }
 
 interface AccountLine {
-  node: AccountNode
+  node: ComparedAccount
   depth: number
   open: boolean
   hasChildren: boolean
 }
-
-const NO_ACCOUNTS: AccountNode[] = []
 
 function findSection(sections: IncomeStatementSection[], name: FlowSection) {
   return sections.find((section) => section.section === name)
 }
 
 function flatten(
-  nodes: AccountNode[],
+  nodes: ComparedAccount[],
   expanded: Set<string>,
   section: FlowSection,
+  comparing: boolean,
   depth = 0,
 ): AccountLine[] {
   const rows: AccountLine[] = []
   for (const node of nodes) {
-    if (!includeNode(section, node)) continue
+    if (!includeNode(section, node, comparing)) continue
     const expandedNode = expanded.has(node.account)
-    const childRows = expandedNode ? flatten(node.children, expanded, section, depth + 1) : []
+    const childRows = expandedNode ? flatten(node.children, expanded, section, comparing, depth + 1) : []
     const hasChildren = expandedNode
       ? childRows.length > 0
-      : node.children.some((child) => includeNode(section, child))
+      : node.children.some((child) => includeNode(section, child, comparing))
     rows.push({ node, depth, open: hasChildren && expandedNode, hasChildren })
     if (hasChildren && expandedNode) rows.push(...childRows)
   }
   return rows
 }
 
-function defaultExpanded(sections: IncomeStatementSection[]): Set<string> {
+function defaultExpanded(nodes: ComparedAccount[], section: FlowSection, comparing: boolean): Set<string> {
   const open = new Set<string>()
-  const walk = (nodes: AccountNode[], section: FlowSection): boolean => {
+  const walk = (children: ComparedAccount[]): boolean => {
     let shown = false
-    for (const node of nodes) {
-      if (!includeNode(section, node)) continue
+    for (const node of children) {
+      if (!includeNode(section, node, comparing)) continue
       shown = true
-      if (walk(node.children, section)) open.add(node.account)
+      if (walk(node.children)) open.add(node.account)
     }
     return shown
   }
-  for (const section of sections) walk(section.children, section.section)
+  walk(nodes)
   return open
 }
 
@@ -95,15 +95,19 @@ function LineRow({
   line,
   section,
   currency,
+  comparing,
   onToggle,
 }: {
   line: AccountLine
   section: FlowSection
   currency: string
+  comparing: boolean
   onToggle: (account: string) => void
 }) {
-  const { t, formatCurrency } = useI18n()
+  const { t, formatCurrency, formatSignedCurrency } = useI18n()
   const title = displayAccountName(line.node.name)
+  const current = present(section, line.node.current)
+  const prior = present(section, line.node.prior)
 
   return (
     <TableRow>
@@ -141,18 +145,44 @@ function LineRow({
           </span>
         </span>
       </TableCell>
-      <TableCell className="w-32 text-right tabular-nums">
-        {formatCurrency(present(section, line.node.total), currency)}
+      <TableCell className="w-28 text-right tabular-nums whitespace-nowrap">
+        {formatCurrency(current, currency)}
       </TableCell>
+      {comparing ? (
+        <>
+          <TableCell className="w-28 text-right tabular-nums whitespace-nowrap">
+            {formatCurrency(prior, currency)}
+          </TableCell>
+          <TableCell className="w-28 text-right tabular-nums whitespace-nowrap">
+            {formatSignedCurrency(current - prior, currency)}
+          </TableCell>
+        </>
+      ) : null}
     </TableRow>
   )
 }
 
-function TotalLine({ label, amount, tone }: { label: string; amount: string; tone?: string }) {
+function TotalLine({
+  label,
+  amount,
+  prior,
+  delta,
+  tone,
+}: {
+  label: string
+  amount: string
+  prior?: string
+  delta?: string
+  tone?: string
+}) {
   return (
     <div className="flex items-center justify-between gap-3 pe-4 text-[0.8rem]">
       <span className="text-muted-foreground">{label}</span>
-      <span className={cn('font-medium tabular-nums', tone)}>{amount}</span>
+      <span className="flex shrink-0 gap-4">
+        <span className={cn('font-medium tabular-nums', tone)}>{amount}</span>
+        {prior != null ? <span className="w-28 text-right font-medium tabular-nums">{prior}</span> : null}
+        {delta != null ? <span className={cn('w-28 text-right font-medium tabular-nums', tone)}>{delta}</span> : null}
+      </span>
     </div>
   )
 }
@@ -162,17 +192,23 @@ function AccountSection({
   section,
   lines,
   currency,
+  comparing,
   onToggle,
   totalLabel,
   total,
+  priorTotal,
+  delta,
 }: {
   title: string
   section: FlowSection
   lines: AccountLine[]
   currency: string
+  comparing: boolean
   onToggle: (account: string) => void
   totalLabel: string
   total: string
+  priorTotal?: string
+  delta?: string
 }) {
   const { t } = useI18n()
 
@@ -180,12 +216,20 @@ function AccountSection({
     <section className="flex min-w-0 flex-col gap-2">
       <h2 className="text-[0.8rem] font-medium">{title}</h2>
       {lines.length > 0 ? (
-        <div className="overflow-hidden rounded-lg border bg-card [&_td:last-child]:pe-4 [&_th:last-child]:pe-4">
+        <div className="overflow-x-auto rounded-lg border bg-card [&_td:last-child]:pe-4 [&_th:last-child]:pe-4">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>{t('balanceSheet.account')}</TableHead>
-                <TableHead className="w-32 text-right">{t('balanceSheet.amount')}</TableHead>
+                <TableHead className="w-28 text-right">
+                  {comparing ? t('compare.current') : t('balanceSheet.amount')}
+                </TableHead>
+                {comparing ? (
+                  <>
+                    <TableHead className="w-28 text-right">{t('compare.prior')}</TableHead>
+                    <TableHead className="w-28 text-right">{t('compare.delta')}</TableHead>
+                  </>
+                ) : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -195,6 +239,7 @@ function AccountSection({
                   line={line}
                   section={section}
                   currency={currency}
+                  comparing={comparing}
                   onToggle={onToggle}
                 />
               ))}
@@ -202,28 +247,58 @@ function AccountSection({
           </Table>
         </div>
       ) : null}
-      <TotalLine label={totalLabel} amount={total} />
+      <TotalLine label={totalLabel} amount={total} prior={priorTotal} delta={delta} />
     </section>
   )
 }
 
-function Statement({ data }: { data: IncomeStatementData }) {
+interface FlowView {
+  nodes: ComparedAccount[]
+  current: number
+  prior: number
+}
+
+function flowView(data: IncomeStatementData, prior: IncomeStatementData | null, name: FlowSection): FlowView {
+  const current = findSection(data.sections, name)
+  const previous = prior ? findSection(prior.sections, name) : undefined
+  return {
+    nodes: compareAccounts(current?.children ?? [], previous?.children ?? []),
+    current: current?.total ?? 0,
+    prior: previous?.total ?? 0,
+  }
+}
+
+function Statement({
+  currency,
+  comparing,
+  income,
+  expenses,
+}: {
+  currency: string
+  comparing: boolean
+  income: FlowView
+  expenses: FlowView
+}) {
   const { t, formatCurrency, formatSignedCurrency } = useI18n()
-  const currency = data.operating_currency
-  const [expanded, setExpanded] = useState<Set<string>>(() => defaultExpanded(data.sections))
-  const income = findSection(data.sections, 'income')
-  const expenses = findSection(data.sections, 'expenses')
-  const revenue = present('income', income?.total ?? 0)
-  const expenseTotal = present('expenses', expenses?.total ?? 0)
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const open = defaultExpanded(income.nodes, 'income', comparing)
+    for (const account of defaultExpanded(expenses.nodes, 'expenses', comparing)) open.add(account)
+    return open
+  })
+  const revenue = present('income', income.current)
+  const priorRevenue = present('income', income.prior)
+  const expenseTotal = present('expenses', expenses.current)
+  const priorExpenseTotal = present('expenses', expenses.prior)
   const profit = revenue - expenseTotal
+  const priorProfit = priorRevenue - priorExpenseTotal
 
   const incomeLines = useMemo(
-    () => flatten(income?.children ?? NO_ACCOUNTS, expanded, 'income'),
-    [income, expanded],
+    () => flatten(income.nodes, expanded, 'income', comparing),
+    [income.nodes, expanded, comparing],
   )
   const expenseLines = useMemo(
-    () => flatten(expenses?.children ?? NO_ACCOUNTS, expanded, 'expenses'),
-    [expenses, expanded],
+    () => flatten(expenses.nodes, expanded, 'expenses', comparing),
+    [expenses.nodes, expanded, comparing],
   )
 
   function toggle(account: string) {
@@ -245,9 +320,12 @@ function Statement({ data }: { data: IncomeStatementData }) {
         section="income"
         lines={incomeLines}
         currency={currency}
+        comparing={comparing}
         onToggle={toggle}
         totalLabel={t('income.totalRevenue')}
         total={formatCurrency(revenue, currency)}
+        priorTotal={comparing ? formatCurrency(priorRevenue, currency) : undefined}
+        delta={comparing ? formatSignedCurrency(revenue - priorRevenue, currency) : undefined}
       />
       <div className="flex min-w-0 flex-col gap-2">
         <AccountSection
@@ -255,13 +333,18 @@ function Statement({ data }: { data: IncomeStatementData }) {
           section="expenses"
           lines={expenseLines}
           currency={currency}
+          comparing={comparing}
           onToggle={toggle}
           totalLabel={t('income.totalExpenses')}
           total={formatCurrency(expenseTotal, currency)}
+          priorTotal={comparing ? formatCurrency(priorExpenseTotal, currency) : undefined}
+          delta={comparing ? formatSignedCurrency(expenseTotal - priorExpenseTotal, currency) : undefined}
         />
         <TotalLine
           label={t('income.profitTitle')}
           amount={formatSignedCurrency(profit, currency)}
+          prior={comparing ? formatSignedCurrency(priorProfit, currency) : undefined}
+          delta={comparing ? formatSignedCurrency(profit - priorProfit, currency) : undefined}
           tone={profitTone}
         />
       </div>
@@ -272,22 +355,35 @@ function Statement({ data }: { data: IncomeStatementData }) {
 export function IncomeStatement() {
   const { t, formatDate } = useI18n()
   const { timeFilter } = useTimeFilter()
+  const priorKey = priorPeriod(timeFilter)
 
   const query = useQuery({
     queryKey: ['income-statement', timeFilter],
     queryFn: ({ signal }) => fetchIncomeStatement(timeFilter, signal),
   })
+  const priorQuery = useQuery({
+    queryKey: ['income-statement', priorKey],
+    queryFn: ({ signal }) => fetchIncomeStatement(priorKey as string, signal),
+    enabled: priorKey != null,
+  })
 
-  if (query.isError) {
+  if (query.isError || (priorKey != null && priorQuery.isError)) {
+    const error = query.isError ? query.error : priorQuery.error
     return (
       <Alert variant="destructive">
         <TriangleAlertIcon />
         <AlertTitle>{t('income.errorTitle')}</AlertTitle>
         <AlertDescription>
-          {explainFavaError(query.error, t)}
+          {explainFavaError(error, t)}
         </AlertDescription>
         <AlertAction>
-          <Button variant="outline" onClick={() => void query.refetch()}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              void query.refetch()
+              if (priorKey) void priorQuery.refetch()
+            }}
+          >
             {t('common.retry')}
           </Button>
         </AlertAction>
@@ -295,14 +391,19 @@ export function IncomeStatement() {
     )
   }
 
-  if (query.isPending || !query.data) {
+  if (query.isPending || !query.data || (priorKey != null && priorQuery.isPending)) {
     return <Skeleton className="h-96 w-full rounded-lg" />
   }
 
   const data = query.data
-  const hasActivity = data.sections.some((section) =>
-    section.children.some((node) => includeNode(section.section, node)),
-  )
+  const prior = priorKey != null ? (priorQuery.data ?? null) : null
+  const income = flowView(data, prior, 'income')
+  const expenses = flowView(data, prior, 'expenses')
+  const comparing = prior != null
+  const active =
+    income.nodes.some((node) => includeNode('income', node, comparing)) ||
+    expenses.nodes.some((node) => includeNode('expenses', node, comparing))
+  const fetching = query.isFetching || priorQuery.isFetching
 
   return (
     <div className="flex flex-col gap-6">
@@ -318,19 +419,28 @@ export function IncomeStatement() {
         <Badge variant="outline">{data.operating_currency}</Badge>
         <Button
           variant="outline"
-          onClick={() => query.refetch()}
-          disabled={query.isFetching}
+          onClick={() => {
+            void query.refetch()
+            if (priorKey) void priorQuery.refetch()
+          }}
+          disabled={fetching}
         >
           <RefreshCwIcon
             data-icon="inline-start"
-            className={cn(query.isFetching && 'animate-spin')}
+            className={cn(fetching && 'animate-spin')}
           />
           {t('common.refresh')}
         </Button>
       </div>
 
-      {hasActivity ? (
-        <Statement key={timeFilter} data={data} />
+      {active ? (
+        <Statement
+          key={`${timeFilter}:${priorKey ?? ''}`}
+          currency={data.operating_currency}
+          comparing={comparing}
+          income={income}
+          expenses={expenses}
+        />
       ) : (
         <Empty className="border border-dashed">
           <EmptyHeader>

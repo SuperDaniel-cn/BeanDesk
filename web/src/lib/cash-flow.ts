@@ -169,6 +169,54 @@ export function linesIn(section: CashFlowSection) {
   return CASH_FLOW_LINES.filter((line) => line.section === section)
 }
 
+export interface ComparedAmount {
+  current: number
+  prior: number
+}
+
+export interface CashFlowComparison {
+  lines: Record<CashFlowLineId, ComparedAmount>
+  unassigned: Array<{ account: string } & ComparedAmount>
+  unassignedTotal: ComparedAmount
+  sections: Record<CashFlowSection, ComparedAmount>
+  net: ComparedAmount
+}
+
+/** Pair two statements. Unassigned accounts are the union, with a missing side as zero. */
+export function compareCashFlow(current: CashFlowStatement, prior: CashFlowStatement): CashFlowComparison {
+  const lines = Object.fromEntries(
+    CASH_FLOW_LINES.map((line) => [
+      line.id,
+      { current: current.lines[line.id], prior: prior.lines[line.id] },
+    ]),
+  ) as Record<CashFlowLineId, ComparedAmount>
+
+  const unassigned = new Map<string, ComparedAmount>()
+  for (const row of current.unassigned) {
+    unassigned.set(row.account, { current: row.amount, prior: 0 })
+  }
+  for (const row of prior.unassigned) {
+    const existing = unassigned.get(row.account) ?? { current: 0, prior: 0 }
+    existing.prior = row.amount
+    unassigned.set(row.account, existing)
+  }
+
+  const sections = Object.fromEntries(
+    CASH_FLOW_SECTIONS.map((section) => [
+      section,
+      { current: current.sections[section], prior: prior.sections[section] },
+    ]),
+  ) as Record<CashFlowSection, ComparedAmount>
+
+  return {
+    lines,
+    unassigned: [...unassigned.entries()].map(([account, amounts]) => ({ account, ...amounts })),
+    unassignedTotal: { current: current.unassignedTotal, prior: prior.unassignedTotal },
+    sections,
+    net: { current: current.net, prior: prior.net },
+  }
+}
+
 /** Outflow lines are stored as negative cash. The statement prints the payment as a positive amount. */
 export function presentedLineAmount(id: CashFlowLineId, signed: number): number {
   const line = CASH_FLOW_LINES.find((item) => item.id === id)

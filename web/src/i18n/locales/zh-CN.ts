@@ -25,6 +25,18 @@ export const zhCN = {
     slugInvalid: 'config.js 里的账套 slug 无效。',
   },
 
+  ledger: {
+    errorsTitle: {
+      other: '{count} 条账本错误',
+    },
+  },
+
+  compare: {
+    current: '本期',
+    prior: '去年同期',
+    delta: '差额',
+  },
+
   time: {
     allTime: '全部时期',
     year: '年度',
@@ -252,6 +264,7 @@ export const zhCN = {
     tagsLabel: '标签',
     allTags: '全部标签',
     emptyTitle: '没有符合条件的分录',
+    truncated: '结果被截断了。请缩小期间后再看剩余分录。',
     viewDocument: '查看凭证',
     date: '日期',
     payee: '对方',

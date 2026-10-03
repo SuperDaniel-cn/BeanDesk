@@ -51,18 +51,16 @@ import {
   type PostingItem,
   type TransactionEntry,
 } from '@/lib/api'
+import { favaClient } from '@/lib/fava-client'
+import {
+  JOURNAL_ROOT_FIELDS,
+  accountInRoot,
+  journalRootValue,
+} from '@/lib/journal'
+import { rootNames } from '@/lib/ledger-model'
 import { useTimeFilter } from '@/lib/time-context'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-
-const ROOT_ACCOUNT_FILTERS = [
-  { key: 'journal.roots.all', value: '' },
-  { key: 'journal.roots.assets', value: 'Assets' },
-  { key: 'journal.roots.liabilities', value: 'Liabilities' },
-  { key: 'journal.roots.income', value: 'Income' },
-  { key: 'journal.roots.expenses', value: 'Expenses' },
-  { key: 'journal.roots.equity', value: 'Equity' },
-] as const
 
 export function Journal() {
   const { t } = useI18n()
@@ -84,10 +82,20 @@ export function Journal() {
   }, [urlAccount, urlTag])
 
   const { timeFilter } = useTimeFilter()
-  const { data: transactions, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['transactions', timeFilter],
-    queryFn: () => fetchTransactions(200, timeFilter),
+  const ledger = useQuery({
+    queryKey: ['ledger-data'],
+    queryFn: ({ signal }) => favaClient.getLedgerData(signal),
   })
+  const rootFilters = JOURNAL_ROOT_FIELDS.map(({ key, field }) => ({
+    key,
+    value: journalRootValue(rootNames(ledger.data?.options), field),
+  }))
+  const activeRoot = rootFilters.some((filter) => filter.value === selectedRoot) ? selectedRoot : ''
+  const { data: journal, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ['transactions', timeFilter],
+    queryFn: () => fetchTransactions(timeFilter),
+  })
+  const transactions = journal?.entries
 
   const { data: allAccounts = [] } = useQuery({
     queryKey: ['accounts'],
@@ -124,13 +132,13 @@ export function Journal() {
         tx.postings.some((p) => p.account.toLowerCase().includes(needle))
       const matchTag = !selectedTag || tx.tags.includes(selectedTag)
       const matchRoot =
-        !selectedRoot || tx.postings.some((p) => p.account.startsWith(selectedRoot))
+        !activeRoot || tx.postings.some((posting) => accountInRoot(posting.account, activeRoot))
       const matchAccount =
         !selectedAccountFilter ||
         tx.postings.some((p) => p.account.toLowerCase().startsWith(accountNeedle))
       return matchSearch && matchTag && matchRoot && matchAccount
     })
-  }, [transactions, search, selectedTag, selectedRoot, selectedAccountFilter])
+  }, [transactions, search, selectedTag, activeRoot, selectedAccountFilter])
 
   const clearDrillFilter = () => {
     setSelectedAccountFilter('')
@@ -168,13 +176,13 @@ export function Journal() {
       )}
 
       <Tabs
-        value={selectedRoot || 'all'}
+        value={activeRoot || 'all'}
         onValueChange={(value) => setSelectedRoot(value === 'all' ? '' : value)}
         className="gap-4"
       >
         <TabsList variant="line" aria-label={t('journal.rootLabel')} className="max-sm:w-full">
-          {ROOT_ACCOUNT_FILTERS.map(({ key, value }) => (
-            <TabsTrigger key={value || 'all'} value={value || 'all'}>
+          {rootFilters.map(({ key, value }) => (
+            <TabsTrigger key={key} value={value || 'all'}>
               {t(key)}
             </TabsTrigger>
           ))}
@@ -228,6 +236,9 @@ export function Journal() {
             </Button>
         </div>
       </div>
+      {journal?.truncated ? (
+        <p className="text-[0.8rem] text-muted-foreground">{t('journal.truncated')}</p>
+      ) : null}
       <div className="overflow-hidden rounded-lg border bg-card">
           {isLoading ? (
             <div className="flex flex-col gap-2 p-3">

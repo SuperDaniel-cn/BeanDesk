@@ -10,6 +10,7 @@
 
 import { apiUrl, readLedgerSlug } from './config'
 import { FAVA_SLUG, FAVA_UNREACHABLE } from './fava-error'
+import { assembleJournalRows, journalQuery, type JournalPage } from './journal'
 import {
   operatingCurrency,
   quoteCommodity,
@@ -291,50 +292,11 @@ export class FavaClient {
     }
   }
 
-  async getTransactions(limit = 100, time?: string): Promise<TransactionEntry[]> {
+  async getTransactions(time?: string): Promise<JournalPage> {
     const ledgerData = await this.getLedgerData()
     const currency = operatingCurrency(ledgerData.options.operating_currency)
-    const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 100
-    const result = await this.query(
-      `
-      SELECT id, date, flag, payee, narration, account, units(position) as units, tags, links
-      ORDER BY date DESC
-      LIMIT ${safeLimit * 3}
-    `,
-      time,
-    )
-    const map = new Map<string, TransactionEntry>()
-
-    for (const row of result.rows || []) {
-      const [id, date, flag, payee, narration, account, units, tags, links] = row
-      const amount = units as { number?: number; currency?: string } | null
-      const postingAmount = amount?.number ?? 0
-      const postingCurrency = amount?.currency ?? currency
-
-      const entryId = String(id)
-      let tx = map.get(entryId)
-      if (!tx) {
-        tx = {
-          id: entryId,
-          date: String(date),
-          flag: String(flag || '*'),
-          payee: String(payee || '—'),
-          narration: String(narration || ''),
-          postings: [],
-          tags: Array.isArray(tags) ? tags.map(String) : [],
-          links: Array.isArray(links) ? links.map(String) : [],
-        }
-        map.set(entryId, tx)
-      }
-
-      tx.postings.push({
-        account: String(account),
-        amount: postingAmount,
-        currency: postingCurrency,
-      })
-    }
-
-    return Array.from(map.values()).slice(0, safeLimit)
+    const result = await this.query(journalQuery(), time)
+    return assembleJournalRows(result.rows ?? [], currency)
   }
 }
 

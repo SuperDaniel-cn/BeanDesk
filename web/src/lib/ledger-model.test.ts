@@ -6,6 +6,9 @@ import {
   buildBalanceSheet,
   buildIncomeStatement,
   buildTrialBalance,
+  compareAccounts,
+  priorPeriod,
+  type AccountNode,
   readInventory,
   rootNames,
   responseLooksLikeFava,
@@ -294,5 +297,60 @@ describe('buildTrialBalance', () => {
     expect(assets?.children[0]?.total).toBe(100)
     expect(trial.sections.find((section) => section.rootAccount === 'Income')?.root).toBe('income')
     expect(trial.sections.find((section) => section.rootAccount === 'Expenses')?.root).toBe('expenses')
+  })
+})
+
+function account(account: string, total: number, children: AccountNode[] = []): AccountNode {
+  return { name: account, account, total, children, label_key: null }
+}
+
+describe('priorPeriod', () => {
+  test('steps a year, quarter, and month back to the same period last year', () => {
+    expect(priorPeriod('2026')).toBe('2025')
+    expect(priorPeriod('2026-Q2')).toBe('2025-Q2')
+    expect(priorPeriod('2026-03')).toBe('2025-03')
+  })
+
+  test('has no prior column for all-time or an unknown filter', () => {
+    expect(priorPeriod('')).toBeNull()
+    expect(priorPeriod('2026-Q5')).toBeNull()
+    expect(priorPeriod('2026-13')).toBeNull()
+  })
+})
+
+describe('compareAccounts', () => {
+  test('aligns by account and fills a missing side with zero', () => {
+    expect(
+      compareAccounts(
+        [account('Income:A', -10, [account('Income:A:B', -10)])],
+        [account('Income:C', -4)],
+      ),
+    ).toEqual([
+      {
+        account: 'Income:A',
+        name: 'Income:A',
+        label_key: null,
+        current: -10,
+        prior: 0,
+        children: [
+          {
+            account: 'Income:A:B',
+            name: 'Income:A:B',
+            label_key: null,
+            current: -10,
+            prior: 0,
+            children: [],
+          },
+        ],
+      },
+      {
+        account: 'Income:C',
+        name: 'Income:C',
+        label_key: null,
+        current: 0,
+        prior: -4,
+        children: [],
+      },
+    ])
   })
 })
