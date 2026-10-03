@@ -6,6 +6,10 @@ Beancount 与 Fava 的现代财务工作台，基于 React 19、TypeScript、Tai
 
 [English](README.md) | **简体中文**
 
+[![Release](https://img.shields.io/github/v/release/SuperDaniel-cn/BeanDesk?color=blue)](https://github.com/SuperDaniel-cn/BeanDesk/releases)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
+[![赞助](https://img.shields.io/badge/Sponsor-加密货币赞助-ea4aaa?logo=githubsponsors&logoColor=white)](#赞助支持)
+
 ![BeanDesk 界面预览](./docs/images/zh/trial-balance.png)
 
 ## 快速上手

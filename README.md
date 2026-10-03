@@ -6,6 +6,10 @@ The architecture is analogous to MetaCubeXD for Clash or AriaNg for Aria2: Fava 
 
 **English** | [简体中文](README.zh-CN.md)
 
+[![Release](https://img.shields.io/github/v/release/SuperDaniel-cn/BeanDesk?color=blue)](https://github.com/SuperDaniel-cn/BeanDesk/releases)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
+[![Sponsor](https://img.shields.io/badge/Sponsor-Crypto%20USDC-ea4aaa?logo=githubsponsors&logoColor=white)](#sponsorship)
+
 ![BeanDesk Trial Balance Preview](./docs/images/en/trial-balance.png)
 
 ## Quick Start
