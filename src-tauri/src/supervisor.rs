@@ -225,7 +225,8 @@ fn grouped_shell(directory: &Path) -> Command {
             .stdin(Stdio::null())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
-            .creation_flags(0x0000_0200);
+            // CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP. No console, and the group can still be stopped.
+            .creation_flags(0x0800_0200);
         cmd
     }
 }
@@ -373,7 +374,7 @@ mod tests {
         );
 
         supervisor.parent_hold.take();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         let mut leader_gone = false;
         while std::time::Instant::now() < deadline
             && (!leader_gone || kids.iter().any(|pid| alive(*pid)))

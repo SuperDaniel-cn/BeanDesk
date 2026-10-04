@@ -1,6 +1,7 @@
 # PyInstaller spec. Collect Fava/Beancount data files so templates survive freeze.
 # beanquery.sources is a namespace package; importlib loads beanquery.sources.<scheme>.
 
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all
@@ -46,7 +47,8 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,
+    # Windows: a console program shows a window, and closing it kills Fava.
+    console=sys.platform != "win32",
 )
 coll = COLLECT(
     exe,

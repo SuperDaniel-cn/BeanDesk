@@ -65,18 +65,28 @@ jobs:
           - platform: macos-latest
             args: --target aarch64-apple-darwin
             rust_targets: aarch64-apple-darwin
+            python_architecture: arm64
+            engine_arch: arm64
           - platform: macos-latest
             args: --target x86_64-apple-darwin
             rust_targets: x86_64-apple-darwin
+            python_architecture: x64
+            engine_arch: x86_64
           - platform: ubuntu-22.04
             args: ''
             rust_targets: ''
+            python_architecture: x64
+            engine_arch: ''
           - platform: ubuntu-22.04-arm
             args: ''
             rust_targets: ''
+            python_architecture: arm64
+            engine_arch: ''
           - platform: windows-latest
             args: ''
             rust_targets: ''
+            python_architecture: x64
+            engine_arch: ''
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7
@@ -107,8 +117,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          architecture: ${{ matrix.python_architecture }}
 
       - name: freeze the bundled ledger engine
+        env:
+          ENGINE_ARCH: ${{ matrix.engine_arch }}
         run: bash engine/build.sh
 
       - name: fetch the pinned restic binary

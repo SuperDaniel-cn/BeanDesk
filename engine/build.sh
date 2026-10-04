@@ -39,4 +39,14 @@ if [ ! -f "$EXE" ] || [ ! -d "$DEST/_internal" ]; then
     exit 1
 fi
 chmod +x "$EXE" 2>/dev/null || true
+if [ "$(uname -s)" = Darwin ] && [ -n "${ENGINE_ARCH:-}" ]; then
+    arches="$(lipo -archs "$EXE" 2>/dev/null || true)"
+    case " $arches " in
+        *" ${ENGINE_ARCH} "*) ;;
+        *)
+            echo "bundled engine is [$arches], expected ${ENGINE_ARCH}" >&2
+            exit 1
+            ;;
+    esac
+fi
 echo "wrote $DEST"
