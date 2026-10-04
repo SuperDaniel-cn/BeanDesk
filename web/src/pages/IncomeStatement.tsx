@@ -476,7 +476,6 @@ export function IncomeStatement() {
 
       {active ? (
         <Statement
-          key={comparing ? 'y' : 'n'}
           currency={data.operating_currency}
           comparing={comparing}
           currentLabel={currentLabel}

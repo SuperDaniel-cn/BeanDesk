@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router'
+import { useLocation, useSearchParams } from 'react-router'
 import {
   FileTextIcon,
   SearchIcon,
@@ -64,6 +64,7 @@ import { cn } from '@/lib/utils'
 
 export function Journal() {
   const { t } = useI18n()
+  const { pathname } = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const urlAccount = searchParams.get('account') || ''
@@ -77,9 +78,13 @@ export function Journal() {
 
   // Sync state if URL search params change
   useEffect(() => {
-    if (urlAccount) setSelectedAccountFilter(urlAccount)
-    if (urlTag) setSelectedTag(urlTag)
+    setSelectedAccountFilter(urlAccount)
+    setSelectedTag(urlTag || null)
   }, [urlAccount, urlTag])
+
+  useEffect(() => {
+    if (pathname !== '/journal') setSelectedTx(null)
+  }, [pathname])
 
   const { timeFilter } = useTimeFilter()
   const ledger = useQuery({

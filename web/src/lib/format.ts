@@ -103,8 +103,12 @@ function finiteNumber(value: unknown): number | null {
 
 /** Account paths show the Chinese leaf. Every other cell stays a BQL value. */
 export function presentQueryCell(cell: unknown, locale: string): string {
-  if (typeof cell === 'string' && cell.includes(':')) return displayAccountName(cell)
+  if (typeof cell === 'string' && looksLikeAccount(cell)) return displayAccountName(cell)
   return formatQueryValue(cell, locale)
+}
+
+function looksLikeAccount(value: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9-]*(?::[A-Za-z0-9][A-Za-z0-9-]*)*(?:-[\u4e00-\u9fff].*)?$/.test(value)
 }
 
 /** One comparable value for a result column. Null sorts last. */

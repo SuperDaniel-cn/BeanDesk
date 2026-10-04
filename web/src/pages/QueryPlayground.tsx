@@ -126,9 +126,9 @@ export function QueryPlayground() {
     setSubmitted(next)
   }
 
-  function exportCsv(table: BQLQueryResult) {
+  function exportCsv(table: BQLQueryResult, rowsInOrder: BQLQueryResult['rows']) {
     const headers = table.types.map((column) => column.name)
-    const rows = table.rows.map((row) =>
+    const rows = rowsInOrder.map((row) =>
       row.map((cell) => {
         const formatted = presentQueryCell(cell, locale)
         return formatted === '—' ? '' : formatted
@@ -152,7 +152,7 @@ export function QueryPlayground() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-end gap-2">
         {data && data.rows.length > 0 ? (
-          <Button variant="outline" onClick={() => exportCsv(data)}>
+          <Button variant="outline" onClick={() => exportCsv(data, sortedRows)}>
             <DownloadIcon data-icon="inline-start" />
             {t('common.exportCsv')}
           </Button>

@@ -119,6 +119,7 @@ describe('formatQueryValue', () => {
   test('shows the Chinese leaf of an account path', () => {
     expect(presentQueryCell('Assets:Bank:Operating-经营户', 'zh-CN')).toBe('经营户')
     expect(presentQueryCell('2026-01-31', 'zh-CN')).toBe('2026-01-31')
+    expect(presentQueryCell('合同:项目-软件开发', 'zh-CN')).toBe('合同:项目-软件开发')
   })
 
   test('sorts an amount and a one-currency inventory by their number', () => {

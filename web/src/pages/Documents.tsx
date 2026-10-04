@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { FileTextIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router'
 
 import { LinkedDocument } from '@/components/linked-document'
 import { OneLine } from '@/components/one-line'
@@ -37,7 +38,12 @@ export function Documents() {
   const { t, formatDate } = useI18n()
   const { timeFilter } = useTimeFilter()
   const [search, setSearch] = useState('')
+  const { pathname } = useLocation()
   const [selected, setSelected] = useState<LedgerDocument | null>(null)
+
+  useEffect(() => {
+    if (pathname !== '/documents') setSelected(null)
+  }, [pathname])
 
   const query = useQuery({
     queryKey: ['documents'],
