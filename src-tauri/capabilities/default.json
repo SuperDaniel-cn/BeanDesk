@@ -19,7 +19,7 @@
     },
     "allow-start-saved-fava",
     "allow-stop-saved-fava",
-    "allow-fava-status",
+    "allow-fava-host",
     "allow-fava-installed",
     "allow-system-locales",
     {

@@ -1,16 +1,25 @@
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// A Fava process this window started. Stopping it signals that process group
 /// and leaves any Fava the user started themselves alone.
 ///
 /// The child also watches a pipe held here. If this desktop process disappears
 /// before it can stop, the pipe closes and the child ends that same group.
+#[derive(Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostSnapshot {
+    pub running: bool,
+    pub pid: Option<u32>,
+    pub started_ms: Option<u64>,
+}
+
 #[derive(Default)]
 pub struct Supervisor {
     child: Option<Child>,
+    started_at: Option<SystemTime>,
     #[cfg(unix)]
     parent_hold: Option<std::os::fd::OwnedFd>,
 }
@@ -22,9 +31,18 @@ impl Drop for Supervisor {
 }
 
 impl Supervisor {
-    pub fn running(&mut self) -> bool {
+    /// Ownership of a live child this window started. Not “something answers
+    /// on the saved origin.”
+    pub fn snapshot(&mut self) -> HostSnapshot {
         self.reap();
-        self.child.is_some()
+        match self.child.as_ref() {
+            Some(child) => HostSnapshot {
+                running: true,
+                pid: Some(child.id()),
+                started_ms: started_ms(self.started_at),
+            },
+            None => HostSnapshot::default(),
+        }
     }
 
     /// Start `command` in `directory` when this supervisor is not already
@@ -55,6 +73,7 @@ impl Supervisor {
             self.parent_hold = Some(watch.parent_hold);
         }
         self.child = Some(child);
+        self.started_at = Some(SystemTime::now());
         Ok(())
     }
 
@@ -63,6 +82,7 @@ impl Supervisor {
         {
             self.parent_hold.take();
         }
+        self.started_at = None;
         let Some(mut child) = self.child.take() else {
             return;
         };
@@ -95,12 +115,19 @@ impl Supervisor {
         };
         if finished {
             self.child = None;
+            self.started_at = None;
             #[cfg(unix)]
             {
                 self.parent_hold.take();
             }
         }
     }
+}
+
+fn started_ms(started_at: Option<SystemTime>) -> Option<u64> {
+    started_at
+        .and_then(|started| started.duration_since(UNIX_EPOCH).ok())
+        .map(|elapsed| elapsed.as_millis() as u64)
 }
 
 /// The read end stays open until after `spawn`, so the child inherits it.
@@ -223,6 +250,20 @@ fn signal_group(pid: u32, force: bool) {
     }
 }
 
+#[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_is_empty_without_a_child() {
+        let mut supervisor = Supervisor::default();
+        let snap = supervisor.snapshot();
+        assert!(!snap.running);
+        assert!(snap.pid.is_none());
+        assert!(snap.started_ms.is_none());
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -267,13 +308,13 @@ mod tests {
         let mut supervisor = Supervisor::default();
         supervisor.start(&std::env::temp_dir(), "sleep 30").unwrap();
         let started = supervisor.child.as_ref().unwrap().id();
-        assert!(supervisor.running());
+        assert!(supervisor.snapshot().running);
         assert_ne!(started, other_pid);
 
         supervisor.stop();
         assert!(!alive(started));
         assert!(alive(other_pid));
-        assert!(!supervisor.running());
+        assert!(!supervisor.snapshot().running);
     }
 
     #[test]
@@ -285,6 +326,36 @@ mod tests {
         supervisor.start(&directory, "sleep 30").unwrap();
         let second = supervisor.child.as_ref().unwrap().id();
         assert_eq!(first, second);
+        let snap = supervisor.snapshot();
+        assert_eq!(snap.pid, Some(first));
+        assert!(snap.running);
+        assert!(snap.started_ms.is_some());
+    }
+
+    #[test]
+    fn snapshot_clears_after_stop_and_after_the_child_exits() {
+        let mut supervisor = Supervisor::default();
+        supervisor.start(&std::env::temp_dir(), "sleep 30").unwrap();
+        let started = supervisor.snapshot();
+        assert!(started.running);
+        assert!(started.pid.is_some());
+        assert!(started.started_ms.is_some());
+
+        supervisor.stop();
+        let after_stop = supervisor.snapshot();
+        assert!(!after_stop.running);
+        assert!(after_stop.pid.is_none());
+        assert!(after_stop.started_ms.is_none());
+
+        supervisor.start(&std::env::temp_dir(), "true").unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline && supervisor.snapshot().running {
+            thread::sleep(Duration::from_millis(20));
+        }
+        let after_exit = supervisor.snapshot();
+        assert!(!after_exit.running);
+        assert!(after_exit.pid.is_none());
+        assert!(after_exit.started_ms.is_none());
     }
 
     #[test]

@@ -33,10 +33,49 @@ export type ConnectionFile = {
 
 export type ConnectionStep = 'attach' | 'start' | 'ready'
 
+export type ConnectionForm = {
+  kind: ConnectionFile['active']
+  directory: string
+  command: string
+  localOrigin: string
+  remoteOrigin: string
+}
+
 const DEFAULT_ORIGIN = 'http://127.0.0.1:5000'
 
 export function defaultOrigin(): string {
   return DEFAULT_ORIGIN
+}
+
+export function emptyConnectionForm(): ConnectionForm {
+  return {
+    kind: 'local',
+    directory: '',
+    command: '',
+    localOrigin: DEFAULT_ORIGIN,
+    remoteOrigin: DEFAULT_ORIGIN,
+  }
+}
+
+export function isPristineConnectionForm(form: ConnectionForm): boolean {
+  const empty = emptyConnectionForm()
+  return (
+    form.kind === empty.kind &&
+    form.directory === empty.directory &&
+    form.command === empty.command &&
+    form.localOrigin === empty.localOrigin &&
+    form.remoteOrigin === empty.remoteOrigin
+  )
+}
+
+export function formFromConnectionFile(file: ConnectionFile): ConnectionForm {
+  return {
+    kind: file.active,
+    directory: file.local?.directory ?? '',
+    command: file.local?.command ?? '',
+    localOrigin: file.local?.origin ?? DEFAULT_ORIGIN,
+    remoteOrigin: file.remote?.origin ?? DEFAULT_ORIGIN,
+  }
 }
 
 /** http(s) origin with no path, query, user, or fragment. */

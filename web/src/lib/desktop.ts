@@ -7,6 +7,7 @@ import {
   type ConnectionStep,
   type LedgerConnection,
 } from '@/lib/connection'
+import { emptyHostSnapshot, type HostSnapshot } from '@/lib/host'
 
 const STORE_FILE = 'connection.json'
 const STORE_KEY = 'connection'
@@ -28,8 +29,16 @@ export async function saveConnection(file: ConnectionFile): Promise<void> {
   await store.save()
 }
 
+export async function loadHostSnapshot(): Promise<HostSnapshot> {
+  try {
+    return await invoke<HostSnapshot>('fava_host')
+  } catch {
+    return emptyHostSnapshot()
+  }
+}
+
 export async function favaWasStarted(): Promise<boolean> {
-  return invoke<boolean>('fava_status')
+  return (await loadHostSnapshot()).running
 }
 
 export async function stopStartedFava(): Promise<void> {

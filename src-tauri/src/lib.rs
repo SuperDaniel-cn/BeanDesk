@@ -4,7 +4,7 @@ mod supervisor;
 use std::path::Path;
 use std::sync::Mutex;
 
-use supervisor::{Supervisor, accepts_local_origin};
+use supervisor::{HostSnapshot, Supervisor, accepts_local_origin};
 use tauri::{AppHandle, Manager, RunEvent, State};
 use tauri_plugin_store::StoreExt;
 
@@ -44,7 +44,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             start_saved_fava,
             stop_saved_fava,
-            fava_status,
+            fava_host,
             fava_installed,
             system_locales
         ])
@@ -118,8 +118,8 @@ fn stop_saved_fava(host: State<'_, FavaHost>) {
 }
 
 #[tauri::command]
-fn fava_status(host: State<'_, FavaHost>) -> bool {
-    lock(&host).running()
+fn fava_host(host: State<'_, FavaHost>) -> HostSnapshot {
+    lock(&host).snapshot()
 }
 
 /// True when Fava is already on this machine: the saved ledger has a virtualenv

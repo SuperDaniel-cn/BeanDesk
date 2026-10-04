@@ -3,6 +3,7 @@ import {
   ChevronRightIcon,
   ChevronsDownUp,
   ChevronsUpDown,
+  DownloadIcon,
   ExternalLinkIcon,
   RefreshCwIcon,
   Search,
@@ -11,6 +12,7 @@ import {
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 
+import { ReportBar, ReportDay, ReportWhen } from '@/components/report-bar'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -30,21 +32,16 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useI18n } from '@/i18n'
-import type { MessageKey } from '@/i18n/locales/en'
 import { fetchTrialBalance, type AccountNode, type TrialBalanceSection } from '@/lib/api'
+import { exportStatementCsv } from '@/lib/csv'
 import { explainFavaError } from '@/lib/fava-error'
 import { displayAccountName } from '@/lib/format'
 import { isDebitNormal, splitSignedBalance, type TrialBalanceRoot } from '@/lib/ledger-model'
+import { formatPeriodLabel } from '@/lib/period-label'
+import { useShownTime } from '@/lib/shown-time'
+import { TRIAL_ROOT_TITLE, trialCsvTable } from '@/lib/statement-csv'
 import { useTimeFilter } from '@/lib/time-context'
 import { cn } from '@/lib/utils'
-
-const ROOT_TITLE: Record<TrialBalanceRoot, MessageKey> = {
-  assets: 'trialBalance.roots.assets',
-  liabilities: 'trialBalance.roots.liabilities',
-  equity: 'trialBalance.roots.equity',
-  income: 'trialBalance.roots.income',
-  expenses: 'trialBalance.roots.expenses',
-}
 
 const ROOT_ORDER: Record<TrialBalanceRoot, number> = {
   assets: 0,
@@ -272,7 +269,7 @@ function Statement({ data }: { data: Awaited<ReturnType<typeof fetchTrialBalance
             <div key={side === columns.debit ? 'debit' : 'credit'} className="flex min-w-0 flex-col gap-6">
               {side.map(({ section, rows }) => {
                 const name = section.root
-                  ? t(ROOT_TITLE[section.root])
+                  ? t(TRIAL_ROOT_TITLE[section.root])
                   : displayAccountName(section.rootAccount)
                 return (
                   <section key={section.rootAccount} className="flex min-w-0 flex-col gap-2">
@@ -342,13 +339,15 @@ function Statement({ data }: { data: Awaited<ReturnType<typeof fetchTrialBalance
 }
 
 export function TrialBalance() {
-  const { t, formatDate } = useI18n()
+  const { t, formatDate, formatCurrency } = useI18n()
   const { timeFilter } = useTimeFilter()
 
   const query = useQuery({
     queryKey: ['trial-balance', timeFilter],
     queryFn: ({ signal }) => fetchTrialBalance(timeFilter, signal),
+    placeholderData: (previous) => previous,
   })
+  const shownTime = useShownTime(timeFilter, query.isPlaceholderData)
 
   if (query.isError) {
     return (
@@ -367,31 +366,63 @@ export function TrialBalance() {
     )
   }
 
-  if (query.isPending || !query.data) {
+  if (!query.data) {
     return <Skeleton className="h-96 w-full rounded-lg" />
   }
 
   const data = query.data
+  const periodLabel = formatPeriodLabel(shownTime, t)
+  const canExport = !query.isPlaceholderData
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {data.as_of ? (
-          <Badge variant="outline">{t('common.asOf', { date: formatDate(data.as_of) })}</Badge>
-        ) : null}
-        <Badge variant="outline">{data.operating_currency}</Badge>
-        <Badge variant={data.totals.balanced ? 'positive' : 'destructive'}>
-          {data.totals.balanced ? t('trialBalance.balanced') : t('trialBalance.unbalanced')}
-        </Badge>
-        <Button variant="outline" onClick={() => query.refetch()} disabled={query.isFetching}>
-          <RefreshCwIcon
-            data-icon="inline-start"
-            className={cn(query.isFetching && 'animate-spin')}
-          />
-          {t('common.refresh')}
-        </Button>
-      </div>
-      <Statement key={timeFilter} data={data} />
+      <ReportBar
+        status={
+          <>
+            <ReportWhen currency={data.operating_currency}>
+              {data.as_of ? (
+                <ReportDay iso={data.as_of}>
+                  {t('common.asOf', { date: formatDate(data.as_of) })}
+                </ReportDay>
+              ) : null}
+            </ReportWhen>
+            <Badge variant={data.totals.balanced ? 'positive' : 'destructive'}>
+              {data.totals.balanced ? t('trialBalance.balanced') : t('trialBalance.unbalanced')}
+            </Badge>
+          </>
+        }
+        actions={
+          <>
+            <Button
+              variant="outline"
+              disabled={!canExport}
+              onClick={() => {
+                const table = trialCsvTable(data, t, formatCurrency)
+                exportStatementCsv({
+                  title: data.title,
+                  currency: data.operating_currency,
+                  periodLabel,
+                  periodToken: shownTime,
+                  report: t('trialBalance.title'),
+                  headers: table.headers,
+                  rows: table.rows,
+                })
+              }}
+            >
+              <DownloadIcon data-icon="inline-start" />
+              {t('common.exportCsv')}
+            </Button>
+            <Button variant="outline" onClick={() => query.refetch()} disabled={query.isFetching}>
+              <RefreshCwIcon
+                data-icon="inline-start"
+                className={cn(query.isFetching && 'animate-spin')}
+              />
+              {t('common.refresh')}
+            </Button>
+          </>
+        }
+      />
+      <Statement data={data} />
     </div>
   )
 }

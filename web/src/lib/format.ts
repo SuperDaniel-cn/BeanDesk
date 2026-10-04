@@ -28,6 +28,19 @@ export function toDisplay(raw: number): number {
   return -raw || 0
 }
 
+/** Income is a credit in Beancount. Expenses already read as positive debits. */
+export function presentIncome(section: 'income' | 'expenses', raw: number): number {
+  return section === 'income' ? toDisplay(raw) : raw
+}
+
+/** Liabilities and equity are credits. Assets already read as positive debits. */
+export function presentBalance(
+  section: 'assets' | 'liabilities' | 'equity',
+  raw: number,
+): number {
+  return section === 'assets' ? raw : toDisplay(raw)
+}
+
 export function formatNumber(
   value: number,
   locale: string,

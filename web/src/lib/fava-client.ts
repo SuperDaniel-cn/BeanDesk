@@ -93,6 +93,10 @@ export class FavaClient {
     this.inflightLedger = null
   }
 
+  origin(): string | null {
+    return this.directOrigin
+  }
+
   getSlug() {
     return this.slug ?? (readLedgerSlug() || DEFAULT_SLUG)
   }
@@ -277,19 +281,13 @@ export class FavaClient {
     return (result.rows ?? []).map((row) => String(row[0])).sort((a, b) => b.localeCompare(a))
   }
 
-  async getAccounts(): Promise<string[]> {
-    const data = await this.getLedgerData()
-    return data.accounts || []
-  }
-
-  async getDocuments(): Promise<LedgerDocument[]> {
+  async getDocuments(signal?: AbortSignal): Promise<LedgerDocument[]> {
     await this.ensureSlug()
-    try {
-      const json = await this.fetchJson(`${this.prefix()}/${this.slug}/api/documents`)
-      return Array.isArray(json.data) ? (json.data as LedgerDocument[]) : []
-    } catch {
-      return []
+    const json = await this.fetchJson(`${this.prefix()}/${this.slug}/api/documents`, signal)
+    if (!Array.isArray(json.data)) {
+      throw new Error('documents')
     }
+    return json.data as LedgerDocument[]
   }
 
   async getTransactions(time?: string): Promise<JournalPage> {

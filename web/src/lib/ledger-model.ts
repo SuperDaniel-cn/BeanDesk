@@ -24,6 +24,7 @@ export interface BalanceSheetSection {
 }
 
 export interface BalanceSheet {
+  title: string
   as_of: string
   operating_currency: string
   unconverted_currencies: string[]
@@ -48,6 +49,7 @@ export interface StatementPeriod {
 }
 
 export interface IncomeStatement {
+  title: string
   operating_currency: string
   /**
    * Inclusive dates.
@@ -71,6 +73,7 @@ export interface TrialBalanceSection {
 }
 
 export interface TrialBalance {
+  title: string
   as_of: string
   operating_currency: string
   sections: TrialBalanceSection[]
@@ -281,6 +284,7 @@ export function buildBalanceSheet(input: {
   report: FavaTreeReport
   currency: string
   names: RootNames
+  title?: string
   latestDate?: string | null
 }): BalanceSheet {
   const unconverted = new Set<string>()
@@ -314,6 +318,7 @@ export function buildBalanceSheet(input: {
   }
 
   return {
+    title: input.title ?? '',
     as_of: asOfFromDateRange(input.report.date_range) ?? input.latestDate ?? '',
     operating_currency: input.currency,
     unconverted_currencies: [...unconverted].sort(),
@@ -331,6 +336,7 @@ export function buildIncomeStatement(input: {
   report: FavaTreeReport
   currency: string
   names: RootNames
+  title?: string
 }): IncomeStatement {
   const sections: IncomeStatementSection[] = []
 
@@ -352,6 +358,7 @@ export function buildIncomeStatement(input: {
   }
 
   return {
+    title: input.title ?? '',
     operating_currency: input.currency,
     period: periodFromDateRange(input.report.date_range),
     sections,
@@ -386,6 +393,7 @@ export function buildTrialBalance(input: {
   report: FavaTreeReport
   currency: string
   names: RootNames
+  title?: string
   latestDate?: string | null
 }): TrialBalance {
   const sections: TrialBalanceSection[] = []
@@ -409,6 +417,7 @@ export function buildTrialBalance(input: {
   const netImbalance = totalDebits - totalCredits
 
   return {
+    title: input.title ?? '',
     as_of: asOfFromDateRange(input.report.date_range) ?? input.latestDate ?? '',
     operating_currency: input.currency,
     sections,
@@ -452,6 +461,24 @@ export function priorPeriod(time: string): string | null {
   if (parts.kind === 'year') return year
   if (parts.kind === 'quarter') return `${year}-Q${parts.quarter}`
   return `${year}-${parts.month}`
+}
+
+/** Inclusive filter for a Fava document date (`YYYY-MM-DD`). All-time keeps every date. */
+export function dateInPeriod(date: string, time: string): boolean {
+  const parts = periodParts(time)
+  if (!parts) return true
+  if (date.length < 7) return false
+  if (parts.kind === 'year') return date.startsWith(parts.year)
+  if (parts.kind === 'month') return date.startsWith(`${parts.year}-${parts.month}`)
+  const month = Number(date.slice(5, 7))
+  if (!date.startsWith(parts.year) || Number.isNaN(month)) return false
+  const start = (Number(parts.quarter) - 1) * 3 + 1
+  return month >= start && month <= start + 2
+}
+
+/** Currency-conversion plugs are not equity of the company. */
+export function isCurrencyPlug(account: string): boolean {
+  return /:(?:Conversions|Unrealized)(?::|$)/.test(account)
 }
 
 export interface ComparedAccount {

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fava-host"
+description = "Enables the fava_host command without any pre-configured scope."
+commands.allow = ["fava_host"]
+
+[[permission]]
+identifier = "deny-fava-host"
+description = "Denies the fava_host command without any pre-configured scope."
+commands.deny = ["fava_host"]

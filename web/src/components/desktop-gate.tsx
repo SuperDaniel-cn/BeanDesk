@@ -5,7 +5,8 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 
 import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n } from '@/i18n'
-import { loadConnection, loadSuspended, openConnection } from '@/lib/desktop'
+import { loadConnection, loadHostSnapshot, loadSuspended, openConnection } from '@/lib/desktop'
+import { favaClient } from '@/lib/fava-client'
 import {
   activeConnection,
   connectionStepKey,
@@ -13,8 +14,7 @@ import {
   type ConnectionFile,
   type LedgerConnection,
 } from '@/lib/connection'
-
-type DesktopStatus = 'boot' | 'setup' | 'ready'
+import { hostFromSnapshot, idleHost, sessionLost, type DesktopStatus, type HostView } from '@/lib/host'
 
 type DesktopState = {
   status: DesktopStatus
@@ -23,6 +23,7 @@ type DesktopState = {
 }
 
 type DesktopValue = DesktopState & {
+  host: HostView
   log: string[]
   appendLog: (message: string) => void
   clearLog: () => void
@@ -45,11 +46,16 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
   const tRef = useRef(t)
   tRef.current = t
   const [log, setLog] = useState<string[]>([])
+  const [host, setHost] = useState<HostView>(idleHost)
   const [state, setState] = useState<DesktopState>(() =>
     isTauri()
       ? { status: 'boot', file: null, connection: null }
       : { status: 'ready', file: null, connection: null },
   )
+  const stateRef = useRef(state)
+  const hostRef = useRef(host)
+  stateRef.current = state
+  hostRef.current = host
 
   const appendLog = useCallback((message: string) => {
     const stamp = new Date().toLocaleTimeString(undefined, { hourCycle: 'h23' })
@@ -110,7 +116,9 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
           const opened = await openConnection(connection, (step) => {
             say(tRef.current(connectionStepKey(step)))
           })
-          if (!cancelled && opened) setState({ status: 'ready', file, connection })
+          if (cancelled) return
+          if (opened) setState({ status: 'ready', file, connection })
+          else setState({ status: 'setup', file, connection: null })
         } catch (error) {
           say(explainConnectionError(error, tRef.current))
           if (!cancelled) setState({ status: 'setup', file, connection })
@@ -125,8 +133,38 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
     }
   }, [appendLog])
 
+  useEffect(() => {
+    if (!isTauri()) return
+    let cancelled = false
+    const refresh = async () => {
+      const snap = await loadHostSnapshot()
+      const current = stateRef.current
+      const origin = current.connection?.origin ?? activeConnection(current.file)?.origin ?? null
+      let probe: HostView['probe'] = { kind: 'idle' }
+      if (origin) {
+        if (favaClient.origin() !== origin) favaClient.useOrigin(origin)
+        probe = await favaClient.probe().catch(() => ({ kind: 'closed' as const }))
+      }
+      if (cancelled) return
+      const next = hostFromSnapshot(snap, probe, origin, Date.now())
+      const previous = hostRef.current
+      hostRef.current = next
+      setHost(next)
+      if (sessionLost(previous, next, current.status)) {
+        appendLog(tRef.current('settings.hostDown'))
+        release()
+      }
+    }
+    void refresh()
+    const id = window.setInterval(() => void refresh(), 2_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [appendLog, release])
+
   return (
-    <DesktopContext.Provider value={{ ...state, log, appendLog, clearLog, remember, markConnected, release }}>
+    <DesktopContext.Provider value={{ ...state, host, log, appendLog, clearLog, remember, markConnected, release }}>
       {children}
     </DesktopContext.Provider>
   )

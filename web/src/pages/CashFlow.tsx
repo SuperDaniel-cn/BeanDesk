@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { RefreshCwIcon, TriangleAlertIcon } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { DownloadIcon, RefreshCwIcon, TriangleAlertIcon } from 'lucide-react'
 
 import {
   ComparePanel,
@@ -10,8 +10,8 @@ import {
   StatementTable,
   amountTone,
 } from '@/components/period-compare'
+import { ReportBar, ReportDay, ReportWhen } from '@/components/report-bar'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -21,55 +21,26 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useI18n } from '@/i18n'
-import type { MessageKey } from '@/i18n/locales/en'
 import { fetchCashFlow } from '@/lib/api'
 import {
   CASH_FLOW_SECTIONS,
+  CASH_FLOW_SECTION_NET,
+  CASH_FLOW_SECTION_TITLE,
   compareCashFlow,
   linesIn,
   presentedLineAmount,
   type CashFlowComparison,
-  type CashFlowLineId,
-  type CashFlowSection,
   type CashFlowStatement,
 } from '@/lib/cash-flow'
 import { priorPeriod } from '@/lib/ledger-model'
+import { exportStatementCsv } from '@/lib/csv'
 import { explainFavaError } from '@/lib/fava-error'
 import { displayAccountName } from '@/lib/format'
 import { formatPeriodLabel } from '@/lib/period-label'
+import { shownPrior, useShownTime } from '@/lib/shown-time'
+import { cashFlowCsvTable } from '@/lib/statement-csv'
 import { useTimeFilter } from '@/lib/time-context'
 import { cn } from '@/lib/utils'
-
-const SECTION_TITLE: Record<CashFlowSection, MessageKey> = {
-  operating: 'cashFlow.operating',
-  investing: 'cashFlow.investing',
-  financing: 'cashFlow.financing',
-}
-
-const SECTION_NET: Record<CashFlowSection, MessageKey> = {
-  operating: 'cashFlow.operatingNet',
-  investing: 'cashFlow.investingNet',
-  financing: 'cashFlow.financingNet',
-}
-
-const LINE_LABEL: Record<CashFlowLineId, MessageKey> = {
-  sales: 'cashFlow.lines.sales',
-  'operating-other-in': 'cashFlow.lines.operating-other-in',
-  purchases: 'cashFlow.lines.purchases',
-  wages: 'cashFlow.lines.wages',
-  taxes: 'cashFlow.lines.taxes',
-  'operating-other-out': 'cashFlow.lines.operating-other-out',
-  'investment-proceeds': 'cashFlow.lines.investment-proceeds',
-  'investment-income': 'cashFlow.lines.investment-income',
-  'asset-disposal': 'cashFlow.lines.asset-disposal',
-  'investment-acquire': 'cashFlow.lines.investment-acquire',
-  capex: 'cashFlow.lines.capex',
-  borrowings: 'cashFlow.lines.borrowings',
-  capital: 'cashFlow.lines.capital',
-  'debt-principal': 'cashFlow.lines.debt-principal',
-  'debt-interest': 'cashFlow.lines.debt-interest',
-  dividends: 'cashFlow.lines.dividends',
-}
 
 function AmountTable({
   rows,
@@ -166,7 +137,7 @@ function Statement({
               if (current === 0) return []
               return [{
                 key: line.id,
-                label: t(LINE_LABEL[line.id]),
+                label: t(line.label),
                 amount: formatCurrency(current, currency),
               }]
             }
@@ -176,7 +147,7 @@ function Statement({
             const prior = presentedLineAmount(line.id, amounts.prior)
             return [{
               key: line.id,
-              label: t(LINE_LABEL[line.id]),
+              label: t(line.label),
               amount: formatCurrency(current, currency),
               prior: formatCurrency(prior, currency),
               delta: formatSignedCurrency(current - prior, currency),
@@ -186,7 +157,7 @@ function Statement({
           const currentNet = compared ? compared.current : data.sections[section]
           return (
             <section key={section} className="flex min-w-0 flex-col gap-2">
-              <h2 className="text-[0.8rem] font-medium">{t(SECTION_TITLE[section])}</h2>
+              <h2 className="text-[0.8rem] font-medium">{t(CASH_FLOW_SECTION_TITLE[section])}</h2>
               <ComparePanel>
                 <AmountTable
                   rows={rows}
@@ -195,7 +166,7 @@ function Statement({
                   priorLabel={priorLabel}
                 />
                 <PeriodTotals
-                  label={t(SECTION_NET[section])}
+                  label={t(CASH_FLOW_SECTION_NET[section])}
                   current={formatSignedCurrency(currentNet, currency)}
                   prior={compared ? formatSignedCurrency(compared.prior, currency) : undefined}
                   delta={compared
@@ -240,14 +211,18 @@ function Statement({
 }
 
 export function CashFlow() {
-  const { t, formatDate } = useI18n()
+  const { t, formatDate, formatCurrency, formatSignedCurrency } = useI18n()
   const { timeFilter } = useTimeFilter()
+  const queryClient = useQueryClient()
   const priorKey = priorPeriod(timeFilter)
 
   const query = useQuery({
     queryKey: ['cash-flow', timeFilter],
     queryFn: ({ signal }) => fetchCashFlow(timeFilter, signal),
+    placeholderData: (previous) => previous,
   })
+  const shownTime = useShownTime(timeFilter, query.isPlaceholderData)
+  const shownPriorKey = priorPeriod(shownTime)
   const priorQuery = useQuery({
     queryKey: ['cash-flow', priorKey],
     queryFn: ({ signal }) => fetchCashFlow(priorKey as string, signal),
@@ -271,42 +246,84 @@ export function CashFlow() {
     )
   }
 
-  if (query.isPending || !query.data || (priorKey != null && priorQuery.isPending)) {
+  if (!query.data) {
     return <Skeleton className="h-96 w-full rounded-lg" />
   }
 
   const data = query.data
-  const priorFailed = priorKey != null && priorQuery.isError
-  const comparison = priorKey != null && priorQuery.data ? compareCashFlow(data, priorQuery.data) : null
+  const priorFailed = !query.isPlaceholderData && priorKey != null && priorQuery.isError
+  const prior = shownPrior(
+    shownPriorKey,
+    priorKey,
+    priorQuery.data,
+    queryClient.getQueryData<CashFlowStatement>(['cash-flow', shownPriorKey]),
+  )
+  const comparison = prior ? compareCashFlow(data, prior) : null
   const fetching = query.isFetching || priorQuery.isFetching
+  const currentLabel = formatPeriodLabel(shownTime, t)
+  const priorLabel = shownPriorKey ? formatPeriodLabel(shownPriorKey, t) : ''
+  const canExport = !query.isPlaceholderData
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {data.period ? (
-          <Badge variant="outline">
-            {t('cashFlow.period', {
-              from: formatDate(data.period.from),
-              to: formatDate(data.period.to),
-            })}
-          </Badge>
-        ) : null}
-        <Badge variant="outline">{data.operating_currency}</Badge>
-        <Button
-          variant="outline"
-          onClick={() => {
-            void query.refetch()
-            if (priorKey) void priorQuery.refetch()
-          }}
-          disabled={fetching}
-        >
-          <RefreshCwIcon
-            data-icon="inline-start"
-            className={cn(fetching && 'animate-spin')}
-          />
-          {t('common.refresh')}
-        </Button>
-      </div>
+      <ReportBar
+        status={
+          <ReportWhen currency={data.operating_currency}>
+            {data.period ? (
+              <>
+                <ReportDay iso={data.period.from}>{formatDate(data.period.from)}</ReportDay>
+                {` ${t('common.rangeJoiner')} `}
+                <ReportDay iso={data.period.to}>{formatDate(data.period.to)}</ReportDay>
+              </>
+            ) : null}
+          </ReportWhen>
+        }
+        actions={
+          <>
+            <Button
+              variant="outline"
+              disabled={!canExport}
+              onClick={() => {
+                const table = cashFlowCsvTable(
+                  data,
+                  comparison,
+                  t,
+                  formatCurrency,
+                  formatSignedCurrency,
+                  currentLabel,
+                  priorLabel,
+                )
+                exportStatementCsv({
+                  title: data.title,
+                  currency: data.operating_currency,
+                  periodLabel: currentLabel,
+                  periodToken: shownTime,
+                  report: t('cashFlow.title'),
+                  headers: table.headers,
+                  rows: table.rows,
+                })
+              }}
+            >
+              <DownloadIcon data-icon="inline-start" />
+              {t('common.exportCsv')}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                void query.refetch()
+                if (priorKey) void priorQuery.refetch()
+              }}
+              disabled={fetching}
+            >
+              <RefreshCwIcon
+                data-icon="inline-start"
+                className={cn(fetching && 'animate-spin')}
+              />
+              {t('common.refresh')}
+            </Button>
+          </>
+        }
+      />
 
       {priorFailed ? (
         <PriorUnavailableAlert onRetry={() => void priorQuery.refetch()} />
@@ -328,8 +345,8 @@ export function CashFlow() {
       <Statement
         data={data}
         comparison={comparison}
-        currentLabel={formatPeriodLabel(timeFilter, t)}
-        priorLabel={priorKey ? formatPeriodLabel(priorKey, t) : ''}
+        currentLabel={currentLabel}
+        priorLabel={priorLabel}
       />
     </div>
   )

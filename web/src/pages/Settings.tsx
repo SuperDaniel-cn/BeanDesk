@@ -18,8 +18,10 @@ import { useI18n } from '@/i18n'
 import {
   activeConnection,
   connectionStepKey,
-  defaultOrigin,
+  emptyConnectionForm,
   explainConnectionError,
+  formFromConnectionFile,
+  isPristineConnectionForm,
   localDraft,
   normalizeOrigin,
   remoteDraft,
@@ -27,6 +29,7 @@ import {
   type ConnectionFile,
   type LedgerConnection,
 } from '@/lib/connection'
+import { connectionAction, hostUptime } from '@/lib/host'
 import {
   disconnectSession,
   favaWasStarted,
@@ -200,11 +203,12 @@ function ConnectionSettings() {
   const navigate = useNavigate()
   const desktop = useDesktop()
   const saved = desktop.file
-  const [kind, setKind] = useState<Kind>(saved?.active ?? 'local')
-  const [directory, setDirectory] = useState(saved?.local?.directory ?? '')
-  const [command, setCommand] = useState(saved?.local?.command ?? '')
-  const [localOrigin, setLocalOrigin] = useState(saved?.local?.origin ?? defaultOrigin())
-  const [remoteOrigin, setRemoteOrigin] = useState(saved?.remote?.origin ?? defaultOrigin())
+  const blank = emptyConnectionForm()
+  const [kind, setKind] = useState<Kind>(saved?.active ?? blank.kind)
+  const [directory, setDirectory] = useState(saved?.local?.directory ?? blank.directory)
+  const [command, setCommand] = useState(saved?.local?.command ?? blank.command)
+  const [localOrigin, setLocalOrigin] = useState(saved?.local?.origin ?? blank.localOrigin)
+  const [remoteOrigin, setRemoteOrigin] = useState(saved?.remote?.origin ?? blank.remoteOrigin)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -218,6 +222,24 @@ function ConnectionSettings() {
   fields.current.remoteOrigin = remoteOrigin
   fields.current.saved = saved
   fields.current.kind = kind
+
+  useEffect(() => {
+    if (!saved) return
+    const current = {
+      kind: fields.current.kind,
+      directory: fields.current.directory,
+      command: fields.current.command,
+      localOrigin: fields.current.localOrigin,
+      remoteOrigin: fields.current.remoteOrigin,
+    }
+    if (!isPristineConnectionForm(current)) return
+    const next = formFromConnectionFile(saved)
+    setKind(next.kind)
+    setDirectory(next.directory)
+    setCommand(next.command)
+    setLocalOrigin(next.localOrigin)
+    setRemoteOrigin(next.remoteOrigin)
+  }, [saved])
 
   useEffect(() => {
     const node = logRef.current
@@ -361,6 +383,7 @@ function ConnectionSettings() {
 
   return (
     <div className="flex flex-col gap-4">
+      <HostStatusCard />
       <Tabs
         value={kind}
         onValueChange={(value) => {
@@ -458,6 +481,63 @@ function ConnectionSettings() {
   )
 }
 
+function HostStatusCard() {
+  const { t } = useI18n()
+  const desktop = useDesktop()
+  const { host, status } = desktop
+  const sessionKey =
+    status === 'boot'
+      ? 'settings.hostSessionBoot'
+      : status === 'ready'
+        ? 'settings.hostSessionReady'
+        : 'settings.hostSessionSetup'
+  const portKey =
+    host.probe.kind === 'fava'
+      ? 'settings.hostPortFava'
+      : host.probe.kind === 'closed'
+        ? 'settings.hostPortClosed'
+        : host.probe.kind === 'occupied'
+          ? 'settings.hostPortOccupied'
+          : 'settings.hostPortIdle'
+  const elapsed =
+    host.startedAt == null || host.observedAt == null
+      ? null
+      : hostUptime(host.startedAt, host.observedAt)
+  const process = host.owned
+    ? t('settings.hostOwned', {
+        pid: host.pid == null ? '—' : String(host.pid),
+        uptime:
+          elapsed == null
+            ? t('settings.hostPortIdle')
+            : elapsed.unit === 'minutes'
+              ? t('settings.hostUptimeMinutes', { count: elapsed.count })
+              : t('settings.hostUptimeSeconds', { count: elapsed.count }),
+      })
+    : host.probe.kind === 'fava'
+      ? t('settings.hostAttached')
+      : t('settings.hostNone')
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
+      <HostRow label={t('settings.hostSession')} value={t(sessionKey)} />
+      <HostRow
+        label={t('settings.hostPort')}
+        value={host.origin ? `${host.origin} · ${t(portKey)}` : t(portKey)}
+      />
+      <HostRow label={t('settings.hostProcess')} value={process} />
+    </div>
+  )
+}
+
+function HostRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="font-mono text-xs text-foreground">{value}</span>
+    </div>
+  )
+}
+
 function ConnectionButton({
   busy,
   onConnect,
@@ -469,24 +549,32 @@ function ConnectionButton({
 }) {
   const { t } = useI18n()
   const desktop = useDesktop()
-  const connected = desktop.status === 'ready'
-  const automatic = desktop.status === 'boot'
-  const label = connected
-    ? t('settings.stop')
-    : automatic
-      ? t('settings.autoConnecting')
-      : busy
-        ? t('settings.connecting')
-        : t('settings.connect')
+  const action = connectionAction({
+    status: desktop.status,
+    owned: desktop.host.owned,
+    busy,
+  })
+  const label =
+    action === 'stop'
+      ? t('settings.stop')
+      : action === 'disconnect'
+        ? t('settings.disconnect')
+        : action === 'auto'
+          ? t('settings.autoConnecting')
+          : action === 'busy'
+            ? t('settings.connecting')
+            : t('settings.connect')
+  const waiting = action === 'auto' || action === 'busy'
+  const leave = action === 'stop' || action === 'disconnect'
 
   return (
     <Button
       type="button"
-      variant={connected ? 'outline' : 'default'}
-      disabled={automatic || busy}
-      onClick={connected ? onStop : onConnect}
+      variant={leave ? 'outline' : 'default'}
+      disabled={waiting}
+      onClick={leave ? onStop : onConnect}
     >
-      {automatic || busy ? <Spinner data-icon="inline-start" /> : <Plug className="size-3.5" data-icon="inline-start" />}
+      {waiting ? <Spinner data-icon="inline-start" /> : <Plug className="size-3.5" data-icon="inline-start" />}
       {label}
     </Button>
   )

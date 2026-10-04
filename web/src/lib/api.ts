@@ -34,6 +34,7 @@ async function ledgerContext(signal?: AbortSignal) {
   const ledger = await favaClient.getLedgerData(signal)
   return {
     ledger,
+    title: ledger.options.title,
     currency: operatingCurrency(ledger.options.operating_currency),
     names: rootNames(ledger.options),
   }
@@ -68,23 +69,25 @@ async function activityPeriod(signal?: AbortSignal): Promise<StatementPeriod | n
 }
 
 export async function fetchBalanceSheet(time?: string, signal?: AbortSignal) {
-  const { currency, names } = await ledgerContext(signal)
+  const { title, currency, names } = await ledgerContext(signal)
   const report = (await favaClient.getBalanceSheet(time, currency, signal)) as FavaTreeReport
   return buildBalanceSheet({
     report,
     currency,
     names,
+    title,
     latestDate: await asOfFallback(report, signal),
   })
 }
 
 export async function fetchIncomeStatement(time?: string, signal?: AbortSignal) {
-  const { currency, names } = await ledgerContext(signal)
+  const { title, currency, names } = await ledgerContext(signal)
   const report = await favaClient.getIncomeStatement(time, currency, signal)
   const statement = buildIncomeStatement({
     report: report as FavaTreeReport,
     currency,
     names,
+    title,
   })
   if (statement.period) return statement
   const period = await activityPeriod(signal)
@@ -92,18 +95,19 @@ export async function fetchIncomeStatement(time?: string, signal?: AbortSignal) 
 }
 
 export async function fetchTrialBalance(time?: string, signal?: AbortSignal) {
-  const { currency, names } = await ledgerContext(signal)
+  const { title, currency, names } = await ledgerContext(signal)
   const report = (await favaClient.getTrialBalance(time, currency, signal)) as FavaTreeReport
   return buildTrialBalance({
     report,
     currency,
     names,
+    title,
     latestDate: await asOfFallback(report, signal),
   })
 }
 
 export async function fetchCashFlow(time?: string, signal?: AbortSignal) {
-  const { ledger, currency } = await ledgerContext(signal)
+  const { ledger, title, currency } = await ledgerContext(signal)
   const code = quoteCommodity(currency)
   const result = await favaClient.query(
     `SELECT id, date, flag, account, convert(position, "${code}")`,
@@ -116,6 +120,7 @@ export async function fetchCashFlow(time?: string, signal?: AbortSignal) {
     if (posting) postings.push(posting)
   }
   return classifyCashFlow({
+    title,
     currency,
     postings,
     accounts: accountMetaList(ledger.account_details),
@@ -147,12 +152,8 @@ export async function fetchTransactions(time?: string) {
   return favaClient.getTransactions(time)
 }
 
-export async function fetchAccounts(): Promise<string[]> {
-  return favaClient.getAccounts()
-}
-
-export async function fetchDocuments(): Promise<LedgerDocument[]> {
-  return favaClient.getDocuments()
+export async function fetchDocuments(signal?: AbortSignal): Promise<LedgerDocument[]> {
+  return favaClient.getDocuments(signal)
 }
 
 export async function runBQLQuery(bql: string, time?: string, signal?: AbortSignal) {

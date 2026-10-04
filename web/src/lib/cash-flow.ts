@@ -1,3 +1,5 @@
+import type { MessageKey } from '@/i18n/locales/en'
+
 import type { StatementPeriod } from './ledger-model'
 
 /**
@@ -14,23 +16,40 @@ export const CASH_FLOW_SECTIONS = ['operating', 'investing', 'financing'] as con
 export type CashFlowSection = (typeof CASH_FLOW_SECTIONS)[number]
 
 export const CASH_FLOW_LINES = [
-  { id: 'sales', section: 'operating', direction: 'in' },
-  { id: 'operating-other-in', section: 'operating', direction: 'in' },
-  { id: 'purchases', section: 'operating', direction: 'out' },
-  { id: 'wages', section: 'operating', direction: 'out' },
-  { id: 'taxes', section: 'operating', direction: 'out' },
-  { id: 'operating-other-out', section: 'operating', direction: 'out' },
-  { id: 'investment-proceeds', section: 'investing', direction: 'in' },
-  { id: 'investment-income', section: 'investing', direction: 'in' },
-  { id: 'asset-disposal', section: 'investing', direction: 'in' },
-  { id: 'investment-acquire', section: 'investing', direction: 'out' },
-  { id: 'capex', section: 'investing', direction: 'out' },
-  { id: 'borrowings', section: 'financing', direction: 'in' },
-  { id: 'capital', section: 'financing', direction: 'in' },
-  { id: 'debt-principal', section: 'financing', direction: 'out' },
-  { id: 'debt-interest', section: 'financing', direction: 'out' },
-  { id: 'dividends', section: 'financing', direction: 'out' },
-] as const
+  { id: 'sales', section: 'operating', direction: 'in', label: 'cashFlow.lines.sales' },
+  { id: 'operating-other-in', section: 'operating', direction: 'in', label: 'cashFlow.lines.operating-other-in' },
+  { id: 'purchases', section: 'operating', direction: 'out', label: 'cashFlow.lines.purchases' },
+  { id: 'wages', section: 'operating', direction: 'out', label: 'cashFlow.lines.wages' },
+  { id: 'taxes', section: 'operating', direction: 'out', label: 'cashFlow.lines.taxes' },
+  { id: 'operating-other-out', section: 'operating', direction: 'out', label: 'cashFlow.lines.operating-other-out' },
+  { id: 'investment-proceeds', section: 'investing', direction: 'in', label: 'cashFlow.lines.investment-proceeds' },
+  { id: 'investment-income', section: 'investing', direction: 'in', label: 'cashFlow.lines.investment-income' },
+  { id: 'asset-disposal', section: 'investing', direction: 'in', label: 'cashFlow.lines.asset-disposal' },
+  { id: 'investment-acquire', section: 'investing', direction: 'out', label: 'cashFlow.lines.investment-acquire' },
+  { id: 'capex', section: 'investing', direction: 'out', label: 'cashFlow.lines.capex' },
+  { id: 'borrowings', section: 'financing', direction: 'in', label: 'cashFlow.lines.borrowings' },
+  { id: 'capital', section: 'financing', direction: 'in', label: 'cashFlow.lines.capital' },
+  { id: 'debt-principal', section: 'financing', direction: 'out', label: 'cashFlow.lines.debt-principal' },
+  { id: 'debt-interest', section: 'financing', direction: 'out', label: 'cashFlow.lines.debt-interest' },
+  { id: 'dividends', section: 'financing', direction: 'out', label: 'cashFlow.lines.dividends' },
+] as const satisfies ReadonlyArray<{
+  id: string
+  section: CashFlowSection
+  direction: 'in' | 'out'
+  label: MessageKey
+}>
+
+export const CASH_FLOW_SECTION_TITLE: Record<CashFlowSection, MessageKey> = {
+  operating: 'cashFlow.operating',
+  investing: 'cashFlow.investing',
+  financing: 'cashFlow.financing',
+}
+
+export const CASH_FLOW_SECTION_NET: Record<CashFlowSection, MessageKey> = {
+  operating: 'cashFlow.operatingNet',
+  investing: 'cashFlow.investingNet',
+  financing: 'cashFlow.financingNet',
+}
 
 export type CashFlowLineId = (typeof CASH_FLOW_LINES)[number]['id']
 
@@ -63,6 +82,7 @@ export interface UnassignedCashFlow {
 }
 
 export interface CashFlowStatement {
+  title: string
   operating_currency: string
   /** First and last day a cash account actually moved. */
   period: StatementPeriod | null
@@ -92,6 +112,7 @@ export function readAccountCashMeta(
 }
 
 export function classifyCashFlow(input: {
+  title?: string
   currency: string
   postings: CashPosting[]
   accounts: AccountCashMeta[]
@@ -153,6 +174,7 @@ export function classifyCashFlow(input: {
   const unassignedTotal = unassignedRows.reduce((sum, row) => sum + row.amount, 0)
 
   return {
+    title: input.title ?? '',
     operating_currency: input.currency,
     period: periodFrom(dates),
     lines,

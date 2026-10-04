@@ -46,7 +46,6 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import {
   fetchTransactions,
-  fetchAccounts,
   fetchDocuments,
   type PostingItem,
   type TransactionEntry,
@@ -97,14 +96,11 @@ export function Journal() {
   })
   const transactions = journal?.entries
 
-  const { data: allAccounts = [] } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: fetchAccounts,
-  })
+  const allAccounts = ledger.data?.accounts ?? []
 
   const { data: allDocuments = [] } = useQuery({
     queryKey: ['documents'],
-    queryFn: fetchDocuments,
+    queryFn: ({ signal }) => fetchDocuments(signal),
   })
 
   // Extract all unique tags

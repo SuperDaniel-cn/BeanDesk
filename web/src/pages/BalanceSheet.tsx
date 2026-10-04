@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRightIcon, ExternalLinkIcon, RefreshCwIcon, TriangleAlertIcon } from 'lucide-react'
+import { ChevronRightIcon, DownloadIcon, ExternalLinkIcon, RefreshCwIcon, TriangleAlertIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 
+import { ReportBar, ReportDay, ReportWhen } from '@/components/report-bar'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -30,26 +31,18 @@ import {
   type BalanceSheetSection,
   type StatementSection,
 } from '@/lib/api'
+import { exportStatementCsv } from '@/lib/csv'
 import { explainFavaError } from '@/lib/fava-error'
-import { displayAccountName, toDisplay } from '@/lib/format'
+import { displayAccountName, presentBalance } from '@/lib/format'
+import { isCurrencyPlug } from '@/lib/ledger-model'
+import { formatPeriodLabel } from '@/lib/period-label'
+import { useShownTime } from '@/lib/shown-time'
+import { balanceCsvTable } from '@/lib/statement-csv'
 import { cn } from '@/lib/utils'
-
-/**
- * Beancount stores liabilities and equity as credits, so those figures are
- * negative. Flip them for the statement: assets = liabilities + equity, all positive.
- */
-function present(section: StatementSection, raw: number): number {
-  return section === 'assets' ? raw : toDisplay(raw)
-}
-
-/** Currency-conversion plugs are not equity of the company. */
-function isCurrencyPlug(account: string): boolean {
-  return /:(?:Conversions|Unrealized)(?::|$)/.test(account)
-}
 
 function includeNode(section: StatementSection, node: AccountNode): boolean {
   if (isCurrencyPlug(node.account)) return false
-  return present(section, node.total) !== 0
+  return presentBalance(section, node.total) !== 0
 }
 
 interface AccountLine {
@@ -122,7 +115,7 @@ function LineRow({
   onToggle: (account: string) => void
 }) {
   const { t, formatCurrency } = useI18n()
-  const value = present(section, line.node.total)
+  const value = presentBalance(section, line.node.total)
   const title = accountTitle(line.node, t)
 
   return (
@@ -254,9 +247,9 @@ function AccountForm({ data }: { data: BalanceSheetData }) {
     })
   }
 
-  const assetAmount = present('assets', data.totals.assets)
-  const liabilityAmount = present('liabilities', data.totals.liabilities)
-  const equityAmount = present('equity', data.totals.equity)
+  const assetAmount = presentBalance('assets', data.totals.assets)
+  const liabilityAmount = presentBalance('liabilities', data.totals.liabilities)
+  const equityAmount = presentBalance('equity', data.totals.equity)
   const assetTotal = formatCurrency(assetAmount, currency)
   const liabilityTotal = formatCurrency(liabilityAmount, currency)
   const equityTotal = formatCurrency(equityAmount, currency)
@@ -302,13 +295,14 @@ function AccountForm({ data }: { data: BalanceSheetData }) {
 }
 
 export function BalanceSheet() {
-  const { t, formatDate } = useI18n()
+  const { t, formatDate, formatCurrency } = useI18n()
   const { timeFilter } = useTimeFilter()
-
   const query = useQuery({
     queryKey: ['balance-sheet', timeFilter],
     queryFn: ({ signal }) => fetchBalanceSheet(timeFilter, signal),
+    placeholderData: (previous) => previous,
   })
+  const shownTime = useShownTime(timeFilter, query.isPlaceholderData)
 
   if (query.isError) {
     return (
@@ -327,33 +321,65 @@ export function BalanceSheet() {
     )
   }
 
-  if (query.isPending || !query.data) {
+  if (!query.data) {
     return <Skeleton className="h-96 w-full rounded-lg" />
   }
 
   const data = query.data
+  const periodLabel = formatPeriodLabel(shownTime, t)
+  const canExport = !query.isPlaceholderData
   const hasBalances = data.sections.some((section) =>
     section.children.some((node) => includeNode(section.section, node)),
   )
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {data.as_of ? (
-          <Badge variant="outline">{t('common.asOf', { date: formatDate(data.as_of) })}</Badge>
-        ) : null}
-        <Badge variant="outline">{data.operating_currency}</Badge>
-        <Badge variant={data.totals.balanced ? 'positive' : 'destructive'}>
-          {data.totals.balanced ? t('balanceSheet.balanced') : t('balanceSheet.unbalanced')}
-        </Badge>
-        <Button variant="outline" onClick={() => query.refetch()} disabled={query.isFetching}>
-          <RefreshCwIcon
-            data-icon="inline-start"
-            className={cn(query.isFetching && 'animate-spin')}
-          />
-          {t('common.refresh')}
-        </Button>
-      </div>
+      <ReportBar
+        status={
+          <>
+            <ReportWhen currency={data.operating_currency}>
+              {data.as_of ? (
+                <ReportDay iso={data.as_of}>
+                  {t('common.asOf', { date: formatDate(data.as_of) })}
+                </ReportDay>
+              ) : null}
+            </ReportWhen>
+            <Badge variant={data.totals.balanced ? 'positive' : 'destructive'}>
+              {data.totals.balanced ? t('balanceSheet.balanced') : t('balanceSheet.unbalanced')}
+            </Badge>
+          </>
+        }
+        actions={
+          <>
+            <Button
+              variant="outline"
+              disabled={!canExport}
+              onClick={() => {
+                const table = balanceCsvTable(data, t, formatCurrency)
+                exportStatementCsv({
+                  title: data.title,
+                  currency: data.operating_currency,
+                  periodLabel,
+                  periodToken: shownTime,
+                  report: t('balanceSheet.title'),
+                  headers: table.headers,
+                  rows: table.rows,
+                })
+              }}
+            >
+              <DownloadIcon data-icon="inline-start" />
+              {t('common.exportCsv')}
+            </Button>
+            <Button variant="outline" onClick={() => query.refetch()} disabled={query.isFetching}>
+              <RefreshCwIcon
+                data-icon="inline-start"
+                className={cn(query.isFetching && 'animate-spin')}
+              />
+              {t('common.refresh')}
+            </Button>
+          </>
+        }
+      />
 
       {!data.unconverted_currencies.length ? null : (
         <Alert variant="warning">
@@ -375,7 +401,7 @@ export function BalanceSheet() {
           </EmptyHeader>
         </Empty>
       ) : (
-        <AccountForm key={timeFilter} data={data} />
+        <AccountForm data={data} />
       )}
     </div>
   )

@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { ChevronRightIcon, ExternalLinkIcon, RefreshCwIcon, TriangleAlertIcon } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ChevronRightIcon, DownloadIcon, ExternalLinkIcon, RefreshCwIcon, TriangleAlertIcon } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 
@@ -12,8 +12,8 @@ import {
   StatementTable,
   amountTone,
 } from '@/components/period-compare'
+import { ReportBar, ReportDay, ReportWhen } from '@/components/report-bar'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Empty,
@@ -35,20 +35,18 @@ import {
   type IncomeStatementSection,
 } from '@/lib/api'
 import { compareAccounts, priorPeriod, type ComparedAccount } from '@/lib/ledger-model'
+import { exportStatementCsv } from '@/lib/csv'
 import { explainFavaError } from '@/lib/fava-error'
-import { displayAccountName, toDisplay } from '@/lib/format'
+import { displayAccountName, presentIncome } from '@/lib/format'
 import { formatPeriodLabel } from '@/lib/period-label'
+import { useShownTime, shownPrior } from '@/lib/shown-time'
+import { incomeCsvTable } from '@/lib/statement-csv'
 import { cn } from '@/lib/utils'
 
 type FlowSection = IncomeStatementSection['section']
 
-/** Income is a credit in Beancount. Expenses already read as positive debits. */
-function present(section: FlowSection, raw: number): number {
-  return section === 'income' ? toDisplay(raw) : raw
-}
-
 function includeNode(section: FlowSection, node: ComparedAccount): boolean {
-  return present(section, node.current) !== 0 || present(section, node.prior) !== 0
+  return presentIncome(section, node.current) !== 0 || presentIncome(section, node.prior) !== 0
 }
 
 interface AccountLine {
@@ -112,8 +110,8 @@ function LineRow({
 }) {
   const { t, formatCurrency, formatSignedCurrency } = useI18n()
   const title = displayAccountName(line.node.name)
-  const current = present(section, line.node.current)
-  const prior = present(section, line.node.prior)
+  const current = presentIncome(section, line.node.current)
+  const prior = presentIncome(section, line.node.prior)
 
   return (
     <TableRow>
@@ -270,10 +268,10 @@ function Statement({
     for (const account of defaultExpanded(expenses.nodes, 'expenses')) open.add(account)
     return open
   })
-  const revenue = present('income', income.current)
-  const priorRevenue = present('income', income.prior)
-  const expenseTotal = present('expenses', expenses.current)
-  const priorExpenseTotal = present('expenses', expenses.prior)
+  const revenue = presentIncome('income', income.current)
+  const priorRevenue = presentIncome('income', income.prior)
+  const expenseTotal = presentIncome('expenses', expenses.current)
+  const priorExpenseTotal = presentIncome('expenses', expenses.prior)
   const profit = revenue - expenseTotal
   const priorProfit = priorRevenue - priorExpenseTotal
 
@@ -338,14 +336,18 @@ function Statement({
 }
 
 export function IncomeStatement() {
-  const { t, formatDate } = useI18n()
+  const { t, formatDate, formatCurrency, formatSignedCurrency } = useI18n()
   const { timeFilter } = useTimeFilter()
+  const queryClient = useQueryClient()
   const priorKey = priorPeriod(timeFilter)
 
   const query = useQuery({
     queryKey: ['income-statement', timeFilter],
     queryFn: ({ signal }) => fetchIncomeStatement(timeFilter, signal),
+    placeholderData: (previous) => previous,
   })
+  const shownTime = useShownTime(timeFilter, query.isPlaceholderData)
+  const shownPriorKey = priorPeriod(shownTime)
   const priorQuery = useQuery({
     queryKey: ['income-statement', priorKey],
     queryFn: ({ signal }) => fetchIncomeStatement(priorKey as string, signal),
@@ -369,13 +371,18 @@ export function IncomeStatement() {
     )
   }
 
-  if (query.isPending || !query.data || (priorKey != null && priorQuery.isPending)) {
+  if (!query.data) {
     return <Skeleton className="h-96 w-full rounded-lg" />
   }
 
   const data = query.data
-  const priorFailed = priorKey != null && priorQuery.isError
-  const prior = priorKey != null && priorQuery.data ? priorQuery.data : null
+  const priorFailed = !query.isPlaceholderData && priorKey != null && priorQuery.isError
+  const prior = shownPrior(
+    shownPriorKey,
+    priorKey,
+    priorQuery.data,
+    queryClient.getQueryData<IncomeStatementData>(['income-statement', shownPriorKey]),
+  )
   const income = flowView(data, prior, 'income')
   const expenses = flowView(data, prior, 'expenses')
   const comparing = prior != null
@@ -383,34 +390,72 @@ export function IncomeStatement() {
     income.nodes.some((node) => includeNode('income', node)) ||
     expenses.nodes.some((node) => includeNode('expenses', node))
   const fetching = query.isFetching || priorQuery.isFetching
+  const currentLabel = formatPeriodLabel(shownTime, t)
+  const priorLabel = shownPriorKey ? formatPeriodLabel(shownPriorKey, t) : ''
+  const canExport = !query.isPlaceholderData
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {data.period ? (
-          <Badge variant="outline">
-            {t('income.period', {
-              from: formatDate(data.period.from),
-              to: formatDate(data.period.to),
-            })}
-          </Badge>
-        ) : null}
-        <Badge variant="outline">{data.operating_currency}</Badge>
-        <Button
-          variant="outline"
-          onClick={() => {
-            void query.refetch()
-            if (priorKey) void priorQuery.refetch()
-          }}
-          disabled={fetching}
-        >
-          <RefreshCwIcon
-            data-icon="inline-start"
-            className={cn(fetching && 'animate-spin')}
-          />
-          {t('common.refresh')}
-        </Button>
-      </div>
+      <ReportBar
+        status={
+          <ReportWhen currency={data.operating_currency}>
+            {data.period ? (
+              <>
+                <ReportDay iso={data.period.from}>{formatDate(data.period.from)}</ReportDay>
+                {` ${t('common.rangeJoiner')} `}
+                <ReportDay iso={data.period.to}>{formatDate(data.period.to)}</ReportDay>
+              </>
+            ) : null}
+          </ReportWhen>
+        }
+        actions={
+          <>
+            <Button
+              variant="outline"
+              disabled={!canExport}
+              onClick={() => {
+                const table = incomeCsvTable(
+                  income,
+                  expenses,
+                  data.operating_currency,
+                  comparing,
+                  t,
+                  formatCurrency,
+                  formatSignedCurrency,
+                  currentLabel,
+                  priorLabel,
+                )
+                exportStatementCsv({
+                  title: data.title,
+                  currency: data.operating_currency,
+                  periodLabel: currentLabel,
+                  periodToken: shownTime,
+                  report: t('income.title'),
+                  headers: table.headers,
+                  rows: table.rows,
+                })
+              }}
+            >
+              <DownloadIcon data-icon="inline-start" />
+              {t('common.exportCsv')}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                void query.refetch()
+                if (priorKey) void priorQuery.refetch()
+              }}
+              disabled={fetching}
+            >
+              <RefreshCwIcon
+                data-icon="inline-start"
+                className={cn(fetching && 'animate-spin')}
+              />
+              {t('common.refresh')}
+            </Button>
+          </>
+        }
+      />
 
       {priorFailed ? (
         <PriorUnavailableAlert onRetry={() => void priorQuery.refetch()} />
@@ -418,11 +463,11 @@ export function IncomeStatement() {
 
       {active ? (
         <Statement
-          key={`${timeFilter}:${comparing ? 'y' : 'n'}`}
+          key={comparing ? 'y' : 'n'}
           currency={data.operating_currency}
           comparing={comparing}
-          currentLabel={formatPeriodLabel(timeFilter, t)}
-          priorLabel={priorKey ? formatPeriodLabel(priorKey, t) : ''}
+          currentLabel={currentLabel}
+          priorLabel={priorLabel}
           income={income}
           expenses={expenses}
         />

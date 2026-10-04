@@ -3,7 +3,7 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "start_saved_fava",
             "stop_saved_fava",
-            "fava_status",
+            "fava_host",
             "fava_installed",
             "system_locales",
         ]),

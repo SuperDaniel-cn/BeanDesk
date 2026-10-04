@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import type { MessageKey } from '@/i18n/locales/en'
 import { runBQLQuery, type BQLQueryResult } from '@/lib/api'
+import { downloadCsv, formatCsv } from '@/lib/csv'
 import { explainFavaError } from '@/lib/fava-error'
 import { presentQueryCell, querySortValue } from '@/lib/format'
 import { useTimeFilter } from '@/lib/time-context'
@@ -125,23 +126,17 @@ export function QueryPlayground() {
   }
 
   function exportCsv(table: BQLQueryResult) {
-    const headers = table.types.map((column) => column.name).join(',')
-    const lines = table.rows.map((row) =>
-      row
-        .map((cell) => {
-          const formatted = presentQueryCell(cell, locale)
-          const text = formatted === '—' ? '' : formatted
-          return `"${text.replace(/"/g, '""')}"`
-        })
-        .join(','),
+    const headers = table.types.map((column) => column.name)
+    const rows = table.rows.map((row) =>
+      row.map((cell) => {
+        const formatted = presentQueryCell(cell, locale)
+        return formatted === '—' ? '' : formatted
+      }),
     )
-    const csv = `\uFEFF${[headers, ...lines].join('\n')}`
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `bql-${new Date().toISOString().slice(0, 10)}.csv`
-    link.click()
-    URL.revokeObjectURL(url)
+    downloadCsv(
+      `bql-${new Date().toISOString().slice(0, 10)}.csv`,
+      formatCsv([], headers, rows),
+    )
   }
 
   const data = result.data
@@ -158,7 +153,7 @@ export function QueryPlayground() {
         {data && data.rows.length > 0 ? (
           <Button variant="outline" onClick={() => exportCsv(data)}>
             <DownloadIcon data-icon="inline-start" />
-            {t('query.exportCsv')}
+            {t('common.exportCsv')}
           </Button>
         ) : null}
         <Button onClick={() => run()} disabled={result.isFetching}>

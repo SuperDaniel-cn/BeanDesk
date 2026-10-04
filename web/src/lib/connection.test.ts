@@ -2,8 +2,11 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   activeConnection,
+  emptyConnectionForm,
+  formFromConnectionFile,
   isLedgerConnection,
   isLoopbackOrigin,
+  isPristineConnectionForm,
   normalizeOrigin,
   readConnectionFile,
   withDrafts,
@@ -88,6 +91,33 @@ describe('readConnectionFile', () => {
       },
       remote: null,
     })
+  })
+
+  test('fills the settings form from a file that arrives after the first paint', () => {
+    const file = readConnectionFile({
+      active: 'local',
+      local: {
+        directory: '/tmp/ledger',
+        command: 'make run',
+        origin: 'http://127.0.0.1:5000',
+      },
+      remote: { origin: 'https://books.example' },
+    })
+    if (file == null) throw new Error('expected a saved connection')
+    expect(isPristineConnectionForm(emptyConnectionForm())).toBe(true)
+    expect(formFromConnectionFile(file)).toEqual({
+      kind: 'local',
+      directory: '/tmp/ledger',
+      command: 'make run',
+      localOrigin: 'http://127.0.0.1:5000',
+      remoteOrigin: 'https://books.example',
+    })
+    expect(
+      isPristineConnectionForm({
+        ...emptyConnectionForm(),
+        command: 'fava main.bean',
+      }),
+    ).toBe(false)
   })
 
   test('an incomplete edit does not erase the saved local project', () => {

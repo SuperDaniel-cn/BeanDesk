@@ -7,6 +7,8 @@ import {
   buildIncomeStatement,
   buildTrialBalance,
   compareAccounts,
+  dateInPeriod,
+  isCurrencyPlug,
   periodParts,
   priorPeriod,
   type AccountNode,
@@ -330,6 +332,29 @@ describe('priorPeriod', () => {
     expect(priorPeriod('')).toBeNull()
     expect(priorPeriod('2026-Q5')).toBeNull()
     expect(priorPeriod('2026-13')).toBeNull()
+  })
+})
+
+describe('dateInPeriod', () => {
+  test('keeps every date when the filter is all-time', () => {
+    expect(dateInPeriod('2026-03-15', '')).toBe(true)
+  })
+
+  test('matches a year, a quarter, and a month', () => {
+    expect(dateInPeriod('2026-03-15', '2026')).toBe(true)
+    expect(dateInPeriod('2025-03-15', '2026')).toBe(false)
+    expect(dateInPeriod('2026-03-15', '2026-Q1')).toBe(true)
+    expect(dateInPeriod('2026-04-01', '2026-Q1')).toBe(false)
+    expect(dateInPeriod('2026-03-15', '2026-03')).toBe(true)
+    expect(dateInPeriod('2026-04-01', '2026-03')).toBe(false)
+  })
+})
+
+describe('isCurrencyPlug', () => {
+  test('skips conversion and unrealized leaves', () => {
+    expect(isCurrencyPlug('Equity:Conversions')).toBe(true)
+    expect(isCurrencyPlug('Equity:Unrealized:USD')).toBe(true)
+    expect(isCurrencyPlug('Equity:Capital')).toBe(false)
   })
 })
 

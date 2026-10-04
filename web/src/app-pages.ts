@@ -1,9 +1,10 @@
-import { Banknote, BookOpen, FileSpreadsheet, Landmark, Scale, Terminal } from 'lucide-react'
+import { Archive, Banknote, BookOpen, FileSpreadsheet, Landmark, Scale, Terminal } from 'lucide-react'
 import type { ComponentType } from 'react'
 
 import type { MessageKey } from '@/i18n/locales/en'
 import { BalanceSheet } from '@/pages/BalanceSheet'
 import { CashFlow } from '@/pages/CashFlow'
+import { Documents } from '@/pages/Documents'
 import { IncomeStatement } from '@/pages/IncomeStatement'
 import { Journal } from '@/pages/Journal'
 import { QueryPlayground } from '@/pages/QueryPlayground'
@@ -20,5 +21,6 @@ export const REPORT_PAGES: Array<{
   { path: '/income-statement', key: 'income.title', icon: FileSpreadsheet, Page: IncomeStatement },
   { path: '/cash-flow', key: 'cashFlow.title', icon: Banknote, Page: CashFlow },
   { path: '/journal', key: 'journal.title', icon: BookOpen, Page: Journal },
+  { path: '/documents', key: 'documents.title', icon: Archive, Page: Documents },
   { path: '/query', key: 'query.title', icon: Terminal, Page: QueryPlayground },
 ]

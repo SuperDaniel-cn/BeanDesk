@@ -5,6 +5,8 @@ import {
   formatCurrency,
   formatQueryValue,
   formatSignedCurrency,
+  presentBalance,
+  presentIncome,
   presentQueryCell,
   querySortValue,
   toDisplay,
@@ -30,6 +32,21 @@ describe('toDisplay', () => {
 
   test('keeps zero unsigned', () => {
     expect(Object.is(toDisplay(0), 0)).toBe(true)
+  })
+})
+
+describe('presentIncome', () => {
+  test('flips income and leaves expenses as debits', () => {
+    expect(presentIncome('income', -100)).toBe(100)
+    expect(presentIncome('expenses', 40)).toBe(40)
+  })
+})
+
+describe('presentBalance', () => {
+  test('flips liabilities and equity and leaves assets as debits', () => {
+    expect(presentBalance('assets', 100)).toBe(100)
+    expect(presentBalance('liabilities', -30)).toBe(30)
+    expect(presentBalance('equity', -70)).toBe(70)
   })
 })
 
