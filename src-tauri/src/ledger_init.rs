@@ -47,7 +47,14 @@ pub fn init_ledger_tree(directory: &Path) -> Result<(), String> {
     write_new(year_dir.join(format!("{year}.bean")), &year_index)?;
     write_new(year_dir.join(&month_file), "")?;
     write_new(directory.join(".gitignore"), BACKUP_GITIGNORE)?;
+    write_new(directory.join(APP_MARKER), "beandesk\n")?;
     Ok(())
+}
+
+pub const APP_MARKER: &str = ".beandesk";
+
+pub fn app_created_ledger(directory: &Path) -> bool {
+    directory.join(APP_MARKER).is_file()
 }
 
 pub const BACKUP_GITIGNORE: &str = "\
@@ -113,6 +120,7 @@ mod tests {
         assert!(main.contains("option \"documents\" \"documents\""));
         let ignore = fs::read_to_string(root.join(".gitignore")).unwrap();
         assert!(ignore.contains(".backup_key"));
+        assert!(app_created_ledger(&root));
         assert_eq!(init_ledger_tree(&root).err().as_deref(), Some("ledger-exists"));
         let _ = fs::remove_dir_all(&root);
     }

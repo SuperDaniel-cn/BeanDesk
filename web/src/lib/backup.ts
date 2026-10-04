@@ -39,6 +39,7 @@ export type BackupStatus = {
   resticReady: boolean
   archiveDirReady: boolean
   archiveDirectory: string
+  appLedger: boolean
 }
 
 export function emptyBackupSettings(): BackupSettings {
@@ -72,6 +73,7 @@ export function emptyBackupStatus(): BackupStatus {
     resticReady: false,
     archiveDirReady: false,
     archiveDirectory: '',
+    appLedger: false,
   }
 }
 
@@ -110,6 +112,39 @@ export function canWriteArchive(
   status: Pick<BackupStatus, 'hasKey' | 'resticReady' | 'archiveDirReady' | 'archiveDirectory'>,
 ): boolean {
   return archiveBlockReason(settings, status) === null
+}
+
+/** Short label for a restic dest. Cloud URLs stay off the restore picker. */
+export function presentBackupRepo(
+  location: string,
+  t: (key: MessageKey, vars?: Vars) => string,
+): string {
+  const cloud = presentCloudRepo(location)
+  if (cloud !== null) {
+    return cloud ? `${t('settings.backupArchiveCloud')} · ${cloud}` : t('settings.backupArchiveCloud')
+  }
+  const leaf = location.split(/[/\\]/).filter(Boolean).at(-1)
+  return leaf ? `${t('settings.backupArchiveLocal')} · ${leaf}` : t('settings.backupArchiveLocal')
+}
+
+function presentCloudRepo(location: string): string | null {
+  if (!location.startsWith('s3:')) return null
+  try {
+    return new URL(location.slice(3)).pathname.replace(/^\/+|\/+$/g, '')
+  } catch {
+    return ''
+  }
+}
+
+export function presentBackupSnapshot(id: string, time = ''): string {
+  const short = id.slice(0, 8)
+  const when = presentBackupTime(time)
+  return when ? `${short} · ${when}` : short
+}
+
+function presentBackupTime(value: string): string {
+  const match = value.trim().match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/)
+  return match ? `${match[1]} ${match[2]}` : ''
 }
 
 export function archiveNestsLedger(workdir: string, dest: string): boolean {
@@ -166,6 +201,7 @@ export function explainBackupError(
   if (code === 's3' || code === 'restic') return t('settings.backupErrorS3')
   if (code === 'backup-partial') return t('settings.backupErrorPartial')
   if (code === 'snapshot') return t('settings.backupErrorSnapshot')
+  if (code === 'foreign-ledger') return t('settings.backupForeign')
   if (code === 'check') return t('settings.backupErrorCheck')
   if (code === 'check-pending') return t('settings.backupErrorCheckPending')
   return code || t('common.errorFallback')

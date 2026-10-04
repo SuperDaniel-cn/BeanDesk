@@ -119,6 +119,7 @@ pub struct BackupStatus {
     pub restic_ready: bool,
     pub archive_dir_ready: bool,
     pub archive_directory: String,
+    pub app_ledger: bool,
 }
 
 impl BackupSettings {

@@ -25,6 +25,18 @@ struct SavedLocal {
     directory: String,
     command: String,
     origin: String,
+    /// `engine` uses the bundled runtime even when `command` still holds the
+    /// advanced-page shell line. Missing on files written before this field.
+    #[serde(default)]
+    launch: String,
+}
+
+fn bundled_launch(saved: &SavedLocal) -> bool {
+    match saved.launch.as_str() {
+        "engine" => true,
+        "shell" => false,
+        _ => saved.command.trim().is_empty(),
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -115,35 +127,19 @@ fn directory_from_connection(value: &serde_json::Value) -> Result<PathBuf, Strin
     {
         return Ok(PathBuf::from(directory));
     }
-    if value.get("kind").and_then(|kind| kind.as_str()) == Some("local")
-        && let Some(directory) = value
-            .get("directory")
-            .and_then(|item| item.as_str())
-            .map(str::trim)
-            .filter(|item| !item.is_empty())
-    {
-        return Ok(PathBuf::from(directory));
-    }
     Err("directory".to_string())
 }
 
-/// The active mode is the only one that can start a process. A file written
-/// before `active` existed is still a single local or remote record.
+/// The active mode is the only one that can start a process.
 fn local_project(value: &serde_json::Value) -> Result<SavedLocal, String> {
-    if let Some(active) = value.get("active").and_then(|item| item.as_str()) {
-        if active != "local" {
-            return Err("not-local".to_string());
-        }
-        let local = value
-            .get("local")
-            .cloned()
-            .ok_or_else(|| "missing".to_string())?;
-        return serde_json::from_value(local).map_err(|error| error.to_string());
-    }
-    if value.get("kind").and_then(|kind| kind.as_str()) != Some("local") {
+    if value.get("active").and_then(|item| item.as_str()) != Some("local") {
         return Err("not-local".to_string());
     }
-    serde_json::from_value(value.clone()).map_err(|error| error.to_string())
+    let local = value
+        .get("local")
+        .cloned()
+        .ok_or_else(|| "missing".to_string())?;
+    serde_json::from_value(local).map_err(|error| error.to_string())
 }
 
 /// Start the local project saved in the store. The command is not taken from
@@ -154,7 +150,7 @@ fn start_saved_fava(app: AppHandle, host: State<'_, FavaHost>) -> Result<(), Str
     if !accepts_local_origin(&saved.origin) {
         return Err("loopback".to_string());
     }
-    let command = if saved.command.trim().is_empty() {
+    let command = if bundled_launch(&saved) {
         let engine = resolve_engine(Some(&app))?;
         if let Err(code) = init_ledger_tree(Path::new(&saved.directory)) {
             if code != "ledger-exists" {
@@ -196,7 +192,7 @@ fn system_locales() -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{directory_from_connection, local_project};
+    use super::{bundled_launch, directory_from_connection, local_project};
 
     #[test]
     fn reads_the_active_local_project() {
@@ -212,6 +208,7 @@ mod tests {
         let saved = local_project(&value).unwrap();
         assert_eq!(saved.command, "make run");
         assert_eq!(saved.directory, "/tmp/ledger");
+        assert!(!bundled_launch(&saved));
     }
 
     #[test]
@@ -228,6 +225,24 @@ mod tests {
         let saved = local_project(&value).unwrap();
         assert_eq!(saved.command, "");
         assert_eq!(saved.directory, "/tmp/ledger");
+        assert!(bundled_launch(&saved));
+    }
+
+    #[test]
+    fn engine_launch_ignores_a_saved_shell_command() {
+        let value = serde_json::json!({
+            "active": "local",
+            "local": {
+                "directory": "/tmp/ledger",
+                "command": "make run",
+                "origin": "http://127.0.0.1:5000",
+                "launch": "engine"
+            },
+            "remote": null
+        });
+        let saved = local_project(&value).unwrap();
+        assert_eq!(saved.command, "make run");
+        assert!(bundled_launch(&saved));
     }
 
     #[test]
@@ -272,18 +287,6 @@ mod tests {
             "remote": { "origin": "https://books.example" }
         });
         assert_eq!(local_project(&value).err().as_deref(), Some("not-local"));
-    }
-
-    #[test]
-    fn reads_a_local_record_written_before_active_existed() {
-        let value = serde_json::json!({
-            "kind": "local",
-            "directory": "/tmp/ledger",
-            "command": "make run",
-            "origin": "http://127.0.0.1:5000"
-        });
-        let saved = local_project(&value).unwrap();
-        assert_eq!(saved.origin, "http://127.0.0.1:5000");
     }
 
     #[test]

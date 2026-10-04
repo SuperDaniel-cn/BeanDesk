@@ -40,10 +40,6 @@ import { useShownTime } from '@/lib/shown-time'
 import { balanceCsvTable } from '@/lib/statement-csv'
 import { cn } from '@/lib/utils'
 
-function includeNode(_section: StatementSection, node: AccountNode): boolean {
-  return visibleAccount(node.total, node.children)
-}
-
 interface AccountLine {
   node: AccountNode
   depth: number
@@ -57,20 +53,15 @@ function sectionChildren(sections: BalanceSheetSection[], name: StatementSection
   return sections.find((section) => section.section === name)?.children ?? NO_ACCOUNTS
 }
 
-function flatten(
-  nodes: AccountNode[],
-  expanded: Set<string>,
-  section: StatementSection,
-  depth = 0,
-): AccountLine[] {
+function flatten(nodes: AccountNode[], expanded: Set<string>, depth = 0): AccountLine[] {
   const rows: AccountLine[] = []
   for (const node of nodes) {
-    if (!includeNode(section, node)) continue
+    if (!visibleAccount(node.total, node.children)) continue
     const expandedNode = expanded.has(node.account)
-    const childRows = expandedNode ? flatten(node.children, expanded, section, depth + 1) : []
+    const childRows = expandedNode ? flatten(node.children, expanded, depth + 1) : []
     const hasChildren = expandedNode
       ? childRows.length > 0
-      : node.children.some((child) => includeNode(section, child))
+      : node.children.some((child) => visibleAccount(child.total, child.children))
     rows.push({ node, depth, open: hasChildren && expandedNode, hasChildren })
     if (hasChildren && expandedNode) rows.push(...childRows)
   }
@@ -80,16 +71,16 @@ function flatten(
 /** Open every account that still has a balance underneath it. */
 function defaultExpanded(sections: BalanceSheetSection[]): Set<string> {
   const open = new Set<string>()
-  const walk = (nodes: AccountNode[], section: StatementSection): boolean => {
+  const walk = (nodes: AccountNode[]): boolean => {
     let shown = false
     for (const node of nodes) {
-      if (!includeNode(section, node)) continue
+      if (!visibleAccount(node.total, node.children)) continue
       shown = true
-      if (walk(node.children, section)) open.add(node.account)
+      if (walk(node.children)) open.add(node.account)
     }
     return shown
   }
-  for (const section of sections) walk(section.children, section.section)
+  for (const section of sections) walk(section.children)
   return open
 }
 
@@ -225,15 +216,15 @@ function AccountForm({ data }: { data: BalanceSheetData }) {
   const [expanded, setExpanded] = useState<Set<string>>(() => defaultExpanded(data.sections))
 
   const assetLines = useMemo(
-    () => flatten(sectionChildren(data.sections, 'assets'), expanded, 'assets'),
+    () => flatten(sectionChildren(data.sections, 'assets'), expanded),
     [data.sections, expanded],
   )
   const liabilityLines = useMemo(
-    () => flatten(sectionChildren(data.sections, 'liabilities'), expanded, 'liabilities'),
+    () => flatten(sectionChildren(data.sections, 'liabilities'), expanded),
     [data.sections, expanded],
   )
   const equityLines = useMemo(
-    () => flatten(sectionChildren(data.sections, 'equity'), expanded, 'equity'),
+    () => flatten(sectionChildren(data.sections, 'equity'), expanded),
     [data.sections, expanded],
   )
 
@@ -328,7 +319,7 @@ export function BalanceSheet() {
   const periodLabel = formatPeriodLabel(shownTime, t)
   const canExport = !query.isPlaceholderData
   const hasBalances = data.sections.some((section) =>
-    section.children.some((node) => includeNode(section.section, node)),
+    section.children.some((node) => visibleAccount(node.total, node.children)),
   )
 
   return (

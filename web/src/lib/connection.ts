@@ -9,10 +9,14 @@ import type { MessageKey } from '@/i18n/locales/en'
  * leaves the other draft on disk and does not start it.
  */
 
+/** `engine` starts the bundled runtime. `shell` runs `command` as written. */
+export type Launch = 'engine' | 'shell'
+
 export type LocalDraft = {
   directory: string
   command: string
   origin: string
+  launch: Launch
 }
 
 export type RemoteDraft = {
@@ -102,15 +106,35 @@ export function isLoopbackOrigin(origin: string): boolean {
   return host === 'localhost' || host === '127.0.0.1' || host === '::1'
 }
 
-/** Work folder plus a loopback origin. The start command may be empty. */
-export function localWorkdir(directory: string, origin: string, command = ''): LocalDraft | null {
+/**
+ * Work folder plus a loopback origin. An empty command is the bundled engine.
+ * A saved shell command stays on the draft when `launch` is `engine`, so the
+ * simple page can start the runtime without erasing the advanced command.
+ */
+export function localWorkdir(
+  directory: string,
+  origin: string,
+  command = '',
+  launch?: Launch,
+): LocalDraft | null {
   const next = normalizeOrigin(origin)
   if (!directory || !next || !isLoopbackOrigin(next)) return null
-  return { directory, command: command.trim(), origin: next }
+  const trimmed = command.trim()
+  return {
+    directory,
+    command: trimmed,
+    origin: next,
+    launch: launch ?? (trimmed ? 'shell' : 'engine'),
+  }
 }
 
-export function localDraft(directory: string, command: string, origin: string): LocalDraft | null {
-  const draft = localWorkdir(directory, origin, command)
+export function localDraft(
+  directory: string,
+  command: string,
+  origin: string,
+  launch?: Launch,
+): LocalDraft | null {
+  const draft = localWorkdir(directory, origin, command, launch ?? 'shell')
   return draft?.command ? draft : null
 }
 
@@ -159,22 +183,12 @@ export function activeConnection(file: ConnectionFile | null | undefined): Ledge
 export function readConnectionFile(value: unknown): ConnectionFile | null {
   if (!value || typeof value !== 'object') return null
   const record = value as Record<string, unknown>
-  if (record.active === 'local' || record.active === 'remote') {
-    return {
-      active: record.active,
-      local: readLocalDraft(record.local),
-      remote: readRemoteDraft(record.remote),
-    }
+  if (record.active !== 'local' && record.active !== 'remote') return null
+  return {
+    active: record.active,
+    local: readLocalDraft(record.local),
+    remote: readRemoteDraft(record.remote),
   }
-  if (!isLedgerConnection(value)) return null
-  if (value.kind === 'local') {
-    return {
-      active: 'local',
-      local: { directory: value.directory, command: value.command.trim(), origin: value.origin },
-      remote: null,
-    }
-  }
-  return { active: 'remote', local: null, remote: { origin: value.origin } }
 }
 
 export function connectionStepKey(step: ConnectionStep): MessageKey {
@@ -205,6 +219,7 @@ export function explainConnectionError(
   }
   if (code === 'start-exited') return t('settings.startExited')
   if (code === 'occupied') return t('settings.hostPortOccupied')
+  if (code === 'airplay') return t('settings.airplayPort')
   return code || t('common.errorFallback')
 }
 
@@ -218,7 +233,8 @@ function readLocalDraft(value: unknown): LocalDraft | null {
   ) {
     return null
   }
-  return localWorkdir(record.directory, record.origin, record.command)
+  const launch = record.launch === 'engine' || record.launch === 'shell' ? record.launch : undefined
+  return localWorkdir(record.directory, record.origin, record.command, launch)
 }
 
 function readRemoteDraft(value: unknown): RemoteDraft | null {

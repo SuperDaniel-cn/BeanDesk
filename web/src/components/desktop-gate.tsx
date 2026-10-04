@@ -166,9 +166,7 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
       const previous = hostRef.current
       if (next.owned || next.probe.kind === 'fava' || next.probe.kind === 'idle') {
         attachedMisses.current = 0
-      } else if (!next.owned && previous.probe.kind === 'fava') {
-        attachedMisses.current += 1
-      } else if (!next.owned && attachedMisses.current > 0) {
+      } else if (previous.probe.kind === 'fava' || attachedMisses.current > 0) {
         attachedMisses.current += 1
       }
       hostRef.current = next

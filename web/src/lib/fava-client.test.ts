@@ -4,7 +4,7 @@ import type { MessageKey } from '@/i18n/locales/en'
 import { en } from '@/i18n/locales/en'
 import { zhCN } from '@/i18n/locales/zh-CN'
 import { readLedgerSlug } from './config'
-import { FavaClient } from './fava-client'
+import { FavaClient, isAirPlayServer } from './fava-client'
 import {
   explainFavaError,
   FAVA_SLUG,
@@ -21,6 +21,15 @@ const originalFetch = globalThis.fetch
 afterEach(() => {
   globalThis.fetch = originalFetch
   delete (globalThis as { window?: unknown }).window
+})
+
+describe('isAirPlayServer', () => {
+  test('recognizes the macOS receiver that shares port 5000', () => {
+    expect(isAirPlayServer('AirTunes/980.77.5')).toBe(true)
+    expect(isAirPlayServer('AirPlay')).toBe(true)
+    expect(isAirPlayServer('Cheroot/10.0.1')).toBe(false)
+    expect(isAirPlayServer('')).toBe(false)
+  })
 })
 
 describe('explainFavaError', () => {

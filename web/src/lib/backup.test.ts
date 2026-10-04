@@ -10,6 +10,8 @@ import {
   destFolderMissing,
   emptyBackupSettings,
   explainBackupError,
+  presentBackupRepo,
+  presentBackupSnapshot,
   validateS3Endpoint,
 } from './backup'
 
@@ -90,6 +92,22 @@ describe('backup dests', () => {
     ).toBe('archive-dir-gone')
     expect(archiveBlockReason({ ...settings, archiveAuto: true }, ready)).toBe('archive-dest')
     expect(canWriteArchive({ ...settings, archiveAuto: true, s3Enabled: true }, ready)).toBe(true)
+  })
+
+  test('restore labels keep the dest kind and drop the long URL', () => {
+    const t = (key: MessageKey) => key
+    expect(
+      presentBackupRepo('s3:https://example.r2.cloudflarestorage.com/opc-ledger-backup/beandesk', t),
+    ).toBe('settings.backupArchiveCloud · opc-ledger-backup/beandesk')
+    expect(presentBackupRepo('s3:https://example.r2.cloudflarestorage.com', t)).toBe(
+      'settings.backupArchiveCloud',
+    )
+    expect(presentBackupRepo('/Users/me/Backups/untitled folder 2', t)).toBe(
+      'settings.backupArchiveLocal · untitled folder 2',
+    )
+    expect(presentBackupSnapshot('9630e77206f4c5c6a4f48d65938d5181a229953d', '2026-10-05T00:37:38+08:00')).toBe(
+      '9630e772 · 2026-10-05 00:37',
+    )
   })
 
   test('backup dest cannot sit in the ledger tree', () => {

@@ -45,10 +45,6 @@ import { cn } from '@/lib/utils'
 
 type FlowSection = IncomeStatementSection['section']
 
-function includeNode(_section: FlowSection, node: ComparedAccount): boolean {
-  return visibleCompared(node)
-}
-
 interface AccountLine {
   node: ComparedAccount
   depth: number
@@ -60,32 +56,27 @@ function findSection(sections: IncomeStatementSection[], name: FlowSection) {
   return sections.find((section) => section.section === name)
 }
 
-function flatten(
-  nodes: ComparedAccount[],
-  expanded: Set<string>,
-  section: FlowSection,
-  depth = 0,
-): AccountLine[] {
+function flatten(nodes: ComparedAccount[], expanded: Set<string>, depth = 0): AccountLine[] {
   const rows: AccountLine[] = []
   for (const node of nodes) {
-    if (!includeNode(section, node)) continue
+    if (!visibleCompared(node)) continue
     const expandedNode = expanded.has(node.account)
-    const childRows = expandedNode ? flatten(node.children, expanded, section, depth + 1) : []
+    const childRows = expandedNode ? flatten(node.children, expanded, depth + 1) : []
     const hasChildren = expandedNode
       ? childRows.length > 0
-      : node.children.some((child) => includeNode(section, child))
+      : node.children.some((child) => visibleCompared(child))
     rows.push({ node, depth, open: hasChildren && expandedNode, hasChildren })
     if (hasChildren && expandedNode) rows.push(...childRows)
   }
   return rows
 }
 
-function defaultExpanded(nodes: ComparedAccount[], section: FlowSection): Set<string> {
+function defaultExpanded(nodes: ComparedAccount[]): Set<string> {
   const open = new Set<string>()
   const walk = (children: ComparedAccount[]): boolean => {
     let shown = false
     for (const node of children) {
-      if (!includeNode(section, node)) continue
+      if (!visibleCompared(node)) continue
       shown = true
       if (walk(node.children)) open.add(node.account)
     }
@@ -264,8 +255,8 @@ function Statement({
 }) {
   const { t, formatCurrency, formatSignedCurrency } = useI18n()
   const [expanded, setExpanded] = useState<Set<string>>(() => {
-    const open = defaultExpanded(income.nodes, 'income')
-    for (const account of defaultExpanded(expenses.nodes, 'expenses')) open.add(account)
+    const open = defaultExpanded(income.nodes)
+    for (const account of defaultExpanded(expenses.nodes)) open.add(account)
     return open
   })
   const revenue = presentIncome('income', income.current)
@@ -276,11 +267,11 @@ function Statement({
   const priorProfit = priorRevenue - priorExpenseTotal
 
   const incomeLines = useMemo(
-    () => flatten(income.nodes, expanded, 'income'),
+    () => flatten(income.nodes, expanded),
     [income.nodes, expanded],
   )
   const expenseLines = useMemo(
-    () => flatten(expenses.nodes, expanded, 'expenses'),
+    () => flatten(expenses.nodes, expanded),
     [expenses.nodes, expanded],
   )
 
@@ -387,8 +378,8 @@ export function IncomeStatement() {
   const expenses = flowView(data, prior, 'expenses')
   const comparing = prior != null
   const active =
-    income.nodes.some((node) => includeNode('income', node)) ||
-    expenses.nodes.some((node) => includeNode('expenses', node))
+    income.nodes.some((node) => visibleCompared(node)) ||
+    expenses.nodes.some((node) => visibleCompared(node))
   const fetching = query.isFetching || priorQuery.isFetching
   const currentLabel = formatPeriodLabel(shownTime, t)
   const priorLabel = shownPriorKey ? formatPeriodLabel(shownPriorKey, t) : ''

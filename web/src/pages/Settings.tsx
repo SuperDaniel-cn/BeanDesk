@@ -257,9 +257,10 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
     return enqueue(async () => {
       if (connectInFlight.current) return
       const current = fields.current
+      const launch = current.saved?.local?.launch
       const local = allowEmptyCommand
-        ? localWorkdir(current.directory, current.localOrigin, current.command)
-        : localDraft(current.directory, current.command, current.localOrigin)
+        ? localWorkdir(current.directory, current.localOrigin, current.command, launch)
+        : localDraft(current.directory, current.command, current.localOrigin, launch)
       const next = withDrafts(
         current.saved?.active ?? kindOverride ?? current.kind,
         local,
@@ -315,34 +316,42 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
 
   async function connect() {
     if (desktop.status !== 'setup' || busy) return
-    const local = command.trim()
-      ? localDraft(directory, command, localOrigin)
-      : localWorkdir(directory, localOrigin)
     const remote = remoteDraft(remoteOrigin)
+    const launch = fields.current.saved?.local?.launch
     if (kind === 'local') {
       if (!directory) {
         fail(t('settings.missingDirectory'))
+        return
+      }
+      if (!command.trim()) {
+        fail(t('settings.missingCommand'))
         return
       }
       if (!normalizeOrigin(localOrigin)) {
         fail(t('settings.invalidOrigin'))
         return
       }
+      const local = localDraft(directory, command, localOrigin, 'shell')
       if (!local) {
         fail(t('settings.loopback'))
         return
       }
-    } else if (!remote) {
+      await openSaved('local', local, remote)
+      return
+    }
+    if (!remote) {
       fail(t('settings.invalidOrigin'))
       return
     }
-    await openSaved(kind, local, remote)
+    const local = command.trim()
+      ? localDraft(directory, command, localOrigin, launch)
+      : localWorkdir(directory, localOrigin, '', launch ?? 'engine')
+    await openSaved('remote', local, remote)
   }
 
   async function connectSimple() {
     if (desktop.status !== 'setup' || busy) return
-    const savedCommand = fields.current.saved?.local?.command ?? ''
-    const local = localWorkdir(directory, localOrigin, savedCommand)
+    const local = localWorkdir(directory, localOrigin, command, 'engine')
     const remote = remoteDraft(remoteOrigin)
     if (!directory) {
       fail(t('settings.missingWorkDirectory'))

@@ -9,7 +9,6 @@ import {
   compareAccounts,
   dateInPeriod,
   incomeActivityQuery,
-  isCurrencyPlug,
   visibleAccount,
   visibleCompared,
   periodParts,
@@ -395,14 +394,6 @@ describe('incomeActivityQuery', () => {
     expect(incomeActivityQuery('Income', 'Expenses')).toBe(
       'SELECT min(date), max(date) WHERE account ~ "^(Income|Expenses)(:|$)"',
     )
-  })
-})
-
-describe('isCurrencyPlug', () => {
-  test('skips conversion and unrealized leaves', () => {
-    expect(isCurrencyPlug('Equity:Conversions')).toBe(true)
-    expect(isCurrencyPlug('Equity:Unrealized:USD')).toBe(true)
-    expect(isCurrencyPlug('Equity:Capital')).toBe(false)
   })
 })
 

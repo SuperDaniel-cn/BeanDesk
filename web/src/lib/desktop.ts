@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 
-import { favaClient } from '@/lib/fava-client'
+import { favaClient, isAirPlayServer } from '@/lib/fava-client'
 import {
   readConnectionFile,
   type ConnectionFile,
@@ -94,8 +94,13 @@ export async function openConnection(
       onStep?.('ready')
       return true
     }
+    if (state.kind === 'occupied') {
+      const airplay = isAirPlayServer(state.server)
+      if (!(connection.kind === 'local' && airplay)) {
+        throw new Error(airplay ? 'airplay' : 'occupied')
+      }
+    }
     if (connection.kind !== 'local') {
-      if (state.kind === 'occupied') throw new Error('occupied')
       await favaClient.ensureSlug()
       return current()
     }

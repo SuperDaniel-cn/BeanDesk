@@ -18,6 +18,12 @@ import {
   slugFromRedirectUrl,
 } from './ledger-model'
 
+/** AirPlay Receiver listens on every interface. A local Fava can still bind 127.0.0.1. */
+export function isAirPlayServer(server: string): boolean {
+  const name = server.toLowerCase()
+  return name.includes('airtunes') || name.includes('airplay')
+}
+
 export interface FavaAccountDetail {
   meta?: Record<string, unknown>
 }
@@ -107,7 +113,8 @@ export class FavaClient {
 
   /**
    * Distinguish a Fava redirect from a closed port and from another program
-   * that merely answers HTTP. macOS AirPlay Receiver does the latter on 5000.
+   * that merely answers HTTP. macOS AirPlay Receiver answers on port 5000
+   * until a program binds 127.0.0.1:5000 itself.
    */
   async probe(): Promise<OriginProbe> {
     let response: Response

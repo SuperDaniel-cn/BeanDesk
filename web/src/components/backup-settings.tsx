@@ -10,6 +10,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -28,6 +29,7 @@ import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -43,6 +45,8 @@ import {
   emptyBackupSettings,
   emptyBackupStatus,
   explainBackupError,
+  presentBackupRepo,
+  presentBackupSnapshot,
   validateS3Endpoint,
   type BackupSettings,
   type RepoSnapshots,
@@ -53,27 +57,30 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
   const { t } = useI18n()
   const [settings, setSettings] = useState(emptyBackupSettings)
   const [status, setStatus] = useState(emptyBackupStatus)
+  const [statusLoaded, setStatusLoaded] = useState(false)
   const [secret, setSecret] = useState('')
   const [passphrase, setPassphrase] = useState('')
-  const [work, setWork] = useState<'backup' | 'restore' | 'key' | 's3' | null>(null)
+  const [work, setWork] = useState<'backup' | 'restore' | 'list' | 'pick' | 'key' | 's3' | null>(null)
   const [repos, setRepos] = useState<RepoSnapshots[] | null>(null)
   const [restoreRepo, setRestoreRepo] = useState('')
   const [restoreSnapshot, setRestoreSnapshot] = useState('')
   const busy = work !== null
-  const blocking = work === 'backup' || work === 'restore'
+  const blocking = work === 'backup' || work === 'restore' || work === 'list'
   const settingsRef = useRef(settings)
   const writeLock = useRef(Promise.resolve())
   const ready = Boolean(workDirectory)
-  const locked = !ready || busy
+  const foreign = statusLoaded && ready && !status.appLedger
+  const locked = !ready || busy || foreign
   const destMissing = destFolderMissing(settings, status)
   const hasKey = ready && status.hasKey
-  const canArchive = ready && !busy && canWriteArchive(settings, status)
+  const canArchive = ready && !busy && !foreign && canWriteArchive(settings, status)
   const endpointInvalid = Boolean(settings.endpoint.trim() && !validateS3Endpoint(settings.endpoint))
   const destNested = settings.archiveLocal && archiveNestsLedger(workDirectory, settings.archiveDirectory)
 
   async function refreshStatus() {
     const next = await invoke<BackupStatus>('backup_status')
     setStatus(next)
+    setStatusLoaded(true)
     return next
   }
 
@@ -194,22 +201,31 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
   }
 
   async function restore() {
-    const latest = await refreshStatus().catch(() => status)
-    if (!latest.hasKey) {
-      toast.error(t('settings.backupErrorKey'))
-      return
+    if (!ready || busy) return
+    setWork('list')
+    await paint()
+    try {
+      const latest = await refreshStatus().catch(() => status)
+      if (!latest.hasKey) {
+        toast.error(t('settings.backupErrorKey'))
+        return
+      }
+      const listed = await invoke<RepoSnapshots[]>('backup_snapshots').catch(() => [])
+      const usable = listed.filter((repo) => repo.snapshots.length > 0)
+      if (!usable.length) {
+        fail('snapshot')
+        return
+      }
+      const first = usable[0]
+      const newest = first.snapshots[first.snapshots.length - 1]
+      setRepos(usable)
+      setRestoreRepo(first.location)
+      setRestoreSnapshot(newest.id)
+    } catch (caught) {
+      fail(caught)
+    } finally {
+      setWork(null)
     }
-    const listed = await invoke<RepoSnapshots[]>('backup_snapshots').catch(() => [])
-    const usable = listed.filter((repo) => repo.snapshots.length > 0)
-    if (!usable.length) {
-      fail('snapshot')
-      return
-    }
-    const first = usable[0]
-    const newest = first.snapshots[first.snapshots.length - 1]
-    setRepos(usable)
-    setRestoreRepo(first.location)
-    setRestoreSnapshot(newest.id)
   }
 
   function chooseRestoreRepo(location: string) {
@@ -220,19 +236,21 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
   }
 
   async function confirmRestore() {
+    if (busy) return
     if (!restoreRepo || !restoreSnapshot) {
       fail('snapshot')
       return
     }
-    const { open } = await import('@tauri-apps/plugin-dialog')
-    const output = await open({ directory: true, multiple: false })
-    if (typeof output !== 'string') return
-    const snapshot = restoreSnapshot
-    const dest = restoreRepo
-    setRepos(null)
-    setWork('restore')
-    await paint()
+    setWork('pick')
     try {
+      const { open } = await import('@tauri-apps/plugin-dialog')
+      const output = await open({ directory: true, multiple: false })
+      if (typeof output !== 'string') return
+      const snapshot = restoreSnapshot
+      const dest = restoreRepo
+      setRepos(null)
+      setWork('restore')
+      await paint()
       await invoke('backup_restore', { snapshot, output, dest })
       toast.success(t('settings.backupRestoreOk'))
     } catch (caught) {
@@ -303,65 +321,88 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
       }}
     >
       <Dialog open={repos !== null} onOpenChange={(open) => !open && setRepos(null)}>
-        <DialogContent>
+        <DialogContent className="min-w-0 overflow-hidden sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{t('settings.backupRestorePick')}</DialogTitle>
             <DialogDescription>{t('settings.backupKeepHint')}</DialogDescription>
           </DialogHeader>
-          <Field>
+          <Field className="min-w-0">
             <FieldLabel>{t('settings.backupRestoreRepo')}</FieldLabel>
             <Select value={restoreRepo} onValueChange={chooseRestoreRepo}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="min-w-0 w-full overflow-hidden **:data-[slot=select-value]:block **:data-[slot=select-value]:truncate">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                {repos?.map((repo) => (
-                  <SelectItem key={repo.location} value={repo.location}>
-                    {repo.location}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel>{t('settings.backupRestoreSnapshot')}</FieldLabel>
-            <Select value={restoreSnapshot} onValueChange={setRestoreSnapshot}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {repos
-                  ?.find((repo) => repo.location === restoreRepo)
-                  ?.snapshots.map((snapshot) => (
-                    <SelectItem key={snapshot.id} value={snapshot.id}>
-                      {snapshot.id} · {snapshot.time}
+              <SelectContent position="popper" className="min-w-0 max-w-[var(--radix-select-trigger-width)]">
+                <SelectGroup>
+                  {repos?.map((repo) => (
+                    <SelectItem key={repo.location} value={repo.location} className="min-w-0">
+                      <span className="min-w-0 truncate">{presentBackupRepo(repo.location, t)}</span>
                     </SelectItem>
                   ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
           </Field>
-          <Button type="button" onClick={() => void confirmRestore()}>
-            {t('settings.backupRestoreGo')}
-          </Button>
+          <Field className="min-w-0">
+            <FieldLabel>{t('settings.backupRestoreSnapshot')}</FieldLabel>
+            <Select value={restoreSnapshot} onValueChange={setRestoreSnapshot}>
+              <SelectTrigger className="min-w-0 w-full overflow-hidden **:data-[slot=select-value]:block **:data-[slot=select-value]:truncate">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" className="min-w-0 max-w-[var(--radix-select-trigger-width)]">
+                <SelectGroup>
+                  {repos
+                    ?.find((repo) => repo.location === restoreRepo)
+                    ?.snapshots.map((snapshot) => (
+                      <SelectItem key={snapshot.id} value={snapshot.id} className="min-w-0">
+                        <span className="min-w-0 truncate">
+                          {presentBackupSnapshot(snapshot.id, snapshot.time)}
+                        </span>
+                      </SelectItem>
+                    ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <DialogFooter>
+            <Button
+              type="button"
+              disabled={busy || !restoreRepo || !restoreSnapshot}
+              onClick={() => void confirmRestore()}
+            >
+              {work === 'restore' ? <Spinner data-icon="inline-start" /> : null}
+              {t('settings.backupRestoreGo')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={blocking}>
         <DialogContent
+          className="min-w-0 overflow-hidden"
           showCloseButton={false}
           onPointerDownOutside={(event) => event.preventDefault()}
           onEscapeKeyDown={(event) => event.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle>
-              {work === 'restore' ? t('settings.backupRestore') : t('settings.backupNow')}
+              {work === 'backup' ? t('settings.backupNow') : t('settings.backupRestore')}
             </DialogTitle>
             <DialogDescription>
-              {work === 'restore' ? t('settings.backupRestoreWorking') : t('settings.backupWorking')}
+              {work === 'list'
+                ? t('settings.backupRestoreListing')
+                : work === 'restore'
+                  ? t('settings.backupRestoreWorking')
+                  : t('settings.backupWorking')}
             </DialogDescription>
           </DialogHeader>
           <Spinner />
         </DialogContent>
       </Dialog>
+      {foreign ? (
+        <Alert>
+          <AlertDescription>{t('settings.backupForeign')}</AlertDescription>
+        </Alert>
+      ) : null}
       <FieldGroup>
         <Field>
           <FieldLabel htmlFor="backup-workdir">{t('settings.directory')}</FieldLabel>
@@ -465,17 +506,18 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={!hasKey || busy}
+                  disabled={!hasKey || busy || foreign}
                   className="shrink-0"
                   onClick={() => void restore()}
                 >
+                  {work === 'list' || work === 'restore' ? <Spinner data-icon="inline-start" /> : null}
                   {t('settings.backupRestore')}
                 </Button>
               </div>
               {status.lastSnapshot ? (
                 <FieldDescription>
-                  {t('settings.backupLastSnapshot')}: {status.lastSnapshot}
-                  {status.lastSnapshotAt ? ` · ${status.lastSnapshotAt}` : ''}
+                  {t('settings.backupLastSnapshot')}:{' '}
+                  {presentBackupSnapshot(status.lastSnapshot, status.lastSnapshotAt ?? '')}
                 </FieldDescription>
               ) : null}
             </Field>
@@ -632,7 +674,7 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                 </Field>
                 {status.lastUpload ? (
                   <FieldDescription>
-                    {t('settings.backupLastUpload')}: {status.lastUpload}
+                    {t('settings.backupLastUpload')}: {presentBackupRepo(status.lastUpload, t)}
                   </FieldDescription>
                 ) : null}
               </FieldGroup>

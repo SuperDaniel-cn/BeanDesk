@@ -160,7 +160,7 @@ fn sync_watch(app: &AppHandle, directory: &Path, settings: &BackupSettings) {
     let Ok(mut watch) = host.watch.lock() else {
         return;
     };
-    if !settings.should_watch() {
+    if !crate::ledger_init::app_created_ledger(directory) || !settings.should_watch() {
         watch.stop();
         return;
     }
@@ -247,7 +247,16 @@ fn dest_fingerprint(settings: &BackupSettings) -> String {
         .join("\n")
 }
 
+fn require_app_ledger(directory: &Path) -> Result<(), String> {
+    if crate::ledger_init::app_created_ledger(directory) {
+        Ok(())
+    } else {
+        Err("foreign-ledger".to_string())
+    }
+}
+
 fn run_backup(app: &AppHandle, directory: &Path, settings: &BackupSettings) -> Result<BackupStatus, String> {
+    require_app_ledger(directory)?;
     let host = app.state::<BackupHost>();
     match write_dests(app, directory, settings) {
         Ok(()) => {
@@ -286,7 +295,8 @@ fn refresh_live_status(
     status.restic_ready = restic_ready(Some(app));
     status.archive_dir_ready = settings.archive_dir_ready();
     status.archive_directory = settings.archive_directory.trim().to_string();
-    status.watching = watching;
+    status.app_ledger = crate::ledger_init::app_created_ledger(directory);
+    status.watching = watching && status.app_ledger;
     if let Some((id, at)) = cached_snapshot(app, directory, settings) {
         status.last_snapshot = id;
         status.last_snapshot_at = at;
@@ -386,6 +396,7 @@ pub async fn backup_now(app: AppHandle) -> Result<BackupStatus, String> {
 pub async fn backup_set_key(app: AppHandle, password: String) -> Result<BackupStatus, String> {
     spawn_heavy(move || {
         let directory = crate::saved_workdir(&app)?;
+        require_app_ledger(&directory)?;
         let settings = load_settings(&app);
         rekey_existing(Some(&app), &directory, &settings, &password)?;
         Ok(current_status(&app, &directory))
@@ -402,6 +413,7 @@ pub async fn backup_restore(
 ) -> Result<(), String> {
     spawn_heavy(move || {
         let directory = crate::saved_workdir(&app)?;
+        require_app_ledger(&directory)?;
         let settings = load_settings(&app);
         let target = restore_dest(&settings, &dest)?;
         restore_snapshot(Some(&app), &directory, &target, &snapshot, Path::new(&output))?;
@@ -441,6 +453,7 @@ fn restore_dest(settings: &BackupSettings, dest: &str) -> Result<ArchiveDest, St
 pub async fn backup_snapshots(app: AppHandle) -> Result<Vec<restic::RepoSnapshots>, String> {
     spawn_heavy(move || {
         let directory = crate::saved_workdir(&app)?;
+        require_app_ledger(&directory)?;
         let settings = load_settings(&app);
         list_repos(Some(&app), &directory, &settings)
     })
@@ -451,6 +464,7 @@ pub async fn backup_snapshots(app: AppHandle) -> Result<Vec<restic::RepoSnapshot
 pub async fn backup_test_s3(app: AppHandle) -> Result<(), String> {
     spawn_heavy(move || {
         let directory = crate::saved_workdir(&app)?;
+        require_app_ledger(&directory)?;
         let settings = load_settings(&app);
         let s3 = settings::s3_ready(&settings.s3)?;
         test_s3(Some(&app), &directory, &s3)

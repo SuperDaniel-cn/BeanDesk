@@ -55,6 +55,13 @@ describe('isLedgerConnection', () => {
       directory: '/tmp/ledger',
       command: '',
       origin: 'http://127.0.0.1:5000',
+      launch: 'engine',
+    })
+    expect(localWorkdir('/tmp/ledger', 'http://127.0.0.1:5000', 'make run', 'engine')).toEqual({
+      directory: '/tmp/ledger',
+      command: 'make run',
+      origin: 'http://127.0.0.1:5000',
+      launch: 'engine',
     })
   })
 
@@ -92,27 +99,9 @@ describe('readConnectionFile', () => {
       directory: '/tmp/ledger',
       command: 'make run',
       origin: 'http://127.0.0.1:5000',
+      launch: 'shell',
     })
     expect(activeConnection(file!)?.kind).toBe('remote')
-  })
-
-  test('reads a single record from before the two drafts existed', () => {
-    expect(
-      readConnectionFile({
-        kind: 'local',
-        directory: '/tmp/ledger',
-        command: ' make run ',
-        origin: 'http://127.0.0.1:5000',
-      }),
-    ).toEqual({
-      active: 'local',
-      local: {
-        directory: '/tmp/ledger',
-        command: 'make run',
-        origin: 'http://127.0.0.1:5000',
-      },
-      remote: null,
-    })
   })
 
   test('fills the settings form from a file that arrives after the first paint', () => {
@@ -159,9 +148,41 @@ describe('readConnectionFile', () => {
         directory: '/tmp/ledger',
         command: '',
         origin: 'http://127.0.0.1:5000',
+        launch: 'engine',
       },
       remote: null,
     })
+  })
+
+  test('keeps a shell command when the simple page selects the bundled engine', () => {
+    const previous = readConnectionFile({
+      active: 'local',
+      local: {
+        directory: '/tmp/ledger',
+        command: 'make run',
+        origin: 'http://127.0.0.1:5000',
+      },
+      remote: null,
+    })
+    const next = withDrafts(
+      'local',
+      localWorkdir('/tmp/ledger', 'http://127.0.0.1:5000', 'make run', 'engine'),
+      null,
+      previous,
+    )
+    expect(next.local).toEqual({
+      directory: '/tmp/ledger',
+      command: 'make run',
+      origin: 'http://127.0.0.1:5000',
+      launch: 'engine',
+    })
+    expect(
+      readConnectionFile({
+        active: 'local',
+        local: next.local,
+        remote: null,
+      })?.local?.launch,
+    ).toBe('engine')
   })
 
   test('explains a missing bundled engine', () => {
@@ -169,6 +190,7 @@ describe('readConnectionFile', () => {
     expect(explainConnectionError('missing-engine', t)).toBe('settings.missingEngine')
     expect(explainConnectionError('ledger-exists', t)).toBe('settings.createFirstLedgerExists')
     expect(explainConnectionError('not-empty', t)).toBe('settings.createFirstLedgerNotEmpty')
+    expect(explainConnectionError('airplay', t)).toBe('settings.airplayPort')
   })
 
   test('an incomplete edit does not erase the saved local project', () => {

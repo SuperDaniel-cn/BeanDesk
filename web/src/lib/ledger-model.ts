@@ -482,11 +482,6 @@ export function dateInPeriod(date: string, time: string): boolean {
   return month >= start && month <= start + 2
 }
 
-/** Currency-conversion plugs are not equity of the company. */
-export function isCurrencyPlug(account: string): boolean {
-  return /:(?:Conversions|Unrealized)(?::|$)/.test(account)
-}
-
 /** A parent that nets to zero stays visible when a descendant still has a balance. */
 export function visibleAccount(total: number, children: AccountNode[]): boolean {
   if (total !== 0) return true
