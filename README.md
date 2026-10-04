@@ -101,7 +101,7 @@ The same public feed is a static file in this repo: [calendars/cn-small-quarterl
 While the desktop app is open, an event due within 7 days shows one toast and one system banner per UID and occurrence date. Closing the app stops notices.
 
 ### Local MCP
-The same desktop binary speaks MCP on stdio when launched with a bare `mcp` argument (not `--mcp`). Settings → General copies `{ command, args: ["mcp"] }` for a host. The process reads the same `connection.json` as Settings. Tools confirm the work folder, create the first ledger skeleton (`confirmWrite` required), and run bean-check. It does not search for a named ledger repository, start Fava, or touch backup or calendar.
+The same desktop binary speaks MCP on stdio when launched with a bare `mcp` argument (not `--mcp`). Settings → General copies `{ command, args: ["mcp"] }` for a host. The process reads the same `connection.json` as Settings. Tools confirm the work folder, create the first ledger skeleton (`confirmWrite` required), run bean-check, and **read** the live Fava (BQL, statements, journal, documents). Writing entries stays in the work folder. It does not search for a named ledger repository, start Fava, or touch backup or calendar.
 
 ### Interface Details
 - Mobile slide-out drawer navigation.

@@ -37,3 +37,4 @@ rmcp = { version = "3.5.0", features = ["server", "transport-io", "macros", "sch
 tokio = { version = "1", features = ["io-std", "rt", "time"] }
 schemars = { version = "=1.2.1", features = ["derive"] }
 dirs = "6"
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }

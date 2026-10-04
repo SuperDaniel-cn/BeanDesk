@@ -1,4 +1,6 @@
 mod card;
+mod fava;
+mod fava_tools;
 mod store;
 mod tools;
 
@@ -9,6 +11,11 @@ use rmcp::{Json, ServerHandler, ServiceExt, tool, tool_handler, tool_router};
 use serde::Serialize;
 
 use card::{Card, without_trailing_newline};
+use fava_tools::{
+    BqlInput, DocumentsBody, FavaStatusBody, LedgerBody, QueryBody, ReportBody, TimeInput,
+    get_balance_sheet_card, get_fava_card, get_income_statement_card, get_journal_card,
+    get_ledger_card, get_trial_balance_card, list_documents_card, run_bql_card,
+};
 use tools::{
     CheckBody, ConnectionBody, EmptyInput, InitLedgerInput, WriteBody, check_ledger_card,
     get_connection_card, init_ledger_card,
@@ -82,6 +89,94 @@ impl LedgerTools {
         Parameters(_input): Parameters<EmptyInput>,
     ) -> Result<Json<Card<CheckBody>>, String> {
         Ok(Json(check_ledger_card(None)?))
+    }
+
+    #[tool(
+        description = include_str!("prompts/get_fava.txt"),
+        annotations(read_only_hint = true)
+    )]
+    fn get_fava(
+        &self,
+        Parameters(_input): Parameters<EmptyInput>,
+    ) -> Result<Json<Card<FavaStatusBody>>, String> {
+        Ok(Json(get_fava_card(None)?))
+    }
+
+    #[tool(
+        description = include_str!("prompts/get_ledger.txt"),
+        annotations(read_only_hint = true)
+    )]
+    fn get_ledger(
+        &self,
+        Parameters(_input): Parameters<EmptyInput>,
+    ) -> Result<Json<Card<LedgerBody>>, String> {
+        Ok(Json(get_ledger_card(None)?))
+    }
+
+    #[tool(
+        description = include_str!("prompts/run_bql.txt"),
+        annotations(read_only_hint = true)
+    )]
+    fn run_bql(
+        &self,
+        Parameters(input): Parameters<BqlInput>,
+    ) -> Result<Json<Card<QueryBody>>, String> {
+        Ok(Json(run_bql_card(None, input)?))
+    }
+
+    #[tool(
+        description = include_str!("prompts/get_trial_balance.txt"),
+        annotations(read_only_hint = true)
+    )]
+    fn get_trial_balance(
+        &self,
+        Parameters(input): Parameters<TimeInput>,
+    ) -> Result<Json<Card<ReportBody>>, String> {
+        Ok(Json(get_trial_balance_card(None, input)?))
+    }
+
+    #[tool(
+        description = include_str!("prompts/get_balance_sheet.txt"),
+        annotations(read_only_hint = true)
+    )]
+    fn get_balance_sheet(
+        &self,
+        Parameters(input): Parameters<TimeInput>,
+    ) -> Result<Json<Card<ReportBody>>, String> {
+        Ok(Json(get_balance_sheet_card(None, input)?))
+    }
+
+    #[tool(
+        description = include_str!("prompts/get_income_statement.txt"),
+        annotations(read_only_hint = true)
+    )]
+    fn get_income_statement(
+        &self,
+        Parameters(input): Parameters<TimeInput>,
+    ) -> Result<Json<Card<ReportBody>>, String> {
+        Ok(Json(get_income_statement_card(None, input)?))
+    }
+
+    #[tool(
+        description = include_str!("prompts/get_journal.txt"),
+        annotations(read_only_hint = true)
+    )]
+    fn get_journal(
+        &self,
+        Parameters(input): Parameters<TimeInput>,
+    ) -> Result<Json<Card<QueryBody>>, String> {
+        Ok(Json(get_journal_card(None, input)?))
+    }
+
+    #[tool(
+        description = include_str!("prompts/list_documents.txt"),
+        annotations(read_only_hint = true)
+    )]
+    fn list_documents(
+        &self,
+        Parameters(_input): Parameters<EmptyInput>,
+    ) -> Result<Json<Card<DocumentsBody>>, String> {
+        Ok(Json(list_documents_card(None)?))
     }
 }
 
@@ -164,6 +259,14 @@ mod tests {
             include_str!("prompts/get_connection.txt"),
             include_str!("prompts/init_ledger.txt"),
             include_str!("prompts/check_ledger.txt"),
+            include_str!("prompts/get_fava.txt"),
+            include_str!("prompts/get_ledger.txt"),
+            include_str!("prompts/run_bql.txt"),
+            include_str!("prompts/get_trial_balance.txt"),
+            include_str!("prompts/get_balance_sheet.txt"),
+            include_str!("prompts/get_income_statement.txt"),
+            include_str!("prompts/get_journal.txt"),
+            include_str!("prompts/list_documents.txt"),
         ];
         for text in std::iter::once(SERVER_INSTRUCTIONS).chain(descriptions) {
             for banned in BANNED {
@@ -175,6 +278,7 @@ mod tests {
         }
         assert!(!SERVER_INSTRUCTIONS.contains("get_connection"));
         assert!(!SERVER_INSTRUCTIONS.contains("init_ledger"));
+        assert!(!SERVER_INSTRUCTIONS.contains("run_bql"));
         assert!(!SERVER_INSTRUCTIONS.contains("confirmWrite"));
         for description in descriptions {
             assert!(!description.contains("confirmWrite"));

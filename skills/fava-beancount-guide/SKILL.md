@@ -153,14 +153,11 @@ Fava 按账户路径和日期关联单据，前端在明细里预览。
 
 ## 4. 记一笔账
 
-1. 向用户确认账本目录。没有就先按第 1 节新建。
+查账用 BeanDesk MCP 的只读 Fava 工具（`get_ledger`、`run_bql`、报表、`get_journal`）。不要猜仓库名。改账仍写工作目录，不要走 Fava 的写入接口。
+
+1. 向用户确认账本目录。没有就先按第 1 节新建。可用 MCP `get_connection`。
 2. 读取该目录的 `config/accounts.bean`。提取日期、payee、narration、金额、税号和收付款账户，核对三流一致。
 3. 把发票或回单放进 `documents/` 下对应科目目录。
 4. 分录写入 `data/YYYY/YYYY-MM.bean`，并在 `data/YYYY/YYYY.bean` 中 `include`。只使用已经 `open` 的科目。支出同时记费用，以及资产减少或负债增加。
-5. 在该账本目录执行：
-
-   ```bash
-   bean-check main.bean
-   ```
-
-6. 浏览器打开 5188，核对资产负债表、试算平衡和单据预览。
+5. 在该账本目录执行 `bean-check main.bean`，或用 MCP `check_ledger`。
+6. 用 MCP 报表工具或打开界面，核对本期余额和单据目录。

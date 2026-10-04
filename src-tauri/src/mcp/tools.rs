@@ -12,8 +12,8 @@ use crate::{CONNECTION_KEY, directory_from_connection};
 use super::card::Card;
 use super::store::{connection_value, load_saved_connection};
 
-const PREVIEW_LINES: usize = 12;
-const PREVIEW_CHARS: usize = 160;
+pub(crate) const PREVIEW_LINES: usize = 12;
+pub(crate) const PREVIEW_CHARS: usize = 160;
 
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -55,13 +55,13 @@ pub(crate) struct InitLedgerInput {
     pub confirm_write: bool,
 }
 
-enum ResolvedConnection<'a> {
+pub(crate) enum ResolvedConnection<'a> {
     Borrowed(&'a serde_json::Value),
     Owned(serde_json::Value),
 }
 
 impl ResolvedConnection<'_> {
-    fn value(&self) -> &serde_json::Value {
+    pub(crate) fn value(&self) -> &serde_json::Value {
         match self {
             Self::Borrowed(value) => value,
             Self::Owned(value) => value,
@@ -69,7 +69,9 @@ impl ResolvedConnection<'_> {
     }
 }
 
-fn resolve_connection(store: Option<&serde_json::Value>) -> Result<ResolvedConnection<'_>, String> {
+pub(crate) fn resolve_connection(
+    store: Option<&serde_json::Value>,
+) -> Result<ResolvedConnection<'_>, String> {
     match store {
         Some(value) if value.get(CONNECTION_KEY).is_some() => {
             Ok(ResolvedConnection::Borrowed(connection_value(value)?))
@@ -94,15 +96,7 @@ pub(crate) fn get_connection_card(
         .get("active")
         .and_then(|item| item.as_str())
         .unwrap_or("none");
-    let origin = match active {
-        "local" => connection
-            .pointer("/local/origin")
-            .and_then(|item| item.as_str()),
-        "remote" => connection
-            .pointer("/remote/origin")
-            .and_then(|item| item.as_str()),
-        _ => None,
-    };
+    let origin = active_origin_raw(connection);
     let launch = connection
         .pointer("/local/launch")
         .and_then(|item| item.as_str())
@@ -267,7 +261,7 @@ fn run_check(directory: &Path) -> Result<CheckOutcome, String> {
     })
 }
 
-fn preview_output(text: &str) -> String {
+pub(crate) fn preview_output(text: &str) -> String {
     text.lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
@@ -281,6 +275,27 @@ fn preview_output(text: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+pub(crate) fn active_origin_raw(connection: &serde_json::Value) -> Option<&str> {
+    let active = connection.get("active").and_then(|item| item.as_str())?;
+    let origin = match active {
+        "local" => connection.pointer("/local/origin")?.as_str(),
+        "remote" => connection.pointer("/remote/origin")?.as_str(),
+        _ => None,
+    }?;
+    let origin = origin.trim();
+    if origin.is_empty() {
+        None
+    } else {
+        Some(origin)
+    }
+}
+
+pub(crate) fn active_origin(connection: &serde_json::Value) -> Result<String, String> {
+    active_origin_raw(connection)
+        .map(|origin| origin.trim_end_matches('/').to_string())
+        .ok_or_else(|| "No Fava origin in Settings.".into())
 }
 
 fn sentences<const N: usize>(parts: [&str; N]) -> String {
@@ -310,6 +325,26 @@ fn explain_write(code: String) -> String {
 }
 
 #[cfg(test)]
+pub(crate) fn fixture_store_for_tests(
+    directory: impl Into<std::path::PathBuf>,
+    active: &str,
+) -> serde_json::Value {
+    let directory = directory.into();
+    serde_json::json!({
+        "connection": {
+            "active": active,
+            "local": {
+                "directory": directory.to_string_lossy(),
+                "command": "",
+                "origin": "http://127.0.0.1:5000",
+                "launch": "engine"
+            },
+            "remote": null
+        }
+    })
+}
+
+#[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
@@ -317,19 +352,7 @@ mod tests {
     use crate::ledger_init::APP_MARKER;
 
     fn fixture_store(directory: impl Into<PathBuf>, active: &str) -> serde_json::Value {
-        let directory = directory.into();
-        serde_json::json!({
-            "connection": {
-                "active": active,
-                "local": {
-                    "directory": directory.to_string_lossy(),
-                    "command": "",
-                    "origin": "http://127.0.0.1:5000",
-                    "launch": "engine"
-                },
-                "remote": null
-            }
-        })
+        fixture_store_for_tests(directory, active)
     }
 
     fn temp_dir(tag: &str) -> PathBuf {

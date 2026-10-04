@@ -1,0 +1,1 @@
+Read accounts, operating currency, and loader errors from the Settings Fava.
