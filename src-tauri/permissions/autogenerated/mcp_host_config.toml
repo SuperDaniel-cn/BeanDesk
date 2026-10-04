@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mcp-host-config"
+description = "Enables the mcp_host_config command without any pre-configured scope."
+commands.allow = ["mcp_host_config"]
+
+[[permission]]
+identifier = "deny-mcp-host-config"
+description = "Denies the mcp_host_config command without any pre-configured scope."
+commands.deny = ["mcp_host_config"]

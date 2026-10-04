@@ -1,0 +1,1 @@
+Run bean-check on the Settings work folder.

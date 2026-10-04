@@ -299,7 +299,17 @@ export const en = {
     backupErrorS3: 'Cloud archive upload failed',
     backupErrorCheck: 'Restored ledger failed integrity check (bean-check)',
     backupErrorCheckPending: 'The repository check did not pass. The next backup will check it again.',
-    backupBrowser: 'Backup and calendar subscription are only available in the desktop application.',
+    backupBrowser:
+      'Backup, calendar subscription, and the local MCP server are only available in the desktop application.',
+    mcpLabel: 'Local MCP',
+    mcpHint:
+      'The same desktop app, started with a bare mcp argument. It uses the Settings work folder and does not search for a named ledger repository.',
+    mcpCopyJson: 'Copy config',
+    mcpCopyPrompt: 'Copy prompt',
+    mcpCopied: 'Copied',
+    mcpFailed: 'Could not read the desktop executable path',
+    mcpPrompt:
+      'Add BeanDesk as a local stdio MCP server.\ncommand: {command}\nargs: {args}\n\nIt uses the Settings work folder. It does not search for a named ledger repository.',
     backupForeign: 'Backup is only for a ledger created in BeanDesk. This folder already had a ledger, so backup stays off.',
     simpleDirectory: 'Working Directory',
     hostStatus: 'Service Status',

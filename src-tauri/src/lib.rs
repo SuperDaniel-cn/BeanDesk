@@ -2,7 +2,10 @@ mod backup;
 mod connection_log;
 mod engine;
 mod ledger_init;
+mod mcp;
 mod supervisor;
+
+pub use mcp::{is_mcp_launch, run_mcp};
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -13,8 +16,8 @@ use supervisor::{HostSnapshot, Supervisor, accepts_local_origin};
 use tauri::{AppHandle, Manager, RunEvent, State};
 use tauri_plugin_store::StoreExt;
 
-const CONNECTION_FILE: &str = "connection.json";
-const CONNECTION_KEY: &str = "connection";
+pub(crate) const CONNECTION_FILE: &str = "connection.json";
+pub(crate) const CONNECTION_KEY: &str = "connection";
 
 struct FavaHost {
     supervisor: Mutex<Supervisor>,
@@ -66,6 +69,7 @@ pub fn run() {
             fava_host,
             init_ledger,
             read_user_text_file,
+            mcp::mcp_host_config,
             system_locales,
             backup::load_backup_settings,
             backup::save_backup_settings,
@@ -119,7 +123,7 @@ pub(crate) fn saved_workdir(app: &AppHandle) -> Result<PathBuf, String> {
     directory_from_connection(&connection_record(app)?)
 }
 
-fn directory_from_connection(value: &serde_json::Value) -> Result<PathBuf, String> {
+pub(crate) fn directory_from_connection(value: &serde_json::Value) -> Result<PathBuf, String> {
     if let Some(directory) = value
         .get("local")
         .and_then(|local| local.get("directory"))
@@ -215,9 +219,7 @@ fn system_locales() -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        bundled_launch, directory_from_connection, local_project, read_user_text_file_at,
-    };
+    use super::{bundled_launch, directory_from_connection, local_project, read_user_text_file_at};
 
     #[test]
     fn reads_the_active_local_project() {

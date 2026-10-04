@@ -100,6 +100,9 @@ BeanDesk 是订阅方，不是提醒主机。设置 → 日历只选一份来源
 
 桌面进程活着时，距到期 7 天内（含当天）的事项按 UID 和发生日各提醒一次（Sonner + 系统横幅）。关掉应用不再提醒。
 
+### 本机 MCP
+同一份桌面程序加上独立参数 `mcp`（不是 `--mcp`）就走 stdio MCP。设置 → 常规可以复制 `{ command, args: ["mcp"] }`。进程读的是设置页同一份 `connection.json`。工具可以确认工作目录、写下第一本账骨架（必须 `confirmWrite`）、以及跑 bean-check。不会去猜账本仓库名，也不会启动 Fava，更不动备份和日历。
+
 ### 交互细节
 - 移动端侧边抽屉导航。
 - 深色与浅色主题切换。
@@ -157,7 +160,7 @@ make desktop
 
 ![BeanDesk 桌面设置与进程托管](./docs/images/zh/settings.png)
 
-桌面客户端支持 macOS、Windows 与 Linux 跨平台运行，内置自动更新检测与连接状态监控。日历订阅在设置里的日历页（仅桌面）。推送与 `tauri.conf.json` 版本一致的 `v` 标签后，GitHub Actions 构建 Apple Silicon、Intel、Windows、Linux x64 与 Linux Arm 的安装包，并写入草稿 Release。五个任务都成功后再发布；发布之前，已安装的客户端看不到这次更新。这个版本没有手机端。更新包用仓库里的公钥验签。macOS 安装包是临时签名，没有 Apple 公证证书时，系统打开前仍会要求确认。
+桌面客户端支持 macOS、Windows 与 Linux 跨平台运行，内置自动更新检测与连接状态监控。日历订阅在设置里的日历页（仅桌面）。本机 MCP 配置在设置 → 常规（仅桌面）。推送与 `tauri.conf.json` 版本一致的 `v` 标签后，GitHub Actions 构建 Apple Silicon、Intel、Windows、Linux x64 与 Linux Arm 的安装包，并写入草稿 Release。五个任务都成功后再发布；发布之前，已安装的客户端看不到这次更新。这个版本没有手机端。更新包用仓库里的公钥验签。macOS 安装包是临时签名，没有 Apple 公证证书时，系统打开前仍会要求确认。
 
 ## 部署与安全规范
 

@@ -23,7 +23,17 @@ pub fn resolve_engine(app: Option<&AppHandle>) -> Result<PathBuf, String> {
             dirs.push(path);
         }
     }
-    dirs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries").join("engine"));
+    dirs.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("binaries")
+            .join("engine"),
+    );
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            dirs.push(parent.join("../Resources/engine"));
+            dirs.push(parent.join("engine"));
+        }
+    }
 
     for dir in dirs {
         let path = dir.join(name);
@@ -127,7 +137,10 @@ mod tests {
         if looks_like_engine(&path) {
             assert_eq!(resolve_engine(None).unwrap(), path);
         } else {
-            assert_eq!(resolve_engine(None).err().as_deref(), Some("missing-engine"));
+            assert_eq!(
+                resolve_engine(None).err().as_deref(),
+                Some("missing-engine")
+            );
         }
     }
 }

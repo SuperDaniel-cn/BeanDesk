@@ -43,6 +43,7 @@ BeanDesk 前端与桌面端工程规范。
 - 连接日志：设置页上的每一行同时经 log 插件写入本机日志目录。单个文件上限 10MB，超过后从文件开头丢掉最旧的行，最近的内容留在原文件，不按日期另存。页面上的清除只清空当前窗口里的显示。
 - 桌面更新：安装包只覆盖 macOS、Windows 和 Linux。推送与 `tauri.conf.json`、`web/package.json`、`src-tauri/Cargo.toml` 版本一致的 `v*` 标签才触发 `.github/workflows/release.yml`。先在一台小的 Ubuntu 上核对版本、签名密钥和前端构建，再开五个平台任务。产物写入草稿 Release，五个任务都成功后再手动发布；草稿不会成为 updater 的 latest。Linux 用 `ubuntu-22.04` 和公开仓库的 `ubuntu-22.04-arm`，不要换成模拟的 Arm 环境。更新签名的私钥只放在 GitHub Secret，公钥写在 `tauri.conf.json`。不提交私钥。这个版本不构建 Android 或 iOS。
 - 日历订阅：设置 Calendar 页。同一时间只有一份来源：随包装的中国小规模按季目录、本机 `.ics`、或用户粘贴的 HTTPS ICS（`webcal://` 保存成 `https://`）。配置在本机 `calendar.json`，不进 `connection.json` / `backup.json`。打开时读一次当前来源；7 天内到期的事项每条 UID+日期只弹一次 Sonner 和系统横幅。关掉应用不再提醒。不办提醒云、不轮询、不写 CalDAV、不把账本当日历。公开仓库里的 `calendars/*.ics` 是静态文件，不是我们运营的服务。手机提醒用同一条 HTTPS。读本机文件只走 `read_user_text_file`，只读用户选中的绝对路径。
+- 本机 MCP：同一桌面二进制，参数只认独立的 `mcp`（不是 `--mcp`，也不看 argv0）。stdio JSON-RPC。读本机 `connection.json`，与设置页同一份工作目录。工具白名单：`get_connection`、`init_ledger`、`check_ledger`。写入必须 `confirmWrite`。不猜账本仓库名，不开放备份、日历、BQL 或启动 Fava。设置页只复制 `{ command: 当前可执行文件, args: ["mcp"] }`。不办云 MCP，不监听 HTTP。
 
 ## 5. 技术栈与包管理约束
 

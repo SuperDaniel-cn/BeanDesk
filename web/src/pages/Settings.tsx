@@ -6,6 +6,7 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronUp,
+  Copy,
   FilePlus2,
   FolderOpen,
   Plug,
@@ -66,6 +67,7 @@ import {
   setSuspended,
   stopStartedFava,
 } from '@/lib/desktop'
+import { loadMcpHostConfig, mcpHostConfigText } from '@/lib/mcp-host'
 
 type Kind = LedgerConnection['kind']
 type SettingsTab = 'general' | 'simple' | 'geek' | 'backup' | 'calendar'
@@ -89,6 +91,8 @@ function GeneralSettings({ tauri }: { tauri: boolean }) {
         <>
           <Separator />
           <UpdateCheck />
+          <Separator />
+          <McpHostSettings />
         </>
       ) : null}
     </section>
@@ -160,6 +164,54 @@ export function Settings() {
         </div>
       </div>
     </SidebarProvider>
+  )
+}
+
+function McpHostSettings() {
+  const { t } = useI18n()
+  const [copied, setCopied] = useState<'json' | 'prompt' | ''>('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!copied) return
+    const id = window.setTimeout(() => setCopied(''), 2000)
+    return () => window.clearTimeout(id)
+  }, [copied])
+
+  async function copy(kind: 'json' | 'prompt') {
+    try {
+      const config = await loadMcpHostConfig()
+      const text =
+        kind === 'json'
+          ? mcpHostConfigText(config)
+          : t('settings.mcpPrompt', {
+              command: config.command,
+              args: JSON.stringify(config.args),
+            })
+      await navigator.clipboard.writeText(text)
+      setCopied(kind)
+      setError('')
+    } catch {
+      setError(t('settings.mcpFailed'))
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      <span className="text-xs text-muted-foreground">{t('settings.mcpLabel')}</span>
+      <p className="text-xs text-muted-foreground">{t('settings.mcpHint')}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" onClick={() => void copy('json')}>
+          <Copy data-icon="inline-start" />
+          {copied === 'json' ? t('settings.mcpCopied') : t('settings.mcpCopyJson')}
+        </Button>
+        <Button type="button" variant="outline" onClick={() => void copy('prompt')}>
+          <Copy data-icon="inline-start" />
+          {copied === 'prompt' ? t('settings.mcpCopied') : t('settings.mcpCopyPrompt')}
+        </Button>
+      </div>
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
   )
 }
 

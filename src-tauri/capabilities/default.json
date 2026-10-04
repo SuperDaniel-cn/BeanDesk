@@ -15,6 +15,7 @@
     "allow-fava-host",
     "allow-init-ledger",
     "allow-read-user-text-file",
+    "allow-mcp-host-config",
     "allow-system-locales",
     "notification:default",
     "allow-load-backup-settings",

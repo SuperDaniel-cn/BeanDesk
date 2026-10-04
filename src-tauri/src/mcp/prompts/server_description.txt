@@ -1,0 +1,1 @@
+BeanDesk and this MCP share the Settings connection and the same work folder. They do not search for a named ledger repository.

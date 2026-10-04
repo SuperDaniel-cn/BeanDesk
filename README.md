@@ -100,6 +100,9 @@ The same public feed is a static file in this repo: [calendars/cn-small-quarterl
 
 While the desktop app is open, an event due within 7 days shows one toast and one system banner per UID and occurrence date. Closing the app stops notices.
 
+### Local MCP
+The same desktop binary speaks MCP on stdio when launched with a bare `mcp` argument (not `--mcp`). Settings → General copies `{ command, args: ["mcp"] }` for a host. The process reads the same `connection.json` as Settings. Tools confirm the work folder, create the first ledger skeleton (`confirmWrite` required), and run bean-check. It does not search for a named ledger repository, start Fava, or touch backup or calendar.
+
 ### Interface Details
 - Mobile slide-out drawer navigation.
 - Dark and light theme switching.
@@ -157,7 +160,7 @@ The desktop shell connects directly to Fava via Tauri's native HTTP layer, bypas
 
 ![BeanDesk Desktop Settings & Supervisor](./docs/images/en/settings.png)
 
-The desktop client runs cross-platform on macOS, Windows, and Linux, with built-in update checks and live connection logs. Calendar subscription lives on the Settings Calendar page (desktop only).
+The desktop client runs cross-platform on macOS, Windows, and Linux, with built-in update checks and live connection logs. Calendar subscription lives on the Settings Calendar page (desktop only). Local MCP config is on Settings → General (desktop only).
 
 ## Deployment and Security Guidelines
 
