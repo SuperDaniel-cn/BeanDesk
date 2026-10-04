@@ -1,12 +1,17 @@
 import { describe, expect, test } from 'bun:test'
 
+import type { MessageKey } from '@/i18n/locales/en'
+
 import {
   activeConnection,
   emptyConnectionForm,
+  explainConnectionError,
   formFromConnectionFile,
   isLedgerConnection,
   isLoopbackOrigin,
   isPristineConnectionForm,
+  localDraft,
+  localWorkdir,
   normalizeOrigin,
   readConnectionFile,
   withDrafts,
@@ -36,6 +41,23 @@ describe('isLoopbackOrigin', () => {
 })
 
 describe('isLedgerConnection', () => {
+  test('allows an empty start command on a saved local project', () => {
+    expect(
+      isLedgerConnection({
+        kind: 'local',
+        directory: '/tmp/ledger',
+        command: '',
+        origin: 'http://127.0.0.1:5000',
+      }),
+    ).toBe(true)
+    expect(localDraft('/tmp/ledger', '  ', 'http://127.0.0.1:5000/')).toBeNull()
+    expect(localWorkdir('/tmp/ledger', 'http://127.0.0.1:5000/')).toEqual({
+      directory: '/tmp/ledger',
+      command: '',
+      origin: 'http://127.0.0.1:5000',
+    })
+  })
+
   test('requires a loopback origin for a local project', () => {
     expect(
       isLedgerConnection({
@@ -118,6 +140,35 @@ describe('readConnectionFile', () => {
         command: 'fava main.bean',
       }),
     ).toBe(false)
+  })
+
+  test('keeps an empty command when reading a saved local draft', () => {
+    expect(
+      readConnectionFile({
+        active: 'local',
+        local: {
+          directory: '/tmp/ledger',
+          command: '',
+          origin: 'http://127.0.0.1:5000',
+        },
+        remote: null,
+      }),
+    ).toEqual({
+      active: 'local',
+      local: {
+        directory: '/tmp/ledger',
+        command: '',
+        origin: 'http://127.0.0.1:5000',
+      },
+      remote: null,
+    })
+  })
+
+  test('explains a missing bundled engine', () => {
+    const t = (key: MessageKey) => key
+    expect(explainConnectionError('missing-engine', t)).toBe('settings.missingEngine')
+    expect(explainConnectionError('ledger-exists', t)).toBe('settings.createFirstLedgerExists')
+    expect(explainConnectionError('not-empty', t)).toBe('settings.createFirstLedgerNotEmpty')
   })
 
   test('an incomplete edit does not erase the saved local project', () => {

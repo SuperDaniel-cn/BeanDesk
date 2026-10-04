@@ -14,23 +14,21 @@ The architecture is analogous to MetaCubeXD for Clash or AriaNg for Aria2: Fava 
 
 ## Quick Start
 
-BeanDesk is a pure presentation workbench powered by a local or remote Fava instance.
+BeanDesk is a shell around **one** Fava process. Ledger files stay in a folder you choose. We do not host a cloud.
 
-### 1. Install Fava Engine
+### 1. A ledger service
 
-- **Developers (terminal one-liner)**:
-  ```bash
-  pip install fava
-  ```
-- **Ask your AI Agent (Cursor / Claude Code / terminal agent)**:
-  > Copy prompt: *"Please install Python 3, Beancount, and Fava on my machine, initialize a minimal ledger `main.bean` in this folder, and start Fava on port 5000."*
+- **Desktop, first book**: pick a work folder in Settings. Leave the start command empty to use the bundled engine, or create the first `main.bean` skeleton if the folder is empty.
+- **Bring your own**: start Fava yourself (`pip install fava`, or your own venv / `make run`) and either paste the address or type that start command.
+- **Ask a local agent**:
+  > Copy prompt: *"In the folder I name, create a minimal Beancount ledger and start Fava on 127.0.0.1:5000. Do not assume a repo name."*
 
-For ledger initialization patterns and compliance guidelines, see the [Fava and Beancount Guide](skills/fava-beancount-guide/SKILL.md).
+See the [Fava and Beancount Guide](skills/fava-beancount-guide/SKILL.md).
 
 ### 2. Run BeanDesk
 
-- **Desktop App (Recommended)**: Run `make desktop`. Configure your ledger directory and startup command in Settings to supervise the process automatically, or connect directly to an existing Fava address.
-- **Web Browser**: Once your Fava service is up, run `make dev` and open `http://127.0.0.1:5188`.
+- **Desktop (recommended)**: `make desktop`. Start here (folder + empty or custom command) or connect to an address already running Fava.
+- **Browser**: only attaches to an existing Fava. `make dev`, then `http://127.0.0.1:5188`.
 
 ## Project Positioning and Roadmap
 
@@ -40,16 +38,18 @@ Roadmap:
 
 - Phase 1: Universal financial workbench. Complete three statutory statements: Balance Sheet, Income Statement, and direct-method Cash Flow Statement, alongside a side-by-side Trial Balance, global time filtering, and a native BQL console.
 - Phase 2: One-person company compliance module. Shareholder loan and advance monitoring to prevent asset commingling and personal liability; tax provision estimates; three-way match checks between contracts, invoices, and bank statements; commercial delivery evidence archive.
-- Phase 3: Out-of-the-box cross-platform desktop client. Built with Tauri 2, supporting one-click connection to local Fava, LAN NAS, or remote tunnels, with an automatic local process supervisor.
+- Phase 3: Out-of-the-box desktop client: bundled engine sidecar, first-ledger skeleton, still one Fava. Backup stays the user's copy of that folder.
 
 ## Feature Boundaries and Non-Goals
 
-To stay lightweight and focused on accounting rigor, this project excludes:
+To stay a shell around Fava:
 
-- Personal securities and portfolio tracking: No stock lot gain calculations, forex portfolios, or cryptocurrency scatter charts. The focus remains strictly on operating revenue, cost accounting, and corporate entity cash flows.
-- Web-based ledger source editor: No inline text editing. Ledger files remain in desktop editors and local Git repositories. The web interface focuses on reports, drill-through, and document audit.
-- Vanity visualizations: No charts. Reports are presented in dense, structured tables.
-- Application-layer authentication: No user accounts, credentials database, or frontend login forms. Network security is delegated to infrastructure layers.
+- No cloud ledger, no user accounts, no backup upload. The work directory is the user's files.
+- No app-level vault switcher. Several books are several Fava root files and slugs on **one** service.
+- No built-in accounting engine and no raw Python runtime. Reports ask Fava. A custom start command is not rewritten.
+- No web ledger editor. Edit `.bean` files in a desktop editor or via the skill.
+- No personal securities or portfolio tracking. Operating books only.
+- No charts. Tables only.
 
 ## Features
 
@@ -140,8 +140,8 @@ make desktop
 
 The desktop shell connects directly to Fava via Tauri's native HTTP layer, bypassing browser CORS and mixed-content restrictions. Settings provides two operation modes:
 
-- **Local project mode**: Choose your ledger directory and startup command (e.g. `make run` or `fava main.bean`). The client checks the port, spawns the background process group on demand, and cleans it up upon exit.
-- **Connect-only mode**: Enter the origin of an existing Fava instance. Accessing remote servers over private overlay networks like Tailscale or WireGuard is strongly recommended.
+- **Start here**: Choose the work directory. Leave the command empty for the bundled engine, or type your own (`make run`, `fava a.bean b.bean`). This window starts at most one Fava.
+- **Use existing**: Enter an origin that already answers. Private overlay networks (Tailscale, WireGuard) are recommended off-loopback.
 
 ![BeanDesk Desktop Settings & Supervisor](./docs/images/en/settings.png)
 

@@ -13,6 +13,11 @@
  *    locale and exposes them through `useI18n()`.
  */
 
+/** Last path segment of a Fava document filename. */
+export function fileLeaf(filename: string): string {
+  return filename.split('/').pop() || filename
+}
+
 /** Leaf names are `English-中文`. Show the Chinese segment when it is there. */
 export function displayAccountName(name: string): string {
   const hyphen = name.lastIndexOf('-')

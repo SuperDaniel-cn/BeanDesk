@@ -4,7 +4,7 @@ fn main() {
             "start_saved_fava",
             "stop_saved_fava",
             "fava_host",
-            "fava_installed",
+            "init_ledger",
             "system_locales",
         ]),
     ))

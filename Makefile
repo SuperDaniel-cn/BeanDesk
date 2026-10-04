@@ -1,4 +1,4 @@
-.PHONY: install dev desktop build test clean help
+.PHONY: install dev desktop build test engine clean help
 
 PORT ?= 5188
 FAVA_URL ?= http://127.0.0.1:5000
@@ -10,6 +10,7 @@ help:
 	@echo "  make desktop  - Start the Tauri window (Bun starts Vite; not npm run tauri dev)"
 	@echo "  make build    - Build static production bundle"
 	@echo "  make test     - Lint, typecheck tests, and run frontend and desktop tests"
+	@echo "  make engine   - Freeze the bundled Fava engine directory for this machine"
 	@echo "  make clean    - Remove node_modules and dist artifacts"
 
 install:
@@ -32,5 +33,8 @@ test:
 	cd web && bun test
 	cargo test --manifest-path src-tauri/Cargo.toml
 
+engine:
+	@bash engine/build.sh
+
 clean:
-	rm -rf web/node_modules web/dist
+	rm -rf web/node_modules web/dist .engine-venv engine/build engine/dist src-tauri/binaries/engine

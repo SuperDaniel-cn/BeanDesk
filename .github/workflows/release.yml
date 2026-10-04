@@ -104,6 +104,13 @@ jobs:
         working-directory: web
         run: bun install --frozen-lockfile
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: freeze the bundled ledger engine
+        run: bash engine/build.sh
+
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

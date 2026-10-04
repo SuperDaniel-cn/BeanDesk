@@ -10,17 +10,10 @@
     "log:default",
     "updater:default",
     "process:allow-restart",
-    {
-      "identifier": "opener:allow-open-url",
-      "allow": [
-        { "url": "https://beancount.github.io/*" },
-        { "url": "https://furius.ca/*" }
-      ]
-    },
     "allow-start-saved-fava",
     "allow-stop-saved-fava",
     "allow-fava-host",
-    "allow-fava-installed",
+    "allow-init-ledger",
     "allow-system-locales",
     {
       "identifier": "http:default",

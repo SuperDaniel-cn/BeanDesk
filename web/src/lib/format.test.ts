@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   displayAccountName,
+  fileLeaf,
   formatCurrency,
   formatQueryValue,
   formatSignedCurrency,
@@ -11,6 +12,13 @@ import {
   querySortValue,
   toDisplay,
 } from './format'
+
+describe('fileLeaf', () => {
+  test('keeps the basename of an archive path', () => {
+    expect(fileLeaf('Expenses/Tools/2026-01-31.note.png')).toBe('2026-01-31.note.png')
+    expect(fileLeaf('invoice.pdf')).toBe('invoice.pdf')
+  })
+})
 
 describe('displayAccountName', () => {
   test('uses the Chinese segment after the last hyphen', () => {

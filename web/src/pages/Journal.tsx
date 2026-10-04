@@ -340,7 +340,7 @@ export function Journal() {
 
       {/* Centered Modal / Dialog for Selected Transaction & Documents */}
       <Dialog open={!!selectedTx} onOpenChange={(open) => !open && setSelectedTx(null)}>
-        <DialogContent className="w-full max-w-[calc(100%-1.5rem)] sm:max-w-3xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
+        <DialogContent className="w-full max-w-[calc(100%-1.5rem)] min-w-0 sm:max-w-3xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
           {selectedTx && (
             <>
               <DialogHeader>

@@ -102,26 +102,31 @@ export function isLoopbackOrigin(origin: string): boolean {
   return host === 'localhost' || host === '127.0.0.1' || host === '::1'
 }
 
-export function isLedgerConnection(value: unknown): value is LedgerConnection {
-  if (!value || typeof value !== 'object') return false
-  const record = value as Record<string, unknown>
-  if (typeof record.origin !== 'string' || !normalizeOrigin(record.origin)) return false
-  if (record.kind === 'remote') return true
-  return (
-    record.kind === 'local' &&
-    typeof record.directory === 'string' &&
-    record.directory.length > 0 &&
-    typeof record.command === 'string' &&
-    record.command.trim().length > 0 &&
-    isLoopbackOrigin(record.origin)
-  )
+/** Work folder plus a loopback origin. The start command may be empty. */
+export function localWorkdir(directory: string, origin: string, command = ''): LocalDraft | null {
+  const next = normalizeOrigin(origin)
+  if (!directory || !next || !isLoopbackOrigin(next)) return null
+  return { directory, command: command.trim(), origin: next }
 }
 
 export function localDraft(directory: string, command: string, origin: string): LocalDraft | null {
-  const next = normalizeOrigin(origin)
-  const trimmed = command.trim()
-  if (!directory || !trimmed || !next || !isLoopbackOrigin(next)) return null
-  return { directory, command: trimmed, origin: next }
+  const draft = localWorkdir(directory, origin, command)
+  return draft?.command ? draft : null
+}
+
+export function isLedgerConnection(value: unknown): value is LedgerConnection {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  if (record.kind === 'remote') {
+    return typeof record.origin === 'string' && normalizeOrigin(record.origin) != null
+  }
+  return (
+    record.kind === 'local' &&
+    typeof record.directory === 'string' &&
+    typeof record.command === 'string' &&
+    typeof record.origin === 'string' &&
+    localWorkdir(record.directory, record.origin, record.command) != null
+  )
 }
 
 export function remoteDraft(origin: string): RemoteDraft | null {
@@ -190,6 +195,9 @@ export function explainConnectionError(
   const code = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
   if (code === 'directory') return t('settings.missingDirectory')
   if (code === 'empty-command') return t('settings.missingCommand')
+  if (code === 'missing-engine') return t('settings.missingEngine')
+  if (code === 'ledger-exists') return t('settings.createFirstLedgerExists')
+  if (code === 'not-empty') return t('settings.createFirstLedgerNotEmpty')
   if (code === 'loopback') return t('settings.loopback')
   if (code === 'not-local' || code === 'missing') return t('settings.notLocal')
   if (code.startsWith('spawn:')) {
@@ -210,7 +218,7 @@ function readLocalDraft(value: unknown): LocalDraft | null {
   ) {
     return null
   }
-  return localDraft(record.directory, record.command, record.origin)
+  return localWorkdir(record.directory, record.origin, record.command)
 }
 
 function readRemoteDraft(value: unknown): RemoteDraft | null {

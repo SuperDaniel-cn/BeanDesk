@@ -1,9 +1,13 @@
 mod connection_log;
+mod engine;
+mod ledger_init;
 mod supervisor;
 
 use std::path::Path;
 use std::sync::Mutex;
 
+use engine::{resolve_engine, sidecar_command};
+use ledger_init::init_ledger_tree;
 use supervisor::{HostSnapshot, Supervisor, accepts_local_origin};
 use tauri::{AppHandle, Manager, RunEvent, State};
 use tauri_plugin_store::StoreExt;
@@ -30,7 +34,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_log::Builder::new().skip_logger().build())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             #[cfg(desktop)]
             app.handle()
@@ -45,7 +48,7 @@ pub fn run() {
             start_saved_fava,
             stop_saved_fava,
             fava_host,
-            fava_installed,
+            init_ledger,
             system_locales
         ])
         .build(tauri::generate_context!())
@@ -108,7 +111,18 @@ fn start_saved_fava(app: AppHandle, host: State<'_, FavaHost>) -> Result<(), Str
     if !accepts_local_origin(&saved.origin) {
         return Err("loopback".to_string());
     }
-    lock(&host).start(Path::new(&saved.directory), &saved.command)
+    let command = if saved.command.trim().is_empty() {
+        let engine = resolve_engine(Some(&app))?;
+        if let Err(code) = init_ledger_tree(Path::new(&saved.directory)) {
+            if code != "ledger-exists" {
+                return Err(code);
+            }
+        }
+        sidecar_command(&engine, &saved.origin)?
+    } else {
+        saved.command
+    };
+    lock(&host).start(Path::new(&saved.directory), &command)
 }
 
 /// Stop the process group this window started.
@@ -122,38 +136,9 @@ fn fava_host(host: State<'_, FavaHost>) -> HostSnapshot {
     lock(&host).snapshot()
 }
 
-/// True when Fava is already on this machine: the saved ledger has a virtualenv
-/// binary, or `fava` is on `PATH`. The quick-setup card stays hidden then.
 #[tauri::command]
-fn fava_installed(app: AppHandle) -> bool {
-    if saved_directory(&app).is_some_and(|directory| fava_in_project(Path::new(&directory))) {
-        return true;
-    }
-    executable_on_path("fava")
-}
-
-fn saved_directory(app: &AppHandle) -> Option<String> {
-    let store = app.store(CONNECTION_FILE).ok()?;
-    store.reload().ok()?;
-    let value = store.get(CONNECTION_KEY)?;
-    value
-        .get("local")
-        .and_then(|local| local.get("directory"))
-        .and_then(|item| item.as_str())
-        .or_else(|| value.get("directory").and_then(|item| item.as_str()))
-        .map(str::to_string)
-}
-
-fn fava_in_project(directory: &Path) -> bool {
-    directory.join(".venv/bin/fava").is_file() || directory.join(".venv/Scripts/fava.exe").is_file()
-}
-
-fn executable_on_path(name: &str) -> bool {
-    let Some(path) = std::env::var_os("PATH") else {
-        return false;
-    };
-    std::env::split_paths(&path)
-        .any(|dir| dir.join(name).is_file() || dir.join(format!("{name}.exe")).is_file())
+fn init_ledger(directory: String) -> Result<(), String> {
+    init_ledger_tree(Path::new(&directory))
 }
 
 /// Preferred languages from the operating system. The webview's
@@ -187,6 +172,22 @@ mod tests {
     }
 
     #[test]
+    fn reads_a_local_project_with_an_empty_command() {
+        let value = serde_json::json!({
+            "active": "local",
+            "local": {
+                "directory": "/tmp/ledger",
+                "command": "",
+                "origin": "http://127.0.0.1:5000"
+            },
+            "remote": null
+        });
+        let saved = local_project(&value).unwrap();
+        assert_eq!(saved.command, "");
+        assert_eq!(saved.directory, "/tmp/ledger");
+    }
+
+    #[test]
     fn refuses_to_start_when_connect_only_is_active() {
         let value = serde_json::json!({
             "active": "remote",
@@ -210,16 +211,6 @@ mod tests {
         });
         let saved = local_project(&value).unwrap();
         assert_eq!(saved.origin, "http://127.0.0.1:5000");
-    }
-
-    #[test]
-    fn a_project_venv_counts_as_fava_installed() {
-        let root = std::env::temp_dir().join(format!("beandesk-fava-{}", std::process::id()));
-        let bin = root.join(".venv/bin");
-        std::fs::create_dir_all(&bin).unwrap();
-        std::fs::write(bin.join("fava"), b"#!/bin/sh\n").unwrap();
-        assert!(super::fava_in_project(&root));
-        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

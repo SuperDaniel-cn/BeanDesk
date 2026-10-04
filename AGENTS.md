@@ -2,16 +2,19 @@
 
 BeanDesk 前端与桌面端工程规范。
 
-记账引导见 skills/fava-beancount-guide/SKILL.md。该技能引导用户自建账本；本仓库不附带账本，也不记录任何账本路径、科目、分录、凭证或备份信息。
+记账引导见 skills/fava-beancount-guide/SKILL.md。该技能只读写用户点名的工作目录；本仓库不附带账本，也不记录任何账本路径、科目、分录、凭证或备份信息。
 
 ## 1. 架构定位与职责边界
 
-本项目为只读财务前端工作台，直连 Fava，无自建后端与数据库。提供 Web 页面与 Tauri 2 桌面壳两种运行形态：
+本项目是壳：只读报表工作台，直连 **一个** Fava，无自建后端、数据库、云账号或备份上传。提供 Web 与 Tauri 2 桌面两种形态。
 
-- 零定制后端：不引入自定义后端服务或独立数据库。报表与数据查询直接通过 HTTP 与 Fava 通信。
-- 前端核心：React 19、TypeScript、Vite、Tailwind CSS、shadcn/ui，代码存放在 web 目录。
-- 桌面外壳：Tauri 2 位于 src-tauri 目录，负责桌面窗口宿主、网络转发与本机 Fava 进程生命周期托管。
-- 职责隔离：本规范约束前端与桌面外壳代码。复式记账合规与用户自建账本的初始化由技能模块处理。
+- 零定制后端：报表与查询只通过 HTTP 问 Fava。不算账，不自建会计引擎。
+- 文件是用户的：`.bean` 与 `documents/` 在用户选定的工作目录。应用不托管云同步。需要时只写下第一本账的骨架，不做网页账本编辑器。
+- 一个服务：桌面只拉起或连接一个 Fava。多本账是 Fava 多个根文件与 slug（`fava a.bean b.bean`），不是应用级换仓库、换连接。
+- 引擎可换：外行空启动命令走发布包里的冻结 sidecar。极客填自己的启动命令，或只填已有地址。不解析、不改写用户命令。不内置生 Python。
+- 前端核心：React 19、TypeScript、Vite、Tailwind CSS、shadcn/ui，代码在 web。
+- 桌面外壳：src-tauri，窗口、HTTP 插件、这一个 Fava 进程的看管。
+- 职责隔离：本规范约束壳。复式记账与记分录由技能在用户目录里完成。
 
 ## 2. 接口通信与双通道规范
 
@@ -32,7 +35,9 @@ BeanDesk 前端与桌面端工程规范。
 
 - 配置持久化：桌面端连接地址与本机命令使用 @tauri-apps/plugin-store 存储在本机，不提交进 Git，也不写入 web/public/config.js。同一份记录里 `active` 只有 `local` 或 `remote`。切到仅连接不会清掉本机目录和启动命令，切到本机项目也不会清掉仅连接的地址。启动进程只看当前生效的本机项目。
 - 进程看管原则：启动本机项目前先检测端口。已通则仅连接；未通则在独立进程组执行用户命令，等待就绪后再进入界面。退出时仅终止本次拉起的进程组。设置页展示的是现场快照（会话、端口探测、本窗口是否拥有进程）。Stop 只对 `owned`；PID 只存在本窗口内存里，不写入 store。
-- 运行环境解耦：BeanDesk 不内置 Python 运行环境，不解析或篡改用户填写的启动命令。
+- 运行环境：发布包装冻结的 `beandesk-engine` 目录（onedir：可执行文件加 `_internal`，不是单文件）。空命令才走这条路径。没有冻品时报 `missing-engine`。用户填写的启动命令原样交给 shell，不解析、不改写。不内置生 Python 解释器。
+- 第一本账：`init_ledger` 只在用户选定的工作目录写技能里的骨架。已有 `main.bean` 则报 `ledger-exists`。不开放通用写盘。
+- 不提供云备份：设置只指引用户备份工作目录。不上传、不代登网盘、不自动 Git 快照。
 - 启动命令：仓库根没有 package.json。浏览器使用 `make dev`，页面在 http://127.0.0.1:5188。桌面使用 `make desktop`，即 `bunx @tauri-apps/cli dev`。不要改成 `npm run tauri dev`，也不要在仓库根新建 Node 工程。
 - 配置目录：CLI 会先进入 `src-tauri`。`beforeDevCommand` 和 `beforeBuildCommand` 用 `cwd: "../web"` 再执行 `bun run dev` / `bun run build`。不要把 `../web` 写进命令本身：从仓库根启动时前端目录是 `web/`，从 `src-tauri` 启动时前端目录会退回仓库根，命令里的 `../web` 会找不到目录。devUrl 与 Vite 的 host、port 保持一致。打包读取 `web/dist`。
 - 连接日志：设置页上的每一行同时经 log 插件写入本机日志目录。单个文件上限 10MB，超过后从文件开头丢掉最旧的行，最近的内容留在原文件，不按日期另存。页面上的清除只清空当前窗口里的显示。

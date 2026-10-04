@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-init-ledger"
+description = "Enables the init_ledger command without any pre-configured scope."
+commands.allow = ["init_ledger"]
+
+[[permission]]
+identifier = "deny-init-ledger"
+description = "Denies the init_ledger command without any pre-configured scope."
+commands.deny = ["init_ledger"]

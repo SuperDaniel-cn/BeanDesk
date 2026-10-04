@@ -5,6 +5,7 @@ import { Menu, Settings } from 'lucide-react'
 import { REPORT_PAGES } from '@/app-pages'
 import { BrandMark } from '@/components/brand-mark'
 import { LedgerErrors } from '@/components/ledger-errors'
+import { StartupLoading, useStartupScreen } from '@/components/startup-loading'
 import { TimeFilterSelector } from '@/components/time-filter-selector'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
@@ -26,6 +27,7 @@ function useDocumentTitle(title: string) {
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useI18n()
   const { pathname } = useLocation()
+  const starting = useStartupScreen()
   const [mobileOpen, setMobileOpen] = useState(false)
   const pageKey =
     REPORT_PAGES.find((page) => page.path === pathname)?.key
@@ -35,6 +37,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     window.scrollTo(0, 0)
   }, [pathname])
+
+  if (starting) return <StartupLoading />
 
   return (
     <div className="min-h-svh bg-background">

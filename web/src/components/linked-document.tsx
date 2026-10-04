@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n } from '@/i18n'
+import { fileLeaf } from '@/lib/format'
 import { favaClient } from '@/lib/fava-client'
 
 export function LinkedDocument({ filename }: { filename: string | null }) {
@@ -38,11 +39,11 @@ export function LinkedDocument({ filename }: { filename: string | null }) {
   }, [desktop, filename])
 
   const href = !filename ? null : desktop ? preview : favaClient.getDocumentUrl(filename)
-  const downloadName = filename?.split('/').pop() || 'document'
+  const downloadName = filename ? fileLeaf(filename) : 'document'
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
+    <div className="flex min-w-0 flex-col gap-3">
+      <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-muted-foreground">
           {t('journal.documentsHeading')}
         </span>
@@ -78,7 +79,7 @@ export function LinkedDocument({ filename }: { filename: string | null }) {
       ) : !href ? (
         <Skeleton className="h-80 w-full" />
       ) : (
-        <div className="overflow-hidden rounded-xl border bg-muted/10 shadow-xs">
+        <div className="min-w-0 overflow-hidden rounded-xl border bg-muted/10 shadow-xs">
           {filename.toLowerCase().endsWith('.pdf') ? (
             <iframe
               src={href}
@@ -86,16 +87,16 @@ export function LinkedDocument({ filename }: { filename: string | null }) {
               title={t('journal.previewTitle')}
             />
           ) : (
-            <div className="flex flex-col items-center justify-center p-4">
+            <div className="flex items-center justify-center p-4">
               <img
                 src={href}
                 alt={t('journal.previewAlt')}
-                className="max-h-80 rounded-lg object-contain sm:max-h-[460px]"
+                className="max-h-80 max-w-full rounded-lg object-contain sm:max-h-[460px]"
               />
             </div>
           )}
           <div className="truncate bg-muted/40 px-4 py-2 text-center font-mono text-xs text-muted-foreground">
-            {filename}
+            {downloadName}
           </div>
         </div>
       )}

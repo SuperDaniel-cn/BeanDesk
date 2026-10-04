@@ -30,13 +30,8 @@ import { useI18n } from '@/i18n'
 import { fetchDocuments, type LedgerDocument } from '@/lib/api'
 import { dateInPeriod } from '@/lib/ledger-model'
 import { explainFavaError } from '@/lib/fava-error'
-import { displayAccountName } from '@/lib/format'
+import { displayAccountName, fileLeaf } from '@/lib/format'
 import { useTimeFilter } from '@/lib/time-context'
-
-function fileLeaf(filename: string): string {
-  const parts = filename.split('/')
-  return parts[parts.length - 1] || filename
-}
 
 export function Documents() {
   const { t, formatDate } = useI18n()
@@ -175,11 +170,11 @@ export function Documents() {
       )}
 
       <Dialog open={selected != null} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="w-full max-w-[calc(100%-1.5rem)] max-h-[90vh] overflow-y-auto rounded-2xl p-4 sm:max-w-3xl sm:p-6">
+        <DialogContent className="w-full max-w-[calc(100%-1.5rem)] max-h-[90vh] min-w-0 overflow-y-auto rounded-2xl p-4 sm:max-w-3xl sm:p-6">
           {selected ? (
             <>
-              <DialogHeader>
-                <DialogTitle>{fileLeaf(selected.filename)}</DialogTitle>
+              <DialogHeader className="min-w-0 pr-8">
+                <DialogTitle className="truncate">{fileLeaf(selected.filename)}</DialogTitle>
                 <DialogDescription>
                   {formatDate(selected.date)} · {displayAccountName(selected.account)}
                 </DialogDescription>

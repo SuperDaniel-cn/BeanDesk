@@ -6,6 +6,14 @@ web/dist/
 # Tauri / Cargo. Local Fava connection lives in the app data dir, not here.
 src-tauri/target/
 src-tauri/gen/
+src-tauri/binaries/engine/
+src-tauri/binaries/beandesk-engine-*
+
+# Frozen ledger engine (rebuilt per platform in CI)
+.engine-venv/
+engine/build/
+engine/dist/
+engine/__pycache__/
 
 # Editors & OS
 .DS_Store

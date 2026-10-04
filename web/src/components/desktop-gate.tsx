@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Navigate, useLocation } from 'react-router'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 
-import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n } from '@/i18n'
 import { loadConnection, loadHostSnapshot, loadSuspended, openConnection } from '@/lib/desktop'
 import { favaClient } from '@/lib/fava-client'
@@ -190,14 +189,6 @@ export function DesktopGuard({ children }: { children: ReactNode }) {
   const desktop = useDesktop()
   const { pathname } = useLocation()
 
-  if (desktop.status === 'boot' && pathname !== '/settings') {
-    return (
-      <div className="flex flex-col gap-3">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    )
-  }
   if (desktop.status === 'setup' && pathname !== '/settings') {
     return <Navigate to="/settings" replace />
   }

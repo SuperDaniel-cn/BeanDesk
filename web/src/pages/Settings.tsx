@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
-import { useNavigate } from 'react-router'
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { Check, ChevronDown, ChevronUp, Copy, FolderOpen, Plug } from 'lucide-react'
+import { ChevronDown, ChevronUp, FilePlus2, FolderOpen, Plug } from 'lucide-react'
 
 import { useAppUpdate } from '@/components/app-update'
 import { formatConnectionLog, formatConnectionLogLine, useDesktop } from '@/components/desktop-gate'
@@ -13,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import {
@@ -24,11 +23,14 @@ import {
   formFromConnectionFile,
   isPristineConnectionForm,
   localDraft,
+  localWorkdir,
   normalizeOrigin,
   remoteDraft,
   withDrafts,
   type ConnectionFile,
   type LedgerConnection,
+  type LocalDraft,
+  type RemoteDraft,
 } from '@/lib/connection'
 import { connectionAction, hostUptime, type DesktopStatus } from '@/lib/host'
 import {
@@ -41,33 +43,8 @@ import {
 } from '@/lib/desktop'
 
 type Kind = LedgerConnection['kind']
-
-const FAVA_DOCS = 'https://beancount.github.io/fava/usage.html#installation'
-const BEANCOUNT_DOCS = 'https://furius.ca/beancount/doc/install'
-
-function useShowQuickSetup(enabled: boolean): boolean {
-  const [show, setShow] = useState(false)
-
-  useEffect(() => {
-    if (!enabled) {
-      setShow(false)
-      return
-    }
-    let cancelled = false
-    void invoke<boolean>('fava_installed')
-      .then((installed) => {
-        if (!cancelled) setShow(!installed)
-      })
-      .catch(() => {
-        if (!cancelled) setShow(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [enabled])
-
-  return show
-}
+type SettingsTab = 'general' | 'simple' | 'geek'
+type ConnectionVariant = Exclude<SettingsTab, 'general'>
 
 function GeneralSettings({ tauri }: { tauri: boolean }) {
   const { t } = useI18n()
@@ -91,100 +68,29 @@ export function Settings() {
   const { t } = useI18n()
   const desktop = useDesktop()
   const tauri = isTauri()
-  const showQuick = useShowQuickSetup(tauri && desktop.status === 'setup')
   const needsHost = desktop.status !== 'ready'
+  const [tab, setTab] = useState<SettingsTab>(needsHost ? 'simple' : 'general')
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
       {tauri ? (
-        <Tabs defaultValue={needsHost ? 'connection' : 'general'}>
+        <Tabs value={tab} onValueChange={(value) => setTab(value as SettingsTab)}>
           <TabsList variant="line">
             <TabsTrigger value="general">{t('settings.tabGeneral')}</TabsTrigger>
-            <TabsTrigger value="connection">{t('settings.tabConnection')}</TabsTrigger>
+            <TabsTrigger value="simple">{t('settings.tabSimple')}</TabsTrigger>
+            <TabsTrigger value="geek">{t('settings.tabGeek')}</TabsTrigger>
           </TabsList>
-          <TabsContent value="general">
+          <div className={tab === 'general' ? '' : 'hidden'}>
             <GeneralSettings tauri />
-          </TabsContent>
-          <TabsContent value="connection" className="flex flex-col gap-4">
-            {showQuick ? <SetupGuide /> : null}
-            <ConnectionSettings />
-          </TabsContent>
+          </div>
+          <div className={tab === 'general' ? 'hidden' : 'flex flex-col gap-4'}>
+            <ConnectionSettings variant={tab === 'simple' ? 'simple' : 'geek'} />
+          </div>
         </Tabs>
       ) : (
         <GeneralSettings tauri={false} />
       )}
     </div>
-  )
-}
-
-function SetupGuide() {
-  const { t } = useI18n()
-  const [copied, setCopied] = useState(false)
-
-  const copyPrompt = () => {
-    void navigator.clipboard.writeText(t('settings.setupAgentPrompt')).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }
-
-  return (
-    <section className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-[0.8rem] font-medium">{t('settings.setupTitle')}</h2>
-        <p className="text-[0.8rem]/relaxed text-muted-foreground">{t('settings.setupBody')}</p>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[0.8rem] text-muted-foreground">{t('settings.setupInstallLead')}</span>
-        <code className="w-fit rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
-          {t('settings.setupInstallCommand')}
-        </code>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[0.8rem] text-muted-foreground">{t('settings.setupAgentLead')}</span>
-        <div className="flex flex-wrap items-center gap-2">
-          <code className="rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
-            {t('settings.setupAgentPrompt')}
-          </code>
-          <Button variant="ghost" size="sm" onClick={copyPrompt}>
-            {copied ? (
-              <>
-                <Check data-icon="inline-start" />
-                {t('settings.setupCopiedPrompt')}
-              </>
-            ) : (
-              <>
-                <Copy data-icon="inline-start" />
-                {t('settings.setupCopyPrompt')}
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-
-      <p className="text-[0.8rem]/relaxed text-muted-foreground">{t('settings.setupModesHint')}</p>
-
-      <p className="flex flex-wrap gap-x-4 gap-y-1 text-[0.8rem]">
-        <DocLink href={FAVA_DOCS}>{t('settings.setupFavaDocs')}</DocLink>
-        <DocLink href={BEANCOUNT_DOCS}>{t('settings.setupBeancountDocs')}</DocLink>
-      </p>
-    </section>
-  )
-}
-
-function DocLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      className="underline underline-offset-4"
-      onClick={() => {
-        void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(href))
-      }}
-    >
-      {children}
-    </button>
   )
 }
 
@@ -222,9 +128,8 @@ function UpdateCheck() {
   )
 }
 
-function ConnectionSettings() {
+function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
   const { t } = useI18n()
-  const navigate = useNavigate()
   const desktop = useDesktop()
   const saved = desktop.file
   const blank = emptyConnectionForm()
@@ -285,13 +190,16 @@ function ConnectionSettings() {
     return run
   }
 
-  function persistDraft(kindOverride?: Kind) {
+  function persistDraft(kindOverride?: Kind, allowEmptyCommand = false) {
     return enqueue(async () => {
       if (connectInFlight.current) return
       const current = fields.current
+      const local = allowEmptyCommand
+        ? localWorkdir(current.directory, current.localOrigin, current.command)
+        : localDraft(current.directory, current.command, current.localOrigin)
       const next = withDrafts(
         current.saved?.active ?? kindOverride ?? current.kind,
-        localDraft(current.directory, current.command, current.localOrigin),
+        local,
         remoteDraft(current.remoteOrigin),
         current.saved,
       )
@@ -307,6 +215,22 @@ function ConnectionSettings() {
     })
   }
 
+  async function createFirstLedger() {
+    if (!directory) {
+      fail(t('settings.missingWorkDirectory'))
+      return
+    }
+    setBusy(true)
+    try {
+      await invoke('init_ledger', { directory })
+      desktop.appendLog(t('settings.createFirstLedgerDone'))
+    } catch (caught) {
+      fail(explainConnectionError(caught, t))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function browse() {
     const { open } = await import('@tauri-apps/plugin-dialog')
     const picked = await open({
@@ -318,7 +242,7 @@ function ConnectionSettings() {
     if (typeof picked !== 'string') return
     fields.current.directory = picked
     setDirectory(picked)
-    void persistDraft()
+    void persistDraft(undefined, variant === 'simple')
   }
 
   function fail(message: string) {
@@ -351,7 +275,29 @@ function ConnectionSettings() {
       fail(t('settings.invalidOrigin'))
       return
     }
+    await openSaved(kind, local, remote)
+  }
 
+  async function connectSimple() {
+    if (desktop.status !== 'setup' || busy) return
+    const local = localWorkdir(directory, localOrigin)
+    const remote = remoteDraft(remoteOrigin)
+    if (!directory) {
+      fail(t('settings.missingWorkDirectory'))
+      return
+    }
+    if (!normalizeOrigin(localOrigin)) {
+      fail(t('settings.invalidOrigin'))
+      return
+    }
+    if (!local) {
+      fail(t('settings.loopback'))
+      return
+    }
+    await openSaved('local', local, remote)
+  }
+
+  async function openSaved(kind: Kind, local: LocalDraft | null, remote: RemoteDraft | null) {
     setBusy(true)
     connectInFlight.current = true
     try {
@@ -372,7 +318,6 @@ function ConnectionSettings() {
       })
       if (!opened) return
       desktop.markConnected(next)
-      navigate('/')
     } catch (caught) {
       fail(explainConnectionError(caught, t))
     } finally {
@@ -405,66 +350,98 @@ function ConnectionSettings() {
 
   return (
     <section className="flex flex-col gap-4">
-      <HostStatus />
+      <HostStatus
+        action={
+          variant === 'simple' ? (
+            <ConnectionButton busy={busy} onConnect={() => void connectSimple()} onStop={() => void stop()} />
+          ) : null
+        }
+      />
 
-      <div className="flex flex-col gap-1.5">
-        <span className="text-xs text-muted-foreground">{t('settings.connectionMode')}</span>
-        <div className="flex w-full flex-wrap items-center justify-between gap-2">
-          <Tabs
-            value={kind}
-            onValueChange={(value) => {
-              const nextKind = value as Kind
-              setKind(nextKind)
-              void persistDraft(nextKind)
-            }}
-          >
-            <TabsList>
-              <TabsTrigger value="local">{t('settings.local')}</TabsTrigger>
-              <TabsTrigger value="remote">{t('settings.remote')}</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <ConnectionButton busy={busy} onConnect={() => void connect()} onStop={() => void stop()} />
-        </div>
-      </div>
-
-      {kind === 'local' ? (
+      {variant === 'simple' ? (
         <>
           <label className="flex w-full flex-col items-start gap-1.5">
-            <span className="text-xs text-muted-foreground">{t('settings.directory')}</span>
-            <span className="flex w-full gap-2">
-              <Input value={directory} readOnly placeholder={t('settings.browse')} className="font-mono" />
+            <span className="text-xs text-muted-foreground">{t('settings.simpleDirectory')}</span>
+            <span className="flex w-full flex-wrap gap-2">
+              <Input value={directory} readOnly placeholder={t('settings.browse')} className="min-w-0 flex-1 font-mono" />
               <Button type="button" variant="outline" onClick={() => void browse()} disabled={busy} className="shrink-0">
                 <FolderOpen data-icon="inline-start" />
                 {t('settings.browse')}
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void createFirstLedger()}
+                disabled={busy || !directory}
+                className="shrink-0"
+              >
+                <FilePlus2 data-icon="inline-start" />
+                {t('settings.createFirstLedger')}
+              </Button>
             </span>
           </label>
-          <label className="flex w-full flex-col items-start gap-1.5">
-            <span className="text-xs text-muted-foreground">{t('settings.command')}</span>
-            <Textarea
-              value={command}
-              onChange={(event) => setCommand(event.target.value)}
-              onBlur={() => void persistDraft()}
-              placeholder={t('settings.commandPlaceholder')}
-              spellCheck={false}
-              rows={2}
-              className="resize-none font-mono"
-            />
-          </label>
-          <OriginField
-            origin={localOrigin}
-            setOrigin={setLocalOrigin}
-            onBlur={() => void persistDraft()}
-            label={t('settings.origin')}
-          />
         </>
       ) : (
-        <OriginField
-          origin={remoteOrigin}
-          setOrigin={setRemoteOrigin}
-          onBlur={() => void persistDraft()}
-          label={t('settings.origin')}
-        />
+        <>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs text-muted-foreground">{t('settings.connectionMode')}</span>
+            <div className="flex w-full flex-wrap items-center justify-between gap-2">
+              <Tabs
+                value={kind}
+                onValueChange={(value) => {
+                  const nextKind = value as Kind
+                  setKind(nextKind)
+                  void persistDraft(nextKind)
+                }}
+              >
+                <TabsList>
+                  <TabsTrigger value="local">{t('settings.local')}</TabsTrigger>
+                  <TabsTrigger value="remote">{t('settings.remote')}</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <ConnectionButton busy={busy} onConnect={() => void connect()} onStop={() => void stop()} />
+            </div>
+          </div>
+          {kind === 'local' ? (
+            <>
+              <label className="flex w-full flex-col items-start gap-1.5">
+                <span className="text-xs text-muted-foreground">{t('settings.directory')}</span>
+                <span className="flex w-full gap-2">
+                  <Input value={directory} readOnly placeholder={t('settings.browse')} className="font-mono" />
+                  <Button type="button" variant="outline" onClick={() => void browse()} disabled={busy} className="shrink-0">
+                    <FolderOpen data-icon="inline-start" />
+                    {t('settings.browse')}
+                  </Button>
+                </span>
+              </label>
+              <label className="flex w-full flex-col items-start gap-1.5">
+                <span className="text-xs text-muted-foreground">{t('settings.command')}</span>
+                <Textarea
+                  value={command}
+                  onChange={(event) => setCommand(event.target.value)}
+                  onBlur={() => void persistDraft()}
+                  placeholder={t('settings.commandPlaceholder')}
+                  spellCheck={false}
+                  rows={2}
+                  className="resize-none font-mono"
+                />
+              </label>
+              <OriginField
+                origin={localOrigin}
+                setOrigin={setLocalOrigin}
+                onBlur={() => void persistDraft()}
+                label={t('settings.origin')}
+              />
+            </>
+          ) : (
+            <OriginField
+              origin={remoteOrigin}
+              setOrigin={setRemoteOrigin}
+              onBlur={() => void persistDraft()}
+              label={t('settings.origin')}
+            />
+          )}
+        </>
       )}
 
       <Card>
@@ -525,7 +502,7 @@ function ConnectionSettings() {
   )
 }
 
-function HostStatus() {
+function HostStatus({ action }: { action?: ReactNode }) {
   const { t } = useI18n()
   const desktop = useDesktop()
   const { host, status } = desktop
@@ -546,18 +523,19 @@ function HostStatus() {
     detail = uptime ? `${t('settings.hostOwned')} · ${uptime}` : t('settings.hostOwned')
   } else if (status === 'ready') {
     detail = t('settings.hostAttached')
-  } else if (status !== 'boot') {
-    if (host.probe.kind === 'occupied') detail = t('settings.hostPortOccupied')
-    else if (host.probe.kind === 'closed') detail = t('settings.hostPortClosed')
-    else if (host.probe.kind === 'fava') detail = t('settings.hostPortReady')
+  } else if (status === 'setup') {
+    detail = t('settings.hostPleaseConnect')
   }
 
   return (
     <div className="flex flex-col items-start gap-1.5">
       <span className="text-xs text-muted-foreground">{t('settings.hostStatus')}</span>
-      <div className="flex flex-wrap items-baseline gap-2">
-        <Badge variant={session.variant}>{t(session.key)}</Badge>
-        {detail ? <span className="text-xs text-muted-foreground">{detail}</span> : null}
+      <div className="flex w-full flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={session.variant}>{t(session.key)}</Badge>
+          {detail ? <span className="text-xs text-muted-foreground">{detail}</span> : null}
+        </div>
+        {action}
       </div>
     </div>
   )

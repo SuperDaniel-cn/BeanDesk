@@ -70,9 +70,10 @@ export async function disconnectSession(): Promise<'stopped' | 'detached'> {
 
 /**
  * Point the client at a saved origin. A local project whose port is not yet
- * Fava gets the saved command first. Fava binds 127.0.0.1 with port reuse, so
- * it can take localhost even when another program already listens on the
- * wildcard address. An origin that is already Fava is left running.
+ * Fava is started from this window: an empty command uses the bundled engine.
+ * Fava binds 127.0.0.1 with port reuse, so it can take localhost even when
+ * another program already listens on the wildcard address. An origin that is
+ * already Fava is left running.
  */
 export async function openConnection(
   connection: LedgerConnection,
@@ -116,7 +117,7 @@ async function waitForLedger(
   onStep: ((step: ConnectionStep) => void) | undefined,
   current: () => boolean,
 ): Promise<boolean> {
-  const deadline = Date.now() + 40_000
+  const deadline = Date.now() + 90_000
   let last: unknown = null
   while (Date.now() < deadline) {
     if (!current()) return false
