@@ -3,16 +3,13 @@ import { describe, expect, test } from 'bun:test'
 import type { MessageKey } from '@/i18n/locales/en'
 
 import {
-  ARCHIVE_PREFIX,
-  ARCHIVE_SUFFIX,
   archiveNestsLedger,
   archiveBlockReason,
   backupErrorCode,
   canWriteArchive,
-  defaultArchiveName,
+  destFolderMissing,
   emptyBackupSettings,
   explainBackupError,
-  needsDebounce,
   validateS3Endpoint,
 } from './backup'
 
@@ -31,40 +28,68 @@ describe('validateS3Endpoint', () => {
 })
 
 describe('backup dests', () => {
-  test('debounce is shared by either auto path', () => {
+  const ready = { hasKey: true, resticReady: true, archiveDirReady: false, archiveDirectory: '' }
+
+  test('an empty dest is incomplete, not a vanished folder', () => {
     const settings = emptyBackupSettings()
-    expect(needsDebounce(settings)).toBe(true)
-    expect(needsDebounce({ ...settings, watch: false })).toBe(false)
-    expect(needsDebounce({ ...settings, watch: false, archiveAuto: true })).toBe(true)
+    expect(destFolderMissing(settings, { archiveDirReady: false, archiveDirectory: '' })).toBe(false)
+    expect(
+      destFolderMissing(
+        { ...settings, archiveLocal: true },
+        { archiveDirReady: false, archiveDirectory: '' },
+      ),
+    ).toBe(false)
+    expect(
+      destFolderMissing(
+        { ...settings, archiveLocal: true, archiveDirectory: '/backups' },
+        { archiveDirReady: false, archiveDirectory: '' },
+      ),
+    ).toBe(false)
+    expect(
+      destFolderMissing(
+        { ...settings, archiveLocal: true, archiveDirectory: '/backups' },
+        { archiveDirReady: false, archiveDirectory: '/backups' },
+      ),
+    ).toBe(true)
+    expect(
+      destFolderMissing(
+        { ...settings, archiveLocal: true, archiveDirectory: '/backups' },
+        { archiveDirReady: true, archiveDirectory: '/backups' },
+      ),
+    ).toBe(false)
   })
 
-  test('manual backup needs a key; auto backup also needs a live dest', () => {
+  test('a backup needs a key, restic, and at least one dest', () => {
     const settings = emptyBackupSettings()
-    expect(archiveBlockReason(settings, { hasKey: false, archiveDirReady: true })).toBe(
-      'backup-key-missing',
-    )
-    expect(canWriteArchive(settings, { hasKey: true, archiveDirReady: false })).toBe(true)
+    expect(archiveBlockReason(settings, { ...ready, hasKey: false })).toBe('backup-key-missing')
+    expect(archiveBlockReason(settings, { ...ready, resticReady: false })).toBe('missing-restic')
+    expect(archiveBlockReason(settings, ready)).toBe('archive-dest')
+    expect(
+      canWriteArchive(
+        { ...settings, archiveLocal: true, archiveDirectory: '/backups' },
+        { ...ready, archiveDirReady: true, archiveDirectory: '/backups' },
+      ),
+    ).toBe(true)
     expect(
       archiveBlockReason(
         { ...settings, archiveAuto: true, archiveLocal: true },
-        { hasKey: true, archiveDirReady: false },
+        ready,
       ),
     ).toBe('archive-dir')
     expect(
       canWriteArchive(
-        { ...settings, archiveAuto: true, archiveLocal: true },
-        { hasKey: true, archiveDirReady: true },
+        { ...settings, archiveAuto: true, archiveLocal: true, archiveDirectory: '/backups' },
+        { ...ready, archiveDirReady: false, archiveDirectory: '' },
       ),
     ).toBe(true)
     expect(
-      archiveBlockReason({ ...settings, archiveAuto: true }, { hasKey: true, archiveDirReady: false }),
-    ).toBe('archive-dest')
-    expect(
-      canWriteArchive(
-        { ...settings, archiveAuto: true, s3Enabled: true },
-        { hasKey: true, archiveDirReady: false },
+      archiveBlockReason(
+        { ...settings, archiveAuto: true, archiveLocal: true, archiveDirectory: '/backups' },
+        { ...ready, archiveDirReady: false, archiveDirectory: '/backups' },
       ),
-    ).toBe(true)
+    ).toBe('archive-dir-gone')
+    expect(archiveBlockReason({ ...settings, archiveAuto: true }, ready)).toBe('archive-dest')
+    expect(canWriteArchive({ ...settings, archiveAuto: true, s3Enabled: true }, ready)).toBe(true)
   })
 
   test('backup dest cannot sit in the ledger tree', () => {
@@ -73,13 +98,6 @@ describe('backup dests', () => {
     expect(archiveNestsLedger('/ledger/', '/ledger/backups/')).toBe(true)
     expect(archiveNestsLedger('/ledger', '/ledger-copy')).toBe(false)
     expect(archiveNestsLedger('/ledger', '/elsewhere')).toBe(false)
-  })
-
-  test('default archive name uses the OpenSSL-compatible suffix', () => {
-    const name = defaultArchiveName(new Date(Date.UTC(2026, 9, 4, 9, 53, 0)))
-    expect(name.startsWith(ARCHIVE_PREFIX)).toBe(true)
-    expect(name.endsWith(ARCHIVE_SUFFIX)).toBe(true)
-    expect(name).toBe('beandesk-backup-20261004_095300.tar.gz.enc')
   })
 })
 
@@ -91,11 +109,15 @@ describe('explainBackupError', () => {
     expect(backupErrorCode({ message: 'backup-key-missing' })).toBe('backup-key-missing')
     expect(explainBackupError('s3-endpoint', t)).toBe('settings.backupErrorS3Endpoint')
     expect(explainBackupError('backup-key-missing', t)).toBe('settings.backupErrorKey')
+    expect(explainBackupError('missing-restic', t)).toBe('settings.backupErrorRestic')
+    expect(explainBackupError('backup-partial', t)).toBe('settings.backupErrorPartial')
+    expect(explainBackupError('snapshot', t)).toBe('settings.backupErrorSnapshot')
     expect(explainBackupError(new Error('backup-key-missing'), t)).toBe('settings.backupErrorKey')
     expect(explainBackupError({ message: 'encrypt' }, t)).toBe('settings.backupErrorEncrypt')
     expect(explainBackupError('git', t)).toBe('settings.backupErrorGit')
     expect(explainBackupError('archive-dest', t)).toBe('settings.backupErrorArchiveDest')
     expect(explainBackupError('archive-dir', t)).toBe('settings.backupErrorArchiveDir')
+    expect(explainBackupError('archive-dir-gone', t)).toBe('settings.backupErrorArchiveDirGone')
     expect(explainBackupError('archive-nested', t)).toBe('settings.backupErrorArchiveNested')
     expect(explainBackupError('check', t)).toBe('settings.backupErrorCheck')
   })

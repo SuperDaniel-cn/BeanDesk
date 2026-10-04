@@ -30,16 +30,5 @@ sys-locale = "0.3.2"
 time = { version = "0.3.55", features = ["formatting", "local-offset", "macros"] }
 tauri-plugin-updater = "2.13.1"
 tauri-plugin-process = "2.4.0"
-pbkdf2 = { version = "0.13.0", features = ["hmac"] }
-sha2 = "0.11.0"
-hmac = "0.13.0"
-hex = "0.4.3"
 url = "2.5.8"
-getrandom = "0.4.3"
-cipher = { version = "0.5.2", features = ["alloc", "block-padding"] }
-reqwest = { version = "0.13.5", features = ["blocking"] }
-tar = "0.4.46"
-flate2 = "1.1.10"
-aes = "0.9.3"
-cbc = { version = "0.2.1", features = ["alloc"] }
 git2 = { version = "0.21.0", default-features = false }

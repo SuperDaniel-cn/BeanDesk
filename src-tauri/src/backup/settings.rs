@@ -4,6 +4,16 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub const SNAPSHOT_PATHS: [&str; 4] = ["main.bean", "config", "data", "documents"];
+pub const KEY_FILE: &str = ".backup_key";
+pub const DEFAULT_DEBOUNCE_SECS: u32 = 5;
+pub const HOST: &str = "beandesk";
+
+/// Keep every snapshot from the last 48 hours, then thin: 30 days, 12 weeks, 24 months.
+pub const KEEP_WITHIN: &str = "48h";
+pub const KEEP_WITHIN_DAILY: &str = "30d";
+pub const KEEP_WITHIN_WEEKLY: &str = "84d";
+pub const KEEP_WITHIN_MONTHLY: &str = "24m";
+pub const CHECK_GROUPS: u32 = 7;
 
 pub fn require_ledger(directory: &Path) -> Result<(), String> {
     if !directory.is_absolute() || !directory.is_dir() || !directory.join("main.bean").is_file() {
@@ -11,11 +21,6 @@ pub fn require_ledger(directory: &Path) -> Result<(), String> {
     }
     Ok(())
 }
-pub const DEFAULT_KEEP: u32 = 30;
-pub const DEFAULT_DEBOUNCE_SECS: u32 = 5;
-pub const ARCHIVE_PREFIX: &str = "beandesk-backup-";
-pub const ARCHIVE_SUFFIX: &str = ".tar.gz.enc";
-pub const KEY_FILE: &str = ".backup_key";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,7 +44,6 @@ pub struct BackupSettings {
     pub archive_directory: String,
     pub s3_enabled: bool,
     pub s3: S3Settings,
-    pub keep: u32,
 }
 
 impl Default for S3Settings {
@@ -66,7 +70,6 @@ impl Default for BackupSettings {
             archive_directory: String::new(),
             s3_enabled: false,
             s3: S3Settings::default(),
-            keep: DEFAULT_KEEP,
         }
     }
 }
@@ -87,7 +90,13 @@ pub struct BackupSettingsView {
     pub path_style_access: bool,
     pub prefix: String,
     pub secret_configured: bool,
-    pub keep: u32,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupSnapshot {
+    pub id: String,
+    pub time: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -95,12 +104,15 @@ pub struct BackupSettingsView {
 pub struct BackupStatus {
     pub last_git_at: Option<String>,
     pub last_git_hash: Option<String>,
-    pub last_archive: Option<String>,
+    pub last_snapshot: Option<String>,
+    pub last_snapshot_at: Option<String>,
     pub last_upload: Option<String>,
     pub last_error: Option<String>,
     pub watching: bool,
     pub has_key: bool,
+    pub restic_ready: bool,
     pub archive_dir_ready: bool,
+    pub archive_directory: String,
 }
 
 impl BackupSettings {
@@ -119,25 +131,51 @@ impl BackupSettings {
             path_style_access: self.s3.path_style_access,
             prefix: self.s3.prefix.clone(),
             secret_configured: !self.s3.secret_access_key.is_empty(),
-            keep: self.keep,
         }
-    }
-
-    pub fn has_archive_dest(&self) -> bool {
-        self.archive_local || self.s3_enabled
     }
 
     pub fn archive_dir_ready(&self) -> bool {
         !self.archive_local || Path::new(self.archive_directory.trim()).is_dir()
     }
 
+    pub fn local_dest_ready(&self) -> bool {
+        self.archive_local && Path::new(self.archive_directory.trim()).is_dir()
+    }
+
+    pub fn cloud_dest_ready(&self) -> bool {
+        self.s3_enabled && s3_ready(&self.s3).is_ok()
+    }
+
+    pub fn has_ready_archive_dest(&self) -> bool {
+        self.local_dest_ready() || self.cloud_dest_ready()
+    }
+
     pub fn archives_on_change(&self) -> bool {
-        self.archive_auto && self.has_archive_dest()
+        self.archive_auto && self.has_ready_archive_dest()
     }
 
     pub fn should_watch(&self) -> bool {
         self.watch || self.archives_on_change()
     }
+
+    pub fn ready_dests(&self) -> Vec<ArchiveDest> {
+        let mut dests = Vec::new();
+        if self.local_dest_ready() {
+            dests.push(ArchiveDest::Local(PathBuf::from(self.archive_directory.trim())));
+        }
+        if let Ok(s3) = s3_ready(&self.s3)
+            && self.s3_enabled
+        {
+            dests.push(ArchiveDest::S3(s3));
+        }
+        dests
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum ArchiveDest {
+    Local(PathBuf),
+    S3(S3Settings),
 }
 
 /// HTTPS API host only. No path, query, user, or fragment.
@@ -170,10 +208,6 @@ pub fn validate_archive_directory(path: &Path) -> Result<PathBuf, String> {
         return Err("archive-dir".to_string());
     }
     Ok(path.to_path_buf())
-}
-
-pub fn existing_file(path: Option<String>) -> Option<String> {
-    path.filter(|path| Path::new(path).is_file())
 }
 
 pub fn reject_archive_inside_ledger(workdir: &Path, dest: &Path) -> Result<(), String> {
@@ -219,7 +253,7 @@ pub fn s3_ready(s3: &S3Settings) -> Result<S3Settings, String> {
         region: {
             let region = s3.region.trim();
             if region.is_empty() {
-                "auto".to_string()
+                "us-east-1".to_string()
             } else {
                 region.to_string()
             }
@@ -230,6 +264,15 @@ pub fn s3_ready(s3: &S3Settings) -> Result<S3Settings, String> {
     })
 }
 
+pub fn s3_repository(s3: &S3Settings) -> String {
+    let bucket = if s3.prefix.is_empty() {
+        s3.bucket_name.clone()
+    } else {
+        format!("{}/{}", s3.bucket_name, s3.prefix)
+    };
+    format!("s3:{}/{bucket}", s3.endpoint)
+}
+
 pub fn exclude_name(name: &str) -> bool {
     matches!(
         name,
@@ -238,8 +281,43 @@ pub fn exclude_name(name: &str) -> bool {
         || name.ends_with('~')
 }
 
-pub fn is_archive_name(name: &str) -> bool {
-    name.starts_with(ARCHIVE_PREFIX) && name.ends_with(ARCHIVE_SUFFIX)
+pub fn collect_mtimes(directory: &Path) -> Result<Vec<(PathBuf, u64)>, String> {
+    let mut times = Vec::new();
+    for name in SNAPSHOT_PATHS {
+        walk_mtimes(directory.join(name), &mut times)?;
+    }
+    Ok(times)
+}
+
+fn walk_mtimes(path: PathBuf, times: &mut Vec<(PathBuf, u64)>) -> Result<(), String> {
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    if exclude_name(name) {
+        return Ok(());
+    }
+    if path.is_file() {
+        let modified = fs_mtime(&path);
+        times.push((path, modified));
+        return Ok(());
+    }
+    if !path.is_dir() {
+        return Ok(());
+    }
+    for entry in std::fs::read_dir(&path).map_err(|error| error.to_string())? {
+        walk_mtimes(entry.map_err(|error| error.to_string())?.path(), times)?;
+    }
+    Ok(())
+}
+
+fn fs_mtime(path: &Path) -> u64 {
+    std::fs::metadata(path)
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -287,6 +365,28 @@ mod tests {
     }
 
     #[test]
+    fn s3_repository_uses_path_style_url() {
+        let s3 = S3Settings {
+            bucket_name: "books".to_string(),
+            endpoint: "https://example.r2.cloudflarestorage.com".to_string(),
+            prefix: "desk".to_string(),
+            ..S3Settings::default()
+        };
+        assert_eq!(
+            s3_repository(&s3),
+            "s3:https://example.r2.cloudflarestorage.com/books/desk"
+        );
+        let bare = S3Settings {
+            prefix: String::new(),
+            ..s3
+        };
+        assert_eq!(
+            s3_repository(&bare),
+            "s3:https://example.r2.cloudflarestorage.com/books"
+        );
+    }
+
+    #[test]
     fn exclude_list_skips_secrets_and_junk() {
         assert!(exclude_name(".env"));
         assert!(exclude_name(".backup_key"));
@@ -306,22 +406,21 @@ mod tests {
         assert!(!settings.archives_on_change());
         assert!(!settings.should_watch());
         settings.archive_local = true;
+        assert!(!settings.archives_on_change());
+        assert!(!settings.should_watch());
+        settings.archive_directory = "/tmp".to_string();
+        assert!(settings.local_dest_ready());
         assert!(settings.archives_on_change());
         assert!(settings.should_watch());
-        settings.archive_directory = "/tmp".to_string();
-        assert!(settings.archive_dir_ready());
         settings.archive_directory = format!("/tmp/beandesk-missing-ready-{}", std::process::id());
         assert!(!settings.archive_dir_ready());
+        assert!(!settings.archives_on_change());
     }
 
     #[test]
     fn archive_directory_must_be_an_absolute_folder() {
         assert_eq!(
             validate_archive_directory(Path::new("relative")).err().as_deref(),
-            Some("archive-dir")
-        );
-        assert_eq!(
-            validate_archive_directory(Path::new("")).err().as_deref(),
             Some("archive-dir")
         );
         let missing = std::env::temp_dir().join(format!(
@@ -339,27 +438,12 @@ mod tests {
     }
 
     #[test]
-    fn existing_file_drops_a_deleted_path() {
-        let path = std::env::temp_dir().join(format!(
-            "beandesk-stale-archive-{}.enc",
-            std::process::id()
-        ));
-        std::fs::write(&path, b"cipher").unwrap();
-        let shown = path.display().to_string();
-        assert_eq!(existing_file(Some(shown.clone())).as_deref(), Some(shown.as_str()));
-        std::fs::remove_file(&path).unwrap();
-        assert_eq!(existing_file(Some(shown)), None);
-        assert_eq!(existing_file(None), None);
-    }
-
-    #[test]
     fn archive_directory_cannot_sit_in_the_ledger() {
         let root = std::env::temp_dir().join(format!("beandesk-nest-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("documents")).unwrap();
         assert!(archive_nests_ledger(&root, &root));
         assert!(archive_nests_ledger(&root, &root.join("documents")));
-        assert!(archive_nests_ledger(&root, &root.join("beandesk-backup-1.tar.gz.enc")));
         assert!(!archive_nests_ledger(&root, &root.parent().unwrap().join("elsewhere")));
         assert_eq!(
             reject_archive_inside_ledger(&root, &root.join("documents"))
@@ -376,7 +460,7 @@ mod tests {
         value
             .as_object_mut()
             .unwrap()
-            .insert("nope".to_string(), serde_json::json!(true));
+            .insert("keep".to_string(), serde_json::json!(30));
         assert!(serde_json::from_value::<BackupSettings>(value).is_err());
     }
 

@@ -1,10 +1,9 @@
-mod archive;
 mod git;
-mod s3;
+mod key;
+mod restic;
 mod settings;
 mod watch;
 
-use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -16,10 +15,9 @@ use crate::engine::resolve_engine;
 
 pub use settings::{BackupSettings, BackupSettingsView, BackupStatus, S3Settings};
 
-use archive::{
-    archive_filename, export_encrypted_archive, has_key, restore_archive, write_cipher,
-    write_encrypted_archive, write_key,
-};
+use key::{has_key, write_key};
+use restic::{backup_dests, list_snapshots, restore_snapshot, restic_ready, test_s3};
+use settings::ArchiveDest;
 use watch::{SharedWatch, Watch};
 
 const BACKUP_FILE: &str = "backup.json";
@@ -55,7 +53,6 @@ pub struct BackupSettingsInput {
     pub endpoint: String,
     pub path_style_access: bool,
     pub prefix: String,
-    pub keep: u32,
 }
 
 impl BackupSettingsInput {
@@ -80,14 +77,8 @@ impl BackupSettingsInput {
                 path_style_access: self.path_style_access,
                 prefix: self.prefix,
             },
-            keep: self.keep.max(1),
         }
     }
-}
-
-struct ArchiveOutcome {
-    archive: Option<String>,
-    upload: Option<String>,
 }
 
 pub fn load_settings(app: &AppHandle) -> BackupSettings {
@@ -119,6 +110,14 @@ fn set_status(host: &BackupHost, update: impl FnOnce(&mut BackupStatus)) {
 fn fail(host: &BackupHost, error: String) -> Result<BackupStatus, String> {
     set_status(host, |status| status.last_error = Some(error.clone()));
     Err(error)
+}
+
+async fn spawn_heavy<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 fn stamp() -> String {
@@ -157,17 +156,12 @@ fn sync_watch(app: &AppHandle, directory: &Path, settings: &BackupSettings) {
     watch.start(
         directory.to_path_buf(),
         settings.clone(),
-        Arc::new(move |directory, settings| {
-            let _ = run_watch_tick(&handle, &directory, &settings);
-        }),
+        Arc::new(move |directory, settings| run_watch_tick(&handle, &directory, &settings)),
     );
 }
 
-fn run_watch_tick(
-    app: &AppHandle,
-    directory: &Path,
-    settings: &BackupSettings,
-) -> Result<BackupStatus, String> {
+/// Runs on the watcher thread. It must not lock `host.watch`: `sync_watch` holds that lock while it joins this thread.
+fn run_watch_tick(app: &AppHandle, directory: &Path, settings: &BackupSettings) {
     let host = app.state::<BackupHost>();
     let mut failed = None;
     if settings.watch {
@@ -181,84 +175,34 @@ fn run_watch_tick(
             Err(error) => failed = Some(error),
         }
     }
-    if settings.archives_on_change() {
-        match write_and_upload(directory, settings) {
-            Ok(outcome) => apply_archive_outcome(&host, outcome),
+    if settings.archives_on_change() && has_key(directory) {
+        match write_dests(app, directory, settings) {
+            Ok(()) => {}
             Err(error) => failed = Some(error),
         }
     }
-    if let Some(error) = failed {
-        return fail(&host, error);
-    }
-    set_status(&host, |status| status.last_error = None);
-    Ok(current_status(app, directory))
+    set_status(&host, |status| status.last_error = failed);
 }
 
-fn apply_archive_outcome(host: &BackupHost, outcome: ArchiveOutcome) {
-    set_status(host, |status| {
-        if let Some(path) = outcome.archive {
-            status.last_archive = Some(path);
+fn write_dests(app: &AppHandle, directory: &Path, settings: &BackupSettings) -> Result<(), String> {
+    let host = app.state::<BackupHost>();
+    let written = backup_dests(Some(app), directory, settings)?;
+    set_status(&host, |status| {
+        if let Some(item) = written.first() {
+            status.last_snapshot = Some(item.id.clone());
+            status.last_snapshot_at = Some(stamp());
         }
-        if let Some(key) = outcome.upload {
-            status.last_upload = Some(key);
+        if let Some(item) = written.iter().find(|item| item.cloud) {
+            status.last_upload = Some(item.location.clone());
         }
     });
+    Ok(())
 }
 
-fn write_and_upload(directory: &Path, settings: &BackupSettings) -> Result<ArchiveOutcome, String> {
-    if !settings.has_archive_dest() {
-        return Err("archive-dest".to_string());
-    }
-    let s3 = if settings.s3_enabled {
-        Some(settings::s3_ready(&settings.s3)?)
-    } else {
-        None
-    };
-
-    let local_path = if settings.archive_local {
-        Some(write_encrypted_archive(
-            directory,
-            Path::new(settings.archive_directory.trim()),
-            settings.keep,
-        )?)
-    } else {
-        None
-    };
-
-    let upload = match s3 {
-        Some(s3) => {
-            let (path, ephemeral) = match &local_path {
-                Some(path) => (path.clone(), false),
-                None => {
-                    let tmp = std::env::temp_dir().join(archive_filename());
-                    write_cipher(directory, &tmp)?;
-                    (tmp, true)
-                }
-            };
-            let uploaded = s3::upload_archive(&s3, &path, settings.keep);
-            if ephemeral {
-                let _ = fs::remove_file(&path);
-            }
-            Some(uploaded?)
-        }
-        None => None,
-    };
-
-    Ok(ArchiveOutcome {
-        archive: local_path.map(|path| path.display().to_string()),
-        upload,
-    })
-}
-
-fn run_archive(
-    app: &AppHandle,
-    directory: &Path,
-    settings: &BackupSettings,
-) -> Result<BackupStatus, String> {
+fn run_backup(app: &AppHandle, directory: &Path, settings: &BackupSettings) -> Result<BackupStatus, String> {
     let host = app.state::<BackupHost>();
-    match write_and_upload(directory, settings) {
-        Ok(outcome) => {
-            apply_archive_outcome(&host, outcome);
+    match write_dests(app, directory, settings) {
+        Ok(()) => {
             set_status(&host, |status| status.last_error = None);
             Ok(current_status(app, directory))
         }
@@ -276,22 +220,24 @@ fn current_status(app: &AppHandle, directory: &Path) -> BackupStatus {
         .unwrap_or(false);
     let Ok(mut status) = host.status.lock() else {
         let mut status = BackupStatus::default();
-        refresh_live_status(&mut status, directory, &settings, watching);
+        refresh_live_status(app, &mut status, directory, &settings, watching);
         return status;
     };
-    refresh_live_status(&mut status, directory, &settings, watching);
+    refresh_live_status(app, &mut status, directory, &settings, watching);
     status.clone()
 }
 
 fn refresh_live_status(
+    app: &AppHandle,
     status: &mut BackupStatus,
     directory: &Path,
     settings: &BackupSettings,
     watching: bool,
 ) {
     status.has_key = has_key(directory);
+    status.restic_ready = restic_ready(Some(app));
     status.archive_dir_ready = settings.archive_dir_ready();
-    status.last_archive = settings::existing_file(status.last_archive.take());
+    status.archive_directory = settings.archive_directory.trim().to_string();
     status.watching = watching;
 }
 
@@ -308,93 +254,135 @@ pub fn load_backup_settings(app: AppHandle) -> BackupSettingsView {
     load_settings(&app).view()
 }
 
+/// Off the main thread: stopping the watcher waits for a tick that may still be writing or uploading.
 #[tauri::command]
-pub fn save_backup_settings(app: AppHandle, input: BackupSettingsInput) -> Result<BackupSettingsView, String> {
-    let previous = load_settings(&app);
-    let mut settings = input.into_settings(&previous);
-    let workdir = crate::saved_workdir(&app).ok();
-    if settings.archive_auto && !workdir.as_ref().is_some_and(|directory| has_key(directory)) {
-        settings.archive_auto = false;
-    }
-    if settings.archive_local && let Some(directory) = &workdir {
-        settings::reject_archive_inside_ledger(
-            directory,
-            Path::new(settings.archive_directory.trim()),
-        )?;
-    }
-    save_settings(&app, &settings)?;
-    if let Some(directory) = &workdir {
-        sync_watch(&app, directory, &settings);
-    }
-    Ok(settings.view())
-}
-
-#[tauri::command]
-pub fn backup_status(app: AppHandle) -> BackupStatus {
-    match crate::saved_workdir(&app) {
-        Ok(directory) => current_status(&app, &directory),
-        Err(_) => BackupStatus::default(),
-    }
-}
-
-#[tauri::command]
-pub fn backup_now(app: AppHandle) -> Result<BackupStatus, String> {
-    let directory = crate::saved_workdir(&app)?;
-    let settings = load_settings(&app);
-    run_archive(&app, &directory, &settings)
-}
-
-#[tauri::command]
-pub fn backup_export(app: AppHandle, dest: String) -> Result<BackupStatus, String> {
-    let directory = crate::saved_workdir(&app)?;
-    let host = app.state::<BackupHost>();
-    match export_encrypted_archive(&directory, Path::new(&dest)) {
-        Ok(path) => {
-            set_status(&host, |status| {
-                status.last_error = None;
-                status.last_archive = Some(path.display().to_string());
-            });
-            Ok(current_status(&app, &directory))
+pub async fn save_backup_settings(
+    app: AppHandle,
+    input: BackupSettingsInput,
+) -> Result<BackupSettingsView, String> {
+    spawn_heavy(move || {
+        let previous = load_settings(&app);
+        let mut settings = input.into_settings(&previous);
+        let workdir = crate::saved_workdir(&app).ok();
+        if settings.archive_auto && !workdir.as_ref().is_some_and(|directory| has_key(directory)) {
+            settings.archive_auto = false;
         }
-        Err(error) => fail(&host, error),
-    }
+        let dest = settings.archive_directory.trim();
+        if settings.archive_local && !dest.is_empty() && let Some(directory) = &workdir {
+            settings::reject_archive_inside_ledger(directory, Path::new(dest))?;
+        }
+        save_settings(&app, &settings)?;
+        if let Some(directory) = &workdir {
+            sync_watch(&app, directory, &settings);
+        }
+        Ok(settings.view())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn backup_set_key(app: AppHandle, password: String) -> Result<BackupStatus, String> {
-    let directory = crate::saved_workdir(&app)?;
-    write_key(&directory, &password)?;
-    Ok(current_status(&app, &directory))
+pub async fn backup_status(app: AppHandle) -> BackupStatus {
+    spawn_heavy(move || {
+        Ok(match crate::saved_workdir(&app) {
+            Ok(directory) => current_status(&app, &directory),
+            Err(_) => BackupStatus::default(),
+        })
+    })
+    .await
+    .unwrap_or_default()
 }
 
 #[tauri::command]
-pub fn backup_restore(app: AppHandle, archive: String, output: String) -> Result<(), String> {
-    let directory = crate::saved_workdir(&app)?;
-    let password = archive::read_key(&directory)?;
-    restore_archive(Path::new(&archive), Path::new(&output), &password)?;
-    let ledger = Path::new(&output).join("main.bean");
-    if !ledger.is_file() {
-        return Err("encrypt".to_string());
-    }
-    let engine = resolve_engine(Some(&app))?;
-    let status = std::process::Command::new(&engine)
-        .arg("check")
-        .arg(&ledger)
-        .current_dir(&output)
-        .status()
-        .map_err(|error| error.to_string())?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err("check".to_string())
-    }
+pub async fn backup_now(app: AppHandle) -> Result<BackupStatus, String> {
+    spawn_heavy(move || {
+        let directory = crate::saved_workdir(&app)?;
+        let settings = load_settings(&app);
+        run_backup(&app, &directory, &settings)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn backup_test_s3(app: AppHandle) -> Result<(), String> {
-    let settings = load_settings(&app);
-    let s3 = settings::s3_ready(&settings.s3)?;
-    s3::test_access(&s3)
+pub async fn backup_set_key(app: AppHandle, password: String) -> Result<BackupStatus, String> {
+    spawn_heavy(move || {
+        let directory = crate::saved_workdir(&app)?;
+        write_key(&directory, &password)?;
+        Ok(current_status(&app, &directory))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn backup_restore(
+    app: AppHandle,
+    snapshot: String,
+    output: String,
+    dest: String,
+) -> Result<(), String> {
+    spawn_heavy(move || {
+        let directory = crate::saved_workdir(&app)?;
+        let settings = load_settings(&app);
+        let target = restore_dest(&settings, &dest)?;
+        restore_snapshot(Some(&app), &directory, &target, &snapshot, Path::new(&output))?;
+        let ledger = Path::new(&output).join("main.bean");
+        if !ledger.is_file() {
+            return Err("encrypt".to_string());
+        }
+        let engine = resolve_engine(Some(&app))?;
+        let status = std::process::Command::new(&engine)
+            .arg("check")
+            .arg(&ledger)
+            .current_dir(&output)
+            .status()
+            .map_err(|error| error.to_string())?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err("check".to_string())
+        }
+    })
+    .await
+}
+
+fn restore_dest(settings: &BackupSettings, dest: &str) -> Result<ArchiveDest, String> {
+    let dests = settings.ready_dests();
+    if dests.is_empty() {
+        return Err("archive-dest".to_string());
+    }
+    if dest.trim().is_empty() {
+        return dests.into_iter().next().ok_or_else(|| "archive-dest".to_string());
+    }
+    dests
+        .into_iter()
+        .find(|item| match item {
+            ArchiveDest::Local(path) => path.display().to_string() == dest,
+            ArchiveDest::S3(s3) => settings::s3_repository(s3) == dest,
+        })
+        .ok_or_else(|| "archive-dest".to_string())
+}
+
+#[tauri::command]
+pub async fn backup_snapshots(app: AppHandle) -> Result<Vec<settings::BackupSnapshot>, String> {
+    spawn_heavy(move || {
+        let directory = crate::saved_workdir(&app)?;
+        let settings = load_settings(&app);
+        let Some(dest) = settings.ready_dests().into_iter().next() else {
+            return Ok(Vec::new());
+        };
+        list_snapshots(Some(&app), &directory, &dest)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn backup_test_s3(app: AppHandle) -> Result<(), String> {
+    spawn_heavy(move || {
+        let directory = crate::saved_workdir(&app)?;
+        let settings = load_settings(&app);
+        let s3 = settings::s3_ready(&settings.s3)?;
+        test_s3(Some(&app), &directory, &s3)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -430,19 +418,6 @@ fn open_folder(directory: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
-    fn ledger_with_dest(name: &str) -> (PathBuf, PathBuf) {
-        let root = std::env::temp_dir().join(format!("beandesk-{name}-{}", std::process::id()));
-        let dest = std::env::temp_dir().join(format!("beandesk-{name}-dest-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        let _ = fs::remove_dir_all(&dest);
-        fs::create_dir_all(&root).unwrap();
-        fs::create_dir_all(&dest).unwrap();
-        fs::write(root.join("main.bean"), "option \"title\" \"Ledger\"\n").unwrap();
-        archive::write_key(&root, "hidden").unwrap();
-        (root, dest)
-    }
 
     fn input(secret: &str) -> BackupSettingsInput {
         BackupSettingsInput {
@@ -459,7 +434,6 @@ mod tests {
             endpoint: String::new(),
             path_style_access: true,
             prefix: String::new(),
-            keep: 30,
         }
     }
 
@@ -471,55 +445,5 @@ mod tests {
         assert_eq!(next.s3.secret_access_key, "kept");
         assert_eq!(next.s3.access_key_id, "ak");
         assert!(!next.archive_auto);
-    }
-
-    #[test]
-    fn archive_without_a_destination_stops_before_writing() {
-        let (root, dest) = ledger_with_dest("nodest");
-        let _ = fs::remove_dir_all(&dest);
-        let mut settings = BackupSettings::default();
-        settings.archive_auto = true;
-        assert_eq!(
-            write_and_upload(&root, &settings).err().as_deref(),
-            Some("archive-dest")
-        );
-        settings.archive_local = true;
-        assert_eq!(
-            write_and_upload(&root, &settings).err().as_deref(),
-            Some("archive-dir")
-        );
-        let _ = fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn archive_stops_after_the_key_is_deleted() {
-        let (root, dest) = ledger_with_dest("mod-keygone");
-        let mut settings = BackupSettings::default();
-        settings.archive_local = true;
-        settings.archive_directory = dest.display().to_string();
-        write_and_upload(&root, &settings).unwrap();
-        fs::remove_file(archive::key_path(&root)).unwrap();
-        assert_eq!(
-            write_and_upload(&root, &settings).err().as_deref(),
-            Some("backup-key-missing")
-        );
-        let _ = fs::remove_dir_all(&root);
-        let _ = fs::remove_dir_all(&dest);
-    }
-
-    #[test]
-    fn archive_stops_after_the_dest_folder_is_deleted() {
-        let (root, dest) = ledger_with_dest("destgone");
-        let mut settings = BackupSettings::default();
-        settings.archive_local = true;
-        settings.archive_directory = dest.display().to_string();
-        write_and_upload(&root, &settings).unwrap();
-        fs::remove_dir_all(&dest).unwrap();
-        assert_eq!(
-            write_and_upload(&root, &settings).err().as_deref(),
-            Some("archive-dir")
-        );
-        assert!(!dest.exists());
-        let _ = fs::remove_dir_all(&root);
     }
 }

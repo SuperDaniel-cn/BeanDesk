@@ -1,9 +1,6 @@
 import type { Vars } from '@/i18n/catalog'
 import type { MessageKey } from '@/i18n/locales/en'
 
-export const ARCHIVE_PREFIX = 'beandesk-backup-'
-export const ARCHIVE_SUFFIX = '.tar.gz.enc'
-
 export type BackupSettings = {
   watch: boolean
   debounceSecs: number
@@ -18,18 +15,25 @@ export type BackupSettings = {
   pathStyleAccess: boolean
   prefix: string
   secretConfigured: boolean
-  keep: number
+}
+
+export type BackupSnapshot = {
+  id: string
+  time: string
 }
 
 export type BackupStatus = {
   lastGitAt: string | null
   lastGitHash: string | null
-  lastArchive: string | null
+  lastSnapshot: string | null
+  lastSnapshotAt: string | null
   lastUpload: string | null
   lastError: string | null
   watching: boolean
   hasKey: boolean
+  resticReady: boolean
   archiveDirReady: boolean
+  archiveDirectory: string
 }
 
 export function emptyBackupSettings(): BackupSettings {
@@ -47,7 +51,6 @@ export function emptyBackupSettings(): BackupSettings {
     pathStyleAccess: true,
     prefix: '',
     secretConfigured: false,
-    keep: 30,
   }
 }
 
@@ -55,35 +58,53 @@ export function emptyBackupStatus(): BackupStatus {
   return {
     lastGitAt: null,
     lastGitHash: null,
-    lastArchive: null,
+    lastSnapshot: null,
+    lastSnapshotAt: null,
     lastUpload: null,
     lastError: null,
     watching: false,
     hasKey: false,
+    resticReady: false,
     archiveDirReady: false,
+    archiveDirectory: '',
   }
+}
+
+export function destFolderMissing(
+  settings: BackupSettings,
+  status: Pick<BackupStatus, 'archiveDirReady' | 'archiveDirectory'>,
+): boolean {
+  const dest = settings.archiveDirectory.trim()
+  if (!settings.archiveLocal || !dest) return false
+  if (status.archiveDirectory !== dest) return false
+  return !status.archiveDirReady
 }
 
 export function archiveBlockReason(
   settings: BackupSettings,
-  status: Pick<BackupStatus, 'hasKey' | 'archiveDirReady'>,
-): 'backup-key-missing' | 'archive-dir' | 'archive-dest' | null {
+  status: Pick<BackupStatus, 'hasKey' | 'resticReady' | 'archiveDirReady' | 'archiveDirectory'>,
+):
+  | 'backup-key-missing'
+  | 'missing-restic'
+  | 'archive-dir'
+  | 'archive-dir-gone'
+  | 'archive-dest'
+  | null {
   if (!status.hasKey) return 'backup-key-missing'
-  if (!settings.archiveAuto) return null
-  if (settings.archiveLocal && !status.archiveDirReady) return 'archive-dir'
+  if (!status.resticReady) return 'missing-restic'
   if (!settings.archiveLocal && !settings.s3Enabled) return 'archive-dest'
+  if (settings.archiveLocal) {
+    if (!settings.archiveDirectory.trim()) return 'archive-dir'
+    if (destFolderMissing(settings, status)) return 'archive-dir-gone'
+  }
   return null
 }
 
 export function canWriteArchive(
   settings: BackupSettings,
-  status: Pick<BackupStatus, 'hasKey' | 'archiveDirReady'>,
+  status: Pick<BackupStatus, 'hasKey' | 'resticReady' | 'archiveDirReady' | 'archiveDirectory'>,
 ): boolean {
   return archiveBlockReason(settings, status) === null
-}
-
-export function needsDebounce(settings: BackupSettings): boolean {
-  return settings.watch || settings.archiveAuto
 }
 
 export function archiveNestsLedger(workdir: string, dest: string): boolean {
@@ -92,20 +113,6 @@ export function archiveNestsLedger(workdir: string, dest: string): boolean {
   if (!ledger || !target) return false
   if (target === ledger) return true
   return target.startsWith(`${ledger}/`) || target.startsWith(`${ledger}\\`)
-}
-
-export function defaultArchiveName(now = new Date()): string {
-  const pad = (value: number) => String(value).padStart(2, '0')
-  const stamp = [
-    now.getUTCFullYear(),
-    pad(now.getUTCMonth() + 1),
-    pad(now.getUTCDate()),
-    '_',
-    pad(now.getUTCHours()),
-    pad(now.getUTCMinutes()),
-    pad(now.getUTCSeconds()),
-  ].join('')
-  return `${ARCHIVE_PREFIX}${stamp}${ARCHIVE_SUFFIX}`
 }
 
 /** HTTPS S3 API host. No path, query, user, or fragment. */
@@ -143,13 +150,17 @@ export function explainBackupError(
   if (code === 'directory' || code === 'missing') return t('settings.backupNeedFolder')
   if (code === 'git') return t('settings.backupErrorGit')
   if (code === 'backup-key-missing') return t('settings.backupErrorKey')
+  if (code === 'missing-restic') return t('settings.backupErrorRestic')
   if (code === 'encrypt') return t('settings.backupErrorEncrypt')
   if (code === 'archive-dest') return t('settings.backupErrorArchiveDest')
   if (code === 'archive-dir') return t('settings.backupErrorArchiveDir')
+  if (code === 'archive-dir-gone') return t('settings.backupErrorArchiveDirGone')
   if (code === 'archive-nested') return t('settings.backupErrorArchiveNested')
   if (code === 's3-endpoint') return t('settings.backupErrorS3Endpoint')
   if (code === 's3-config') return t('settings.backupErrorS3Config')
-  if (code === 's3') return t('settings.backupErrorS3')
+  if (code === 's3' || code === 'restic') return t('settings.backupErrorS3')
+  if (code === 'backup-partial') return t('settings.backupErrorPartial')
+  if (code === 'snapshot') return t('settings.backupErrorSnapshot')
   if (code === 'check') return t('settings.backupErrorCheck')
   return code || t('common.errorFallback')
 }

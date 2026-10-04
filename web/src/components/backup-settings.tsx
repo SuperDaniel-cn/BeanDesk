@@ -7,6 +7,13 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Field,
   FieldContent,
   FieldDescription,
@@ -25,12 +32,13 @@ import {
   archiveBlockReason,
   archiveNestsLedger,
   canWriteArchive,
-  defaultArchiveName,
+  destFolderMissing,
   emptyBackupSettings,
   emptyBackupStatus,
   explainBackupError,
   validateS3Endpoint,
   type BackupSettings,
+  type BackupSnapshot,
   type BackupStatus,
 } from '@/lib/backup'
 
@@ -40,12 +48,14 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
   const [status, setStatus] = useState(emptyBackupStatus)
   const [secret, setSecret] = useState('')
   const [passphrase, setPassphrase] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [work, setWork] = useState<'backup' | 'restore' | 'key' | 's3' | null>(null)
+  const busy = work !== null
+  const blocking = work === 'backup' || work === 'restore'
   const settingsRef = useRef(settings)
   const writeLock = useRef(Promise.resolve())
   const ready = Boolean(workDirectory)
   const locked = !ready || busy
-  const destMissing = settings.archiveLocal && !status.archiveDirReady
+  const destMissing = destFolderMissing(settings, status)
   const hasKey = ready && status.hasKey
   const canArchive = ready && !busy && canWriteArchive(settings, status)
   const endpointInvalid = Boolean(settings.endpoint.trim() && !validateS3Endpoint(settings.endpoint))
@@ -94,6 +104,7 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
     settingsRef.current = saved
     setSettings(saved)
     setSecret('')
+    await refreshStatus().catch(() => undefined)
     return saved
   }
 
@@ -126,6 +137,12 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
     setSettings(next)
   }
 
+  async function paint() {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve())
+    })
+  }
+
   async function runBackup() {
     if (!ready) {
       toast.error(t('settings.backupNeedFolder'))
@@ -137,37 +154,24 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
       fail(blocked)
       return
     }
-    setBusy(true)
+    setWork('backup')
+    await paint()
     try {
       await enqueue(async () => {
         await persist(settingsRef.current)
       })
-      if (settingsRef.current.archiveAuto) {
-        const next = await invoke<BackupStatus>('backup_now')
-        setStatus(next)
-      } else {
-        const { save } = await import('@tauri-apps/plugin-dialog')
-        const dest = await save({
-          defaultPath: defaultArchiveName(),
-          filters: [{ name: 'enc', extensions: ['enc'] }],
-        })
-        if (typeof dest !== 'string') return
-        if (archiveNestsLedger(workDirectory, dest)) {
-          throw new Error('archive-nested')
-        }
-        const next = await invoke<BackupStatus>('backup_export', { dest })
-        setStatus(next)
-      }
+      const next = await invoke<BackupStatus>('backup_now')
+      setStatus(next)
       toast.success(t('settings.backupOk'))
     } catch (caught) {
       fail(caught)
     } finally {
-      setBusy(false)
+      setWork(null)
     }
   }
 
   async function saveKey() {
-    setBusy(true)
+    setWork('key')
     try {
       const next = await invoke<BackupStatus>('backup_set_key', { password: passphrase })
       setStatus(next)
@@ -175,7 +179,7 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
     } catch (caught) {
       fail(caught)
     } finally {
-      setBusy(false)
+      setWork(null)
     }
   }
 
@@ -185,22 +189,24 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
       toast.error(t('settings.backupErrorKey'))
       return
     }
+    const snaps = await invoke<BackupSnapshot[]>('backup_snapshots').catch(() => [])
+    const snapshot = snaps.at(-1)?.id
+    if (!snapshot) {
+      fail('snapshot')
+      return
+    }
     const { open } = await import('@tauri-apps/plugin-dialog')
-    const archive = await open({
-      multiple: false,
-      filters: [{ name: 'enc', extensions: ['enc'] }],
-    })
-    if (typeof archive !== 'string') return
     const output = await open({ directory: true, multiple: false })
     if (typeof output !== 'string') return
-    setBusy(true)
+    setWork('restore')
+    await paint()
     try {
-      await invoke('backup_restore', { archive, output })
+      await invoke('backup_restore', { snapshot, output, dest: '' })
       toast.success(t('settings.backupRestoreOk'))
     } catch (caught) {
       fail(caught)
     } finally {
-      setBusy(false)
+      setWork(null)
     }
   }
 
@@ -244,7 +250,7 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
       toast.error(t('settings.backupErrorS3Endpoint'))
       return
     }
-    setBusy(true)
+    setWork('s3')
     try {
       await enqueue(async () => {
         await persist(settingsRef.current)
@@ -254,7 +260,7 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
     } catch (caught) {
       fail(caught)
     } finally {
-      setBusy(false)
+      setWork(null)
     }
   }
 
@@ -264,6 +270,23 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
         event.preventDefault()
       }}
     >
+      <Dialog open={blocking}>
+        <DialogContent
+          showCloseButton={false}
+          onPointerDownOutside={(event) => event.preventDefault()}
+          onEscapeKeyDown={(event) => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {work === 'restore' ? t('settings.backupRestore') : t('settings.backupNow')}
+            </DialogTitle>
+            <DialogDescription>
+              {work === 'restore' ? t('settings.backupRestoreWorking') : t('settings.backupWorking')}
+            </DialogDescription>
+          </DialogHeader>
+          <Spinner />
+        </DialogContent>
+      </Dialog>
       <FieldGroup>
         <Field>
           <FieldLabel htmlFor="backup-workdir">{t('settings.directory')}</FieldLabel>
@@ -309,7 +332,7 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                 onCheckedChange={(watch) => update({ watch })}
               />
             </Field>
-            {settings.watch ? debounceField('backup-debounce') : null}
+            {debounceField('backup-debounce')}
           </FieldGroup>
         </FieldSet>
 
@@ -322,6 +345,16 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
             {status.hasKey ? (
               <Alert>
                 <AlertDescription>{t('settings.backupKeySet')}</AlertDescription>
+              </Alert>
+            ) : null}
+            {ready && !status.resticReady ? (
+              <Alert>
+                <AlertDescription>{t('settings.backupErrorRestic')}</AlertDescription>
+              </Alert>
+            ) : null}
+            {status.lastError ? (
+              <Alert>
+                <AlertDescription>{explainBackupError(status.lastError, t)}</AlertDescription>
               </Alert>
             ) : null}
             <Field data-disabled={locked || undefined}>
@@ -342,6 +375,7 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                   className="shrink-0"
                   onClick={() => void saveKey()}
                 >
+                  {work === 'key' ? <Spinner data-icon="inline-start" /> : null}
                   {t('settings.backupKeySave')}
                 </Button>
                 <Button
@@ -350,7 +384,7 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                   className="shrink-0"
                   onClick={() => void runBackup()}
                 >
-                  {busy ? <Spinner data-icon="inline-start" /> : null}
+                  {work === 'backup' ? <Spinner data-icon="inline-start" /> : null}
                   {t('settings.backupNow')}
                 </Button>
                 <Button
@@ -363,9 +397,10 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                   {t('settings.backupRestore')}
                 </Button>
               </div>
-              {status.lastArchive ? (
+              {status.lastSnapshot ? (
                 <FieldDescription>
-                  {t('settings.backupLastArchive')}: {status.lastArchive}
+                  {t('settings.backupLastSnapshot')}: {status.lastSnapshot}
+                  {status.lastSnapshotAt ? ` · ${status.lastSnapshotAt}` : ''}
                 </FieldDescription>
               ) : null}
             </Field>
@@ -381,165 +416,149 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                 onCheckedChange={(archiveAuto) => update({ archiveAuto })}
               />
             </Field>
-            {settings.archiveAuto && !settings.watch ? debounceField('backup-auto-debounce') : null}
-            {settings.archiveAuto ? (
+            <Field>
+              <FieldLabel>{t('settings.backupKeep')}</FieldLabel>
+              <FieldDescription>{t('settings.backupKeepHint')}</FieldDescription>
+            </Field>
+            <Field orientation="horizontal" data-disabled={locked || undefined}>
+              <FieldLabel htmlFor="backup-local">{t('settings.backupArchiveLocal')}</FieldLabel>
+              <Switch
+                id="backup-local"
+                checked={settings.archiveLocal}
+                disabled={locked}
+                onCheckedChange={(archiveLocal) => update({ archiveLocal })}
+              />
+            </Field>
+            <Field
+              data-disabled={locked || undefined}
+              data-invalid={destNested || destMissing || undefined}
+            >
+              <FieldLabel htmlFor="backup-archive-dir">
+                {t('settings.backupArchiveDirectory')}
+              </FieldLabel>
+              <div className="flex w-full gap-2">
+                <Input
+                  id="backup-archive-dir"
+                  value={settings.archiveDirectory}
+                  readOnly
+                  placeholder={t('settings.browse')}
+                  className="min-w-0 flex-1 font-mono"
+                  aria-invalid={destNested || destMissing || undefined}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={locked}
+                  className="shrink-0"
+                  onClick={() => void pickArchiveDirectory()}
+                >
+                  <FolderOpen data-icon="inline-start" />
+                  {t('settings.browse')}
+                </Button>
+              </div>
+              {destNested ? (
+                <FieldError>{t('settings.backupErrorArchiveNested')}</FieldError>
+              ) : destMissing ? (
+                <FieldError>{t('settings.backupErrorArchiveDirGone')}</FieldError>
+              ) : null}
+            </Field>
+            <Field orientation="horizontal" data-disabled={locked || undefined}>
+              <FieldContent>
+                <FieldLabel htmlFor="backup-cloud">{t('settings.backupArchiveCloud')}</FieldLabel>
+                <FieldDescription>{t('settings.backupS3Hint')}</FieldDescription>
+              </FieldContent>
+              <Switch
+                id="backup-cloud"
+                checked={settings.s3Enabled}
+                disabled={locked}
+                onCheckedChange={(s3Enabled) => update({ s3Enabled })}
+              />
+            </Field>
+            {settings.s3Enabled ? (
               <FieldGroup>
-                <Field data-disabled={locked || undefined}>
-                  <FieldLabel htmlFor="backup-keep">{t('settings.backupKeep')}</FieldLabel>
+                <Field
+                  data-disabled={locked || undefined}
+                  data-invalid={endpointInvalid || undefined}
+                >
+                  <FieldLabel htmlFor="backup-s3-endpoint">
+                    {t('settings.backupS3Endpoint')}
+                  </FieldLabel>
                   <Input
-                    id="backup-keep"
-                    type="number"
-                    min={1}
-                    value={settings.keep}
+                    id="backup-s3-endpoint"
+                    value={settings.endpoint}
                     disabled={locked}
-                    onChange={(event) =>
-                      patchString('keep', Math.max(1, Number(event.target.value) || 1))
-                    }
+                    spellCheck={false}
+                    aria-invalid={endpointInvalid || undefined}
+                    onChange={(event) => patchString('endpoint', event.target.value)}
+                    onBlur={persistCurrent}
+                  />
+                  {endpointInvalid ? (
+                    <FieldError>{t('settings.backupErrorS3Endpoint')}</FieldError>
+                  ) : null}
+                </Field>
+                <TextField
+                  id="backup-s3-bucket"
+                  label={t('settings.backupS3Bucket')}
+                  value={settings.bucketName}
+                  disabled={locked}
+                  onChange={(bucketName) => patchString('bucketName', bucketName)}
+                  onBlur={persistCurrent}
+                />
+                <TextField
+                  id="backup-s3-region"
+                  label={t('settings.backupS3Region')}
+                  value={settings.region}
+                  disabled={locked}
+                  onChange={(region) => patchString('region', region)}
+                  onBlur={persistCurrent}
+                />
+                <TextField
+                  id="backup-s3-access"
+                  label={t('settings.backupS3AccessKey')}
+                  value={settings.accessKeyId}
+                  disabled={locked}
+                  onChange={(accessKeyId) => patchString('accessKeyId', accessKeyId)}
+                  onBlur={persistCurrent}
+                />
+                <Field data-disabled={locked || undefined}>
+                  <FieldLabel htmlFor="backup-s3-secret">{t('settings.backupS3Secret')}</FieldLabel>
+                  <Input
+                    id="backup-s3-secret"
+                    type="password"
+                    value={secret}
+                    placeholder={settings.secretConfigured ? '••••••••' : undefined}
+                    disabled={locked}
+                    onChange={(event) => setSecret(event.target.value)}
                     onBlur={persistCurrent}
                   />
                 </Field>
                 <Field orientation="horizontal" data-disabled={locked || undefined}>
-                  <FieldLabel htmlFor="backup-local">{t('settings.backupArchiveLocal')}</FieldLabel>
+                  <FieldLabel htmlFor="backup-s3-path">{t('settings.backupS3PathStyle')}</FieldLabel>
                   <Switch
-                    id="backup-local"
-                    checked={settings.archiveLocal}
+                    id="backup-s3-path"
+                    checked={settings.pathStyleAccess}
                     disabled={locked}
-                    onCheckedChange={(archiveLocal) => update({ archiveLocal })}
+                    onCheckedChange={(pathStyleAccess) => update({ pathStyleAccess })}
                   />
                 </Field>
-                {settings.archiveLocal ? (
-                  <Field
-                    data-disabled={locked || undefined}
-                    data-invalid={destNested || destMissing || undefined}
-                  >
-                    <FieldLabel htmlFor="backup-archive-dir">
-                      {t('settings.backupArchiveDirectory')}
-                    </FieldLabel>
-                    <div className="flex w-full gap-2">
-                      <Input
-                        id="backup-archive-dir"
-                        value={settings.archiveDirectory}
-                        readOnly
-                        placeholder={t('settings.browse')}
-                        className="min-w-0 flex-1 font-mono"
-                        aria-invalid={destNested || destMissing || undefined}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={locked}
-                        className="shrink-0"
-                        onClick={() => void pickArchiveDirectory()}
-                      >
-                        <FolderOpen data-icon="inline-start" />
-                        {t('settings.browse')}
-                      </Button>
-                    </div>
-                    {destNested ? (
-                      <FieldError>{t('settings.backupErrorArchiveNested')}</FieldError>
-                    ) : destMissing ? (
-                      <FieldError>{t('settings.backupErrorArchiveDir')}</FieldError>
-                    ) : null}
-                  </Field>
-                ) : null}
-                <Field orientation="horizontal" data-disabled={locked || undefined}>
-                  <FieldContent>
-                    <FieldLabel htmlFor="backup-cloud">{t('settings.backupArchiveCloud')}</FieldLabel>
-                    <FieldDescription>{t('settings.backupS3Hint')}</FieldDescription>
-                  </FieldContent>
-                  <Switch
-                    id="backup-cloud"
-                    checked={settings.s3Enabled}
-                    disabled={locked}
-                    onCheckedChange={(s3Enabled) => update({ s3Enabled })}
-                  />
+                <TextField
+                  id="backup-s3-prefix"
+                  label={t('settings.backupS3Prefix')}
+                  value={settings.prefix}
+                  disabled={locked}
+                  onChange={(prefix) => patchString('prefix', prefix)}
+                  onBlur={persistCurrent}
+                />
+                <Field orientation="horizontal">
+                  <Button type="button" variant="outline" disabled={locked} onClick={() => void testS3()}>
+                    {work === 's3' ? <Spinner data-icon="inline-start" /> : null}
+                    {t('settings.backupS3Test')}
+                  </Button>
                 </Field>
-                {settings.s3Enabled ? (
-                  <FieldGroup>
-                    <Field
-                      data-disabled={locked || undefined}
-                      data-invalid={endpointInvalid || undefined}
-                    >
-                      <FieldLabel htmlFor="backup-s3-endpoint">
-                        {t('settings.backupS3Endpoint')}
-                      </FieldLabel>
-                      <Input
-                        id="backup-s3-endpoint"
-                        value={settings.endpoint}
-                        disabled={locked}
-                        spellCheck={false}
-                        aria-invalid={endpointInvalid || undefined}
-                        onChange={(event) => patchString('endpoint', event.target.value)}
-                        onBlur={persistCurrent}
-                      />
-                      {endpointInvalid ? (
-                        <FieldError>{t('settings.backupErrorS3Endpoint')}</FieldError>
-                      ) : null}
-                    </Field>
-                    <TextField
-                      id="backup-s3-bucket"
-                      label={t('settings.backupS3Bucket')}
-                      value={settings.bucketName}
-                      disabled={locked}
-                      onChange={(bucketName) => patchString('bucketName', bucketName)}
-                      onBlur={persistCurrent}
-                    />
-                    <TextField
-                      id="backup-s3-region"
-                      label={t('settings.backupS3Region')}
-                      value={settings.region}
-                      disabled={locked}
-                      onChange={(region) => patchString('region', region)}
-                      onBlur={persistCurrent}
-                    />
-                    <TextField
-                      id="backup-s3-access"
-                      label={t('settings.backupS3AccessKey')}
-                      value={settings.accessKeyId}
-                      disabled={locked}
-                      onChange={(accessKeyId) => patchString('accessKeyId', accessKeyId)}
-                      onBlur={persistCurrent}
-                    />
-                    <Field data-disabled={locked || undefined}>
-                      <FieldLabel htmlFor="backup-s3-secret">{t('settings.backupS3Secret')}</FieldLabel>
-                      <Input
-                        id="backup-s3-secret"
-                        type="password"
-                        value={secret}
-                        placeholder={settings.secretConfigured ? '••••••••' : undefined}
-                        disabled={locked}
-                        onChange={(event) => setSecret(event.target.value)}
-                        onBlur={persistCurrent}
-                      />
-                    </Field>
-                    <Field orientation="horizontal" data-disabled={locked || undefined}>
-                      <FieldLabel htmlFor="backup-s3-path">{t('settings.backupS3PathStyle')}</FieldLabel>
-                      <Switch
-                        id="backup-s3-path"
-                        checked={settings.pathStyleAccess}
-                        disabled={locked}
-                        onCheckedChange={(pathStyleAccess) => update({ pathStyleAccess })}
-                      />
-                    </Field>
-                    <TextField
-                      id="backup-s3-prefix"
-                      label={t('settings.backupS3Prefix')}
-                      value={settings.prefix}
-                      disabled={locked}
-                      onChange={(prefix) => patchString('prefix', prefix)}
-                      onBlur={persistCurrent}
-                    />
-                    <Field orientation="horizontal">
-                      <Button type="button" variant="outline" disabled={locked} onClick={() => void testS3()}>
-                        {t('settings.backupS3Test')}
-                      </Button>
-                    </Field>
-                    {status.lastUpload ? (
-                      <FieldDescription>
-                        {t('settings.backupLastUpload')}: {status.lastUpload}
-                      </FieldDescription>
-                    ) : null}
-                  </FieldGroup>
+                {status.lastUpload ? (
+                  <FieldDescription>
+                    {t('settings.backupLastUpload')}: {status.lastUpload}
+                  </FieldDescription>
                 ) : null}
               </FieldGroup>
             ) : null}

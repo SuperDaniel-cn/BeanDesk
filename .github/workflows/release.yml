@@ -111,6 +111,23 @@ jobs:
       - name: freeze the bundled ledger engine
         run: bash engine/build.sh
 
+      - name: fetch the pinned restic binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="${{ matrix.rust_targets }}"
+          if [[ -z "$target" ]]; then
+            case "${{ runner.os }}-${{ runner.arch }}" in
+              Linux-X64) target=x86_64-unknown-linux-gnu ;;
+              Linux-ARM64) target=aarch64-unknown-linux-gnu ;;
+              Windows-X64) target=x86_64-pc-windows-msvc ;;
+              macOS-ARM64) target=aarch64-apple-darwin ;;
+              macOS-X64) target=x86_64-apple-darwin ;;
+              *) echo "no restic target for ${{ runner.os }} ${{ runner.arch }}" >&2; exit 1 ;;
+            esac
+          fi
+          bash engine/fetch-restic.sh "$target"
+
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

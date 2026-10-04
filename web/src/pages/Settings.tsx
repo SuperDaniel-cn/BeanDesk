@@ -142,7 +142,9 @@ export function Settings() {
           </SidebarGroup>
         </SidebarContent>
       </Sidebar>
-      <div className="min-w-0 flex-1 overflow-auto px-6 py-8">
+      {/* relative: Radix switches in a form add absolute hidden inputs; without a positioned
+          ancestor they hang off the page and stretch the window's scroll height. */}
+      <div className="relative min-w-0 flex-1 overflow-auto px-6 py-8">
         <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
           <LedgerErrors />
           {tab === 'general' ? <GeneralSettings tauri /> : null}

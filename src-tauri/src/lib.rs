@@ -57,9 +57,9 @@ pub fn run() {
             backup::save_backup_settings,
             backup::backup_status,
             backup::backup_now,
-            backup::backup_export,
             backup::backup_set_key,
             backup::backup_restore,
+            backup::backup_snapshots,
             backup::backup_test_s3,
             backup::backup_open_workdir
         ])

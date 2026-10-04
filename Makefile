@@ -1,4 +1,4 @@
-.PHONY: install dev desktop build test engine clean help
+.PHONY: install dev desktop build test engine restic clean help
 
 PORT ?= 5188
 FAVA_URL ?= http://127.0.0.1:5000
@@ -11,6 +11,7 @@ help:
 	@echo "  make build    - Build static production bundle"
 	@echo "  make test     - Lint, typecheck tests, and run frontend and desktop tests"
 	@echo "  make engine   - Freeze the bundled Fava engine directory for this machine"
+	@echo "  make restic   - Fetch the pinned restic binary for this machine"
 	@echo "  make clean    - Remove node_modules and dist artifacts"
 
 install:
@@ -36,5 +37,8 @@ test:
 engine:
 	@bash engine/build.sh
 
+restic:
+	@bash engine/fetch-restic.sh
+
 clean:
-	rm -rf web/node_modules web/dist .engine-venv engine/build engine/dist src-tauri/binaries/engine
+	rm -rf web/node_modules web/dist .engine-venv engine/build engine/dist src-tauri/binaries/engine src-tauri/binaries/restic

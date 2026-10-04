@@ -4,8 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use super::archive::collect_mtimes;
-use super::settings::BackupSettings;
+use super::settings::{BackupSettings, collect_mtimes};
 
 const POLL: Duration = Duration::from_millis(50);
 const SCAN: Duration = Duration::from_millis(1500);
