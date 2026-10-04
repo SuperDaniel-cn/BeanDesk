@@ -2,8 +2,10 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { useQueryClient } from '@tanstack/react-query'
 import { Navigate, useLocation } from 'react-router'
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import { toast } from 'sonner'
 
 import { useI18n } from '@/i18n'
+import { bootCalendarNotices } from '@/lib/calendar'
 import { loadConnection, loadHostSnapshot, loadSuspended, openConnection } from '@/lib/desktop'
 import { favaClient } from '@/lib/fava-client'
 import {
@@ -101,6 +103,14 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
     setState((current) => ({ status: 'setup', file: current.file, connection: null }))
     void queryClient.removeQueries()
   }, [queryClient])
+
+  useEffect(() => {
+    if (!isTauri()) return
+    void bootCalendarNotices({
+      t: (key, vars) => tRef.current(key, vars),
+      toast: (title, extras) => toast(title, extras),
+    }).catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     if (!isTauri()) return

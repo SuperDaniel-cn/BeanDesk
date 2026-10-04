@@ -45,6 +45,7 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_log::Builder::new().skip_logger().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
@@ -64,6 +65,7 @@ pub fn run() {
             stop_saved_fava,
             fava_host,
             init_ledger,
+            read_user_text_file,
             system_locales,
             backup::load_backup_settings,
             backup::save_backup_settings,
@@ -180,6 +182,27 @@ fn init_ledger(directory: String) -> Result<(), String> {
     init_ledger_tree(Path::new(&directory))
 }
 
+/// Read a user-chosen absolute file. Used for a local ICS calendar.
+/// This is not a general write path.
+#[tauri::command]
+fn read_user_text_file(path: String) -> Result<String, String> {
+    read_user_text_file_at(Path::new(&path))
+}
+
+fn read_user_text_file_at(path: &Path) -> Result<String, String> {
+    if !path.is_absolute() {
+        return Err("path".into());
+    }
+    let meta = std::fs::metadata(path).map_err(|_| "file".to_string())?;
+    if !meta.is_file() {
+        return Err("file".into());
+    }
+    if meta.len() > 2 * 1024 * 1024 {
+        return Err("too-large".into());
+    }
+    std::fs::read_to_string(path).map_err(|_| "file".to_string())
+}
+
 /// Preferred languages from the operating system. The webview's
 /// `navigator.language` follows the app bundle, which is English until the
 /// bundle itself is localized.
@@ -192,7 +215,9 @@ fn system_locales() -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{bundled_launch, directory_from_connection, local_project};
+    use super::{
+        bundled_launch, directory_from_connection, local_project, read_user_text_file_at,
+    };
 
     #[test]
     fn reads_the_active_local_project() {
@@ -294,5 +319,24 @@ mod tests {
         let locales = super::system_locales();
         assert!(!locales.is_empty(), "expected at least one OS language");
         assert!(locales.iter().all(|tag| !tag.is_empty()));
+    }
+
+    #[test]
+    fn reads_an_absolute_text_file() {
+        let path = std::env::temp_dir().join(format!("beandesk-cal-{}.ics", std::process::id()));
+        std::fs::write(&path, "BEGIN:VCALENDAR\n").unwrap();
+        let text = read_user_text_file_at(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(text, "BEGIN:VCALENDAR\n");
+    }
+
+    #[test]
+    fn refuses_a_relative_calendar_path() {
+        assert_eq!(
+            read_user_text_file_at(std::path::Path::new("calendar.ics"))
+                .err()
+                .as_deref(),
+            Some("path")
+        );
     }
 }

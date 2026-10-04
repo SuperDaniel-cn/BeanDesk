@@ -32,3 +32,4 @@ tauri-plugin-updater = "2.13.1"
 tauri-plugin-process = "2.4.0"
 url = "2.5.8"
 git2 = { version = "0.21.0", default-features = false }
+tauri-plugin-notification = "2.5.1"

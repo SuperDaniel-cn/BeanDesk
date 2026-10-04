@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-read-user-text-file"
+description = "Enables the read_user_text_file command without any pre-configured scope."
+commands.allow = ["read_user_text_file"]
+
+[[permission]]
+identifier = "deny-read-user-text-file"
+description = "Denies the read_user_text_file command without any pre-configured scope."
+commands.deny = ["read_user_text_file"]

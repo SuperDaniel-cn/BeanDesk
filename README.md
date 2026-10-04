@@ -50,6 +50,7 @@ To stay a shell around Fava:
 - No web ledger editor. Edit `.bean` files in a desktop editor or via the skill.
 - No personal securities or portfolio tracking. Operating books only.
 - No charts. Tables only.
+- No reminder server. The desktop app can subscribe to **one** calendar at a time (bundled statutory dates, a local `.ics`, or a published HTTPS ICS). Notices fire only while the process is open.
 
 ## Features
 
@@ -87,6 +88,17 @@ Provides a dense table view on desktop and card stream on mobile devices. Suppor
 Includes query templates, keyboard execution shortcuts, sortable table output, and CSV export. Numeric columns right-align automatically.
 
 ![BQL Query Console](./docs/images/en/query.png)
+
+### Calendar subscription
+BeanDesk is a subscriber, not a reminder host. Settings → Calendar picks one source:
+
+- **Bundled**: China small-scale taxpayer, quarterly statutory due dates (VAT and surcharges, CIT prepayment, CIT annual settlement). Public dates only — no accounts, amounts, or company names.
+- **Local `.ics`**: your own dates. That file does not leave this computer.
+- **HTTPS ICS**: a published feed. Google Calendar’s secret iCal address or a public `basic.ics`, and Outlook / Microsoft 365 “Publish calendar” links, work. Sign-in pages, CalDAV, and OAuth do not. `webcal://` is stored as `https://`. The desktop HTTP plugin fetches once at launch.
+
+The same public feed is a static file in this repo: [calendars/cn-small-quarterly.ics](calendars/cn-small-quarterly.ics) (for example `https://raw.githubusercontent.com/SuperDaniel-cn/BeanDesk/main/calendars/cn-small-quarterly.ics`). A phone reminder must use that HTTPS address; a local file cannot.
+
+While the desktop app is open, an event due within 7 days shows one toast and one system banner per UID and occurrence date. Closing the app stops notices.
 
 ### Interface Details
 - Mobile slide-out drawer navigation.
@@ -145,7 +157,7 @@ The desktop shell connects directly to Fava via Tauri's native HTTP layer, bypas
 
 ![BeanDesk Desktop Settings & Supervisor](./docs/images/en/settings.png)
 
-The desktop client runs cross-platform on macOS, Windows, and Linux, with built-in update checks and live connection logs.
+The desktop client runs cross-platform on macOS, Windows, and Linux, with built-in update checks and live connection logs. Calendar subscription lives on the Settings Calendar page (desktop only).
 
 ## Deployment and Security Guidelines
 
@@ -166,6 +178,7 @@ The bind order, Caddy reverse proxy, and SPA fallback are documented in [DEPLOY.
 BeanDesk/
 ├── AGENTS.md               # Frontend engineering standards and agent contract
 ├── DEPLOY.md               # Loopback bind, Caddy proxy, and tunnel setup
+├── calendars/              # Public static ICS feeds (not a hosted reminder service)
 ├── docs/
 │   └── images/             # Product screenshots (EN & ZH)
 ├── skills/                 # AI agent skill definitions

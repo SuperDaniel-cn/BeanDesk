@@ -50,6 +50,7 @@ BeanDesk 是壳，围着 **一个** Fava。账本文件在你选的文件夹里�
 - 不做网页账本编辑器。改 `.bean` 用桌面编辑器或技能。
 - 不追踪个人证券或投资组合。只看经营账。
 - 不引入图表。报表用表格。
+- 不做提醒服务器。桌面端同一时间只订阅一份日历（随包装法定日、本机 `.ics`、或已发布的 HTTPS ICS）。关掉应用就不再提醒。
 
 ## 功能特性
 
@@ -87,6 +88,17 @@ BeanDesk 是壳，围着 **一个** Fava。账本文件在你选的文件夹里�
 内置常用查询模板，支持快捷键运行、结果排序与导出 CSV。数值列自动右对齐展示。
 
 ![BQL 查询控制台](./docs/images/zh/query.png)
+
+### 日历订阅
+BeanDesk 是订阅方，不是提醒主机。设置 → 日历只选一份来源：
+
+- **随包装目录**：中国小规模纳税人、按季的法定公开日（增值税及附加、企业所得税预缴、年度汇算清缴）。不含科目、金额或公司名。
+- **本机 `.ics`**：个性化日期放这里。这份文件出不了这台电脑。
+- **HTTPS ICS**：已发布的订阅地址。谷歌日历的「秘密地址（iCal 格式）」或公开日历 `basic.ics`，以及 Outlook / Microsoft 365「发布日历」给出的链接可以接通。登录页、CalDAV、OAuth 接不通。`webcal://` 会保存成 `https://`。桌面用 HTTP 插件，打开时拉一次。
+
+同一份公共订阅也以静态文件放在仓库里：[calendars/cn-small-quarterly.ics](calendars/cn-small-quarterly.ics)（例如 `https://raw.githubusercontent.com/SuperDaniel-cn/BeanDesk/main/calendars/cn-small-quarterly.ics`）。手机提醒必须用这条 HTTPS；本机文件加不进手机。
+
+桌面进程活着时，距到期 7 天内（含当天）的事项按 UID 和发生日各提醒一次（Sonner + 系统横幅）。关掉应用不再提醒。
 
 ### 交互细节
 - 移动端侧边抽屉导航。
@@ -145,7 +157,7 @@ make desktop
 
 ![BeanDesk 桌面设置与进程托管](./docs/images/zh/settings.png)
 
-桌面客户端支持 macOS、Windows 与 Linux 跨平台运行，内置自动更新检测与连接状态监控。推送与 `tauri.conf.json` 版本一致的 `v` 标签后，GitHub Actions 构建 Apple Silicon、Intel、Windows、Linux x64 与 Linux Arm 的安装包，并写入草稿 Release。五个任务都成功后再发布；发布之前，已安装的客户端看不到这次更新。这个版本没有手机端。更新包用仓库里的公钥验签。macOS 安装包是临时签名，没有 Apple 公证证书时，系统打开前仍会要求确认。
+桌面客户端支持 macOS、Windows 与 Linux 跨平台运行，内置自动更新检测与连接状态监控。日历订阅在设置里的日历页（仅桌面）。推送与 `tauri.conf.json` 版本一致的 `v` 标签后，GitHub Actions 构建 Apple Silicon、Intel、Windows、Linux x64 与 Linux Arm 的安装包，并写入草稿 Release。五个任务都成功后再发布；发布之前，已安装的客户端看不到这次更新。这个版本没有手机端。更新包用仓库里的公钥验签。macOS 安装包是临时签名，没有 Apple 公证证书时，系统打开前仍会要求确认。
 
 ## 部署与安全规范
 
@@ -164,6 +176,7 @@ Fava 原生接口支持执行任意 BQL 查询与读取单据凭证，切勿将�
 BeanDesk/
 ├── AGENTS.md               # 前端工程规范与开发契约
 ├── DEPLOY.md               # 本机绑定、Caddy 反代与隧道部署
+├── calendars/              # 公开静态 ICS（不是我们运营的提醒服务）
 ├── docs/
 │   └── images/             # 界面截屏（中英文）
 ├── skills/                 # 智能体技能定义
