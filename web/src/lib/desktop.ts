@@ -94,7 +94,7 @@ export async function openConnection(
       return true
     }
     if (connection.kind !== 'local') {
-      if (state.kind === 'occupied') throw occupiedError(state.server)
+      if (state.kind === 'occupied') throw new Error('occupied')
       await favaClient.ensureSlug()
       return current()
     }
@@ -141,11 +141,6 @@ async function waitForLedger(
   if (!current()) return false
   onStep?.('ready')
   return true
-}
-
-function occupiedError(server: string): Error {
-  const name = server.trim()
-  return new Error(name ? `occupied:${name}` : 'occupied')
 }
 
 function delay(ms: number): Promise<void> {

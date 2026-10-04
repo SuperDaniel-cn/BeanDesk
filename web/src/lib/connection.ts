@@ -43,10 +43,6 @@ export type ConnectionForm = {
 
 const DEFAULT_ORIGIN = 'http://127.0.0.1:5000'
 
-export function defaultOrigin(): string {
-  return DEFAULT_ORIGIN
-}
-
 export function emptyConnectionForm(): ConnectionForm {
   return {
     kind: 'local',
@@ -148,7 +144,8 @@ export function withDrafts(
   }
 }
 
-export function activeConnection(file: ConnectionFile): LedgerConnection | null {
+export function activeConnection(file: ConnectionFile | null | undefined): LedgerConnection | null {
+  if (!file) return null
   if (file.active === 'local' && file.local) return { kind: 'local', ...file.local }
   if (file.active === 'remote' && file.remote) return { kind: 'remote', ...file.remote }
   return null
@@ -182,7 +179,7 @@ export function connectionStepKey(step: ConnectionStep): MessageKey {
     case 'start':
       return 'settings.logStart'
     case 'ready':
-      return 'settings.logReady'
+      return 'settings.hostSessionReady'
   }
 }
 
@@ -199,10 +196,7 @@ export function explainConnectionError(
     return t('settings.startFailed', { detail: code.slice('spawn:'.length).trim() })
   }
   if (code === 'start-exited') return t('settings.startExited')
-  if (code === 'occupied' || code.startsWith('occupied:')) {
-    const server = code.startsWith('occupied:') ? code.slice('occupied:'.length).trim() : ''
-    return t('settings.occupied', { server: server || 'HTTP' })
-  }
+  if (code === 'occupied') return t('settings.hostPortOccupied')
   return code || t('common.errorFallback')
 }
 

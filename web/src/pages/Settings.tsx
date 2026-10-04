@@ -2,14 +2,15 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { useNavigate } from 'react-router'
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { Check, Copy, FolderOpen, Plug } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Copy, FolderOpen, Plug } from 'lucide-react'
 
 import { useAppUpdate } from '@/components/app-update'
-import { useDesktop } from '@/components/desktop-gate'
+import { formatConnectionLog, formatConnectionLogLine, useDesktop } from '@/components/desktop-gate'
 import { LocaleToggle } from '@/components/locale-toggle'
 import { ThemeToggle } from '@/components/theme-toggle'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -29,7 +30,7 @@ import {
   type ConnectionFile,
   type LedgerConnection,
 } from '@/lib/connection'
-import { connectionAction, hostUptime } from '@/lib/host'
+import { connectionAction, hostUptime, type DesktopStatus } from '@/lib/host'
 import {
   disconnectSession,
   favaWasStarted,
@@ -68,27 +69,50 @@ function useShowQuickSetup(enabled: boolean): boolean {
   return show
 }
 
+function GeneralSettings({ tauri }: { tauri: boolean }) {
+  const { t } = useI18n()
+
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex flex-col items-start gap-1.5">
+        <span className="text-xs text-muted-foreground">{t('theme.label')}</span>
+        <ThemeToggle />
+      </div>
+      <div className="flex flex-col items-start gap-1.5">
+        <span className="text-xs text-muted-foreground">{t('locale.switcherLabel')}</span>
+        <LocaleToggle />
+      </div>
+      {tauri ? <UpdateCheck /> : null}
+    </section>
+  )
+}
+
 export function Settings() {
   const { t } = useI18n()
   const desktop = useDesktop()
   const tauri = isTauri()
   const showQuick = useShowQuickSetup(tauri && desktop.status === 'setup')
+  const needsHost = desktop.status !== 'ready'
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-8">
-      {showQuick ? <SetupGuide /> : null}
-      <section className="flex flex-col gap-4">
-        <div className="flex flex-col items-start gap-1.5">
-          <span className="text-xs text-muted-foreground">{t('theme.label')}</span>
-          <ThemeToggle />
-        </div>
-        <div className="flex flex-col items-start gap-1.5">
-          <span className="text-xs text-muted-foreground">{t('locale.switcherLabel')}</span>
-          <LocaleToggle />
-        </div>
-        {tauri ? <UpdateCheck /> : null}
-      </section>
-      {tauri ? <ConnectionSettings /> : null}
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
+      {tauri ? (
+        <Tabs defaultValue={needsHost ? 'connection' : 'general'}>
+          <TabsList variant="line">
+            <TabsTrigger value="general">{t('settings.tabGeneral')}</TabsTrigger>
+            <TabsTrigger value="connection">{t('settings.tabConnection')}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="general">
+            <GeneralSettings tauri />
+          </TabsContent>
+          <TabsContent value="connection" className="flex flex-col gap-4">
+            {showQuick ? <SetupGuide /> : null}
+            <ConnectionSettings />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <GeneralSettings tauri={false} />
+      )}
     </div>
   )
 }
@@ -127,12 +151,12 @@ function SetupGuide() {
           <Button variant="ghost" size="sm" onClick={copyPrompt}>
             {copied ? (
               <>
-                <Check className="size-3 me-1" />
+                <Check data-icon="inline-start" />
                 {t('settings.setupCopiedPrompt')}
               </>
             ) : (
               <>
-                <Copy className="size-3 me-1" />
+                <Copy data-icon="inline-start" />
                 {t('settings.setupCopyPrompt')}
               </>
             )}
@@ -210,9 +234,9 @@ function ConnectionSettings() {
   const [localOrigin, setLocalOrigin] = useState(saved?.local?.origin ?? blank.localOrigin)
   const [remoteOrigin, setRemoteOrigin] = useState(saved?.remote?.origin ?? blank.remoteOrigin)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const logRef = useRef<HTMLPreElement>(null)
+  const [logOpen, setLogOpen] = useState(true)
+  const logRef = useRef<HTMLDivElement>(null)
   const writeLock = useRef(Promise.resolve())
   const connectInFlight = useRef(false)
   const fields = useRef({ directory, command, localOrigin, remoteOrigin, saved, kind })
@@ -278,7 +302,7 @@ function ConnectionSettings() {
         fields.current.saved = next
         desktop.remember(next)
       } catch (caught) {
-        desktop.appendLog(explainConnectionError(caught, t))
+        desktop.appendLog(explainConnectionError(caught, t), 'error')
       }
     })
   }
@@ -298,8 +322,8 @@ function ConnectionSettings() {
   }
 
   function fail(message: string) {
-    setError(message)
-    desktop.appendLog(message)
+    desktop.appendLog(message, 'error')
+    setLogOpen(true)
   }
 
   async function connect() {
@@ -329,7 +353,6 @@ function ConnectionSettings() {
     }
 
     setBusy(true)
-    setError(null)
     connectInFlight.current = true
     try {
       await setSuspended(false)
@@ -360,7 +383,6 @@ function ConnectionSettings() {
 
   async function stop() {
     setBusy(true)
-    setError(null)
     try {
       const outcome = await disconnectSession()
       desktop.release()
@@ -374,7 +396,7 @@ function ConnectionSettings() {
 
   async function copyLog() {
     try {
-      await navigator.clipboard.writeText(desktop.log.join('\n'))
+      await navigator.clipboard.writeText(formatConnectionLog(desktop.log))
       setCopied(true)
     } catch (caught) {
       fail(explainConnectionError(caught, t))
@@ -382,34 +404,42 @@ function ConnectionSettings() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <HostStatusCard />
-      <Tabs
-        value={kind}
-        onValueChange={(value) => {
-          const nextKind = value as Kind
-          setKind(nextKind)
-          void persistDraft(nextKind)
-        }}
-      >
-        <TabsList>
-          <TabsTrigger value="local">{t('settings.local')}</TabsTrigger>
-          <TabsTrigger value="remote">{t('settings.remote')}</TabsTrigger>
-        </TabsList>
-        <p className="text-xs text-muted-foreground">{t('settings.exclusive')}</p>
+    <section className="flex flex-col gap-4">
+      <HostStatus />
 
-        <TabsContent value="local" className="flex flex-col gap-4 pt-2">
-          <label className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs text-muted-foreground">{t('settings.connectionMode')}</span>
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+          <Tabs
+            value={kind}
+            onValueChange={(value) => {
+              const nextKind = value as Kind
+              setKind(nextKind)
+              void persistDraft(nextKind)
+            }}
+          >
+            <TabsList>
+              <TabsTrigger value="local">{t('settings.local')}</TabsTrigger>
+              <TabsTrigger value="remote">{t('settings.remote')}</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <ConnectionButton busy={busy} onConnect={() => void connect()} onStop={() => void stop()} />
+        </div>
+      </div>
+
+      {kind === 'local' ? (
+        <>
+          <label className="flex w-full flex-col items-start gap-1.5">
             <span className="text-xs text-muted-foreground">{t('settings.directory')}</span>
-            <span className="flex gap-2">
-              <Input value={directory} readOnly placeholder={t('settings.browse')} />
-              <Button type="button" variant="outline" onClick={() => void browse()} disabled={busy}>
+            <span className="flex w-full gap-2">
+              <Input value={directory} readOnly placeholder={t('settings.browse')} className="font-mono" />
+              <Button type="button" variant="outline" onClick={() => void browse()} disabled={busy} className="shrink-0">
                 <FolderOpen data-icon="inline-start" />
                 {t('settings.browse')}
               </Button>
             </span>
           </label>
-          <label className="flex flex-col gap-1.5">
+          <label className="flex w-full flex-col items-start gap-1.5">
             <span className="text-xs text-muted-foreground">{t('settings.command')}</span>
             <Textarea
               value={command}
@@ -417,7 +447,8 @@ function ConnectionSettings() {
               onBlur={() => void persistDraft()}
               placeholder={t('settings.commandPlaceholder')}
               spellCheck={false}
-              className="font-mono"
+              rows={2}
+              className="resize-none font-mono"
             />
           </label>
           <OriginField
@@ -426,116 +457,116 @@ function ConnectionSettings() {
             onBlur={() => void persistDraft()}
             label={t('settings.origin')}
           />
-        </TabsContent>
+        </>
+      ) : (
+        <OriginField
+          origin={remoteOrigin}
+          setOrigin={setRemoteOrigin}
+          onBlur={() => void persistDraft()}
+          label={t('settings.origin')}
+        />
+      )}
 
-        <TabsContent value="remote" className="flex flex-col gap-4 pt-2">
-          <OriginField
-            origin={remoteOrigin}
-            setOrigin={setRemoteOrigin}
-            onBlur={() => void persistDraft()}
-            label={t('settings.origin')}
-          />
-        </TabsContent>
-      </Tabs>
-
-      {error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-muted-foreground">{t('settings.log')}</span>
-          <span className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={desktop.clearLog}
-              disabled={desktop.log.length === 0}
-            >
-              {t('settings.clearLog')}
+      <Card>
+        <CardContent className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <Button type="button" variant="ghost" size="xs" onClick={() => setLogOpen(!logOpen)}>
+              {logOpen ? <ChevronUp data-icon="inline-start" /> : <ChevronDown data-icon="inline-start" />}
+              {t('settings.log')}
+              {desktop.log.length > 0 ? <Badge variant="secondary">{desktop.log.length}</Badge> : null}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void copyLog()}
-              disabled={desktop.log.length === 0}
-            >
-              {copied ? t('settings.copied') : t('settings.copyLog')}
-            </Button>
-          </span>
-        </div>
-        <pre
-          ref={logRef}
-          aria-live="polite"
-          className="max-h-40 min-h-24 overflow-auto rounded-lg border bg-muted/40 p-2 font-mono text-xs whitespace-pre-wrap text-foreground"
-        >
-          {desktop.log.length > 0 ? desktop.log.join('\n') : t('settings.logEmpty')}
-        </pre>
-        <p className="text-xs text-muted-foreground">{t('settings.logKept')}</p>
-      </div>
-
-      <ConnectionButton busy={busy} onConnect={() => void connect()} onStop={() => void stop()} />
-    </div>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={desktop.clearLog}
+                disabled={desktop.log.length === 0}
+              >
+                {t('settings.clearLog')}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={() => void copyLog()}
+                disabled={desktop.log.length === 0}
+              >
+                {copied ? t('settings.copied') : t('settings.copyLog')}
+              </Button>
+            </div>
+          </div>
+          {logOpen ? (
+            <div>
+              <div
+                ref={logRef}
+                aria-live="polite"
+                className="max-h-40 overflow-auto font-mono text-[0.8rem] whitespace-pre-wrap"
+              >
+                {desktop.log.length === 0 ? (
+                  <p className="text-muted-foreground">{t('settings.logEmpty')}</p>
+                ) : (
+                  desktop.log.map((line, index) => (
+                    <p
+                      key={`${line.time}:${index}`}
+                      className={line.tone === 'error' ? 'text-destructive' : 'text-foreground'}
+                    >
+                      {formatConnectionLogLine(line)}
+                    </p>
+                  ))
+                )}
+              </div>
+              <p className="pt-2 text-xs text-muted-foreground">{t('settings.logKept')}</p>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+    </section>
   )
 }
 
-function HostStatusCard() {
+function HostStatus() {
   const { t } = useI18n()
   const desktop = useDesktop()
   const { host, status } = desktop
-  const sessionKey =
-    status === 'boot'
-      ? 'settings.hostSessionBoot'
-      : status === 'ready'
-        ? 'settings.hostSessionReady'
-        : 'settings.hostSessionSetup'
-  const portKey =
-    host.probe.kind === 'fava'
-      ? 'settings.hostPortFava'
-      : host.probe.kind === 'closed'
-        ? 'settings.hostPortClosed'
-        : host.probe.kind === 'occupied'
-          ? 'settings.hostPortOccupied'
-          : 'settings.hostPortIdle'
+  const session = sessionLook(status)
   const elapsed =
     host.startedAt == null || host.observedAt == null
       ? null
       : hostUptime(host.startedAt, host.observedAt)
-  const process = host.owned
-    ? t('settings.hostOwned', {
-        pid: host.pid == null ? '—' : String(host.pid),
-        uptime:
-          elapsed == null
-            ? t('settings.hostPortIdle')
-            : elapsed.unit === 'minutes'
-              ? t('settings.hostUptimeMinutes', { count: elapsed.count })
-              : t('settings.hostUptimeSeconds', { count: elapsed.count }),
-      })
-    : host.probe.kind === 'fava'
-      ? t('settings.hostAttached')
-      : t('settings.hostNone')
+  const uptime =
+    elapsed == null
+      ? null
+      : elapsed.unit === 'minutes'
+        ? t('settings.hostUptimeMinutes', { count: elapsed.count })
+        : t('settings.hostUptimeSeconds', { count: elapsed.count })
+
+  let detail: ReactNode = null
+  if (status === 'ready' && host.owned) {
+    detail = uptime ? `${t('settings.hostOwned')} · ${uptime}` : t('settings.hostOwned')
+  } else if (status === 'ready') {
+    detail = t('settings.hostAttached')
+  } else if (status !== 'boot') {
+    if (host.probe.kind === 'occupied') detail = t('settings.hostPortOccupied')
+    else if (host.probe.kind === 'closed') detail = t('settings.hostPortClosed')
+    else if (host.probe.kind === 'fava') detail = t('settings.hostPortReady')
+  }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
-      <HostRow label={t('settings.hostSession')} value={t(sessionKey)} />
-      <HostRow
-        label={t('settings.hostPort')}
-        value={host.origin ? `${host.origin} · ${t(portKey)}` : t(portKey)}
-      />
-      <HostRow label={t('settings.hostProcess')} value={process} />
+    <div className="flex flex-col items-start gap-1.5">
+      <span className="text-xs text-muted-foreground">{t('settings.hostStatus')}</span>
+      <div className="flex flex-wrap items-baseline gap-2">
+        <Badge variant={session.variant}>{t(session.key)}</Badge>
+        {detail ? <span className="text-xs text-muted-foreground">{detail}</span> : null}
+      </div>
     </div>
   )
 }
 
-function HostRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="font-mono text-xs text-foreground">{value}</span>
-    </div>
-  )
+function sessionLook(status: DesktopStatus) {
+  if (status === 'ready') return { key: 'settings.hostSessionReady', variant: 'positive' } as const
+  if (status === 'boot') return { key: 'settings.hostSessionBoot', variant: 'secondary' } as const
+  return { key: 'settings.hostSessionSetup', variant: 'outline' } as const
 }
 
 function ConnectionButton({
@@ -560,7 +591,7 @@ function ConnectionButton({
       : action === 'disconnect'
         ? t('settings.disconnect')
         : action === 'auto'
-          ? t('settings.autoConnecting')
+          ? t('settings.hostSessionBoot')
           : action === 'busy'
             ? t('settings.connecting')
             : t('settings.connect')
@@ -574,7 +605,7 @@ function ConnectionButton({
       disabled={waiting}
       onClick={leave ? onStop : onConnect}
     >
-      {waiting ? <Spinner data-icon="inline-start" /> : <Plug className="size-3.5" data-icon="inline-start" />}
+      {waiting ? <Spinner data-icon="inline-start" /> : <Plug data-icon="inline-start" />}
       {label}
     </Button>
   )
@@ -592,7 +623,7 @@ function OriginField({
   label: string
 }) {
   return (
-    <label className="flex flex-col gap-1.5">
+    <label className="flex w-full flex-col items-start gap-1.5">
       <span className="text-xs text-muted-foreground">{label}</span>
       <Input
         value={origin}
@@ -600,6 +631,7 @@ function OriginField({
         onBlur={onBlur}
         spellCheck={false}
         inputMode="url"
+        className="font-mono"
       />
     </label>
   )

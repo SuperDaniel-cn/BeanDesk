@@ -22,10 +22,26 @@ type DesktopState = {
   connection: LedgerConnection | null
 }
 
+export type ConnectionLogTone = 'info' | 'error'
+
+export type ConnectionLogLine = {
+  time: string
+  message: string
+  tone: ConnectionLogTone
+}
+
+export function formatConnectionLogLine(line: ConnectionLogLine): string {
+  return `${line.time}  ${line.message}`
+}
+
+export function formatConnectionLog(lines: ConnectionLogLine[]): string {
+  return lines.map(formatConnectionLogLine).join('\n')
+}
+
 type DesktopValue = DesktopState & {
   host: HostView
-  log: string[]
-  appendLog: (message: string) => void
+  log: ConnectionLogLine[]
+  appendLog: (message: string, tone?: ConnectionLogTone) => void
   clearLog: () => void
   remember: (file: ConnectionFile) => void
   markConnected: (file: ConnectionFile) => void
@@ -45,7 +61,7 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n()
   const tRef = useRef(t)
   tRef.current = t
-  const [log, setLog] = useState<string[]>([])
+  const [log, setLog] = useState<ConnectionLogLine[]>([])
   const [host, setHost] = useState<HostView>(idleHost)
   const [state, setState] = useState<DesktopState>(() =>
     isTauri()
@@ -57,11 +73,11 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
   stateRef.current = state
   hostRef.current = host
 
-  const appendLog = useCallback((message: string) => {
-    const stamp = new Date().toLocaleTimeString(undefined, { hourCycle: 'h23' })
-    setLog((lines) => [...lines, `${stamp}  ${message}`])
+  const appendLog = useCallback((message: string, tone: ConnectionLogTone = 'info') => {
+    const time = new Date().toLocaleTimeString(undefined, { hourCycle: 'h23' })
+    setLog((lines) => [...lines, { time, message, tone }])
     if (isTauri()) {
-      void invoke('plugin:log|log', { level: 3, message }).catch(() => undefined)
+      void invoke('plugin:log|log', { level: tone === 'error' ? 1 : 3, message }).catch(() => undefined)
     }
   }, [])
 
@@ -89,8 +105,8 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isTauri()) return
     let cancelled = false
-    const say = (message: string) => {
-      if (!cancelled) appendLog(message)
+    const say = (message: string, tone: ConnectionLogTone = 'info') => {
+      if (!cancelled) appendLog(message, tone)
     }
     Promise.all([loadConnection(), loadSuspended()])
       .then(async ([file, suspended]) => {
@@ -111,7 +127,7 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
           setState({ status: 'setup', file, connection: null })
           return
         }
-        say(tRef.current('settings.logBoot'))
+        say(tRef.current('settings.connecting'))
         try {
           const opened = await openConnection(connection, (step) => {
             say(tRef.current(connectionStepKey(step)))
@@ -120,12 +136,12 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
           if (opened) setState({ status: 'ready', file, connection })
           else setState({ status: 'setup', file, connection: null })
         } catch (error) {
-          say(explainConnectionError(error, tRef.current))
+          say(explainConnectionError(error, tRef.current), 'error')
           if (!cancelled) setState({ status: 'setup', file, connection })
         }
       })
       .catch((error: unknown) => {
-        say(explainConnectionError(error, tRef.current))
+        say(explainConnectionError(error, tRef.current), 'error')
         if (!cancelled) setState({ status: 'setup', file: null, connection: null })
       })
     return () => {
@@ -151,7 +167,7 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
       hostRef.current = next
       setHost(next)
       if (sessionLost(previous, next, current.status)) {
-        appendLog(tRef.current('settings.hostDown'))
+        appendLog(tRef.current('settings.hostDown'), 'error')
         release()
       }
     }
