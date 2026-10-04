@@ -120,5 +120,6 @@ describe('explainBackupError', () => {
     expect(explainBackupError('archive-dir-gone', t)).toBe('settings.backupErrorArchiveDirGone')
     expect(explainBackupError('archive-nested', t)).toBe('settings.backupErrorArchiveNested')
     expect(explainBackupError('check', t)).toBe('settings.backupErrorCheck')
+    expect(explainBackupError('check-pending', t)).toBe('settings.backupErrorCheckPending')
   })
 })

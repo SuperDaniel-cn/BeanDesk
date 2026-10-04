@@ -25,6 +25,13 @@ import {
   FieldSet,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Switch } from '@/components/ui/switch'
 import { useI18n } from '@/i18n'
@@ -38,7 +45,7 @@ import {
   explainBackupError,
   validateS3Endpoint,
   type BackupSettings,
-  type BackupSnapshot,
+  type RepoSnapshots,
   type BackupStatus,
 } from '@/lib/backup'
 
@@ -49,6 +56,9 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
   const [secret, setSecret] = useState('')
   const [passphrase, setPassphrase] = useState('')
   const [work, setWork] = useState<'backup' | 'restore' | 'key' | 's3' | null>(null)
+  const [repos, setRepos] = useState<RepoSnapshots[] | null>(null)
+  const [restoreRepo, setRestoreRepo] = useState('')
+  const [restoreSnapshot, setRestoreSnapshot] = useState('')
   const busy = work !== null
   const blocking = work === 'backup' || work === 'restore'
   const settingsRef = useRef(settings)
@@ -189,19 +199,41 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
       toast.error(t('settings.backupErrorKey'))
       return
     }
-    const snaps = await invoke<BackupSnapshot[]>('backup_snapshots').catch(() => [])
-    const snapshot = snaps.at(-1)?.id
-    if (!snapshot) {
+    const listed = await invoke<RepoSnapshots[]>('backup_snapshots').catch(() => [])
+    const usable = listed.filter((repo) => repo.snapshots.length > 0)
+    if (!usable.length) {
+      fail('snapshot')
+      return
+    }
+    const first = usable[0]
+    const newest = first.snapshots[first.snapshots.length - 1]
+    setRepos(usable)
+    setRestoreRepo(first.location)
+    setRestoreSnapshot(newest.id)
+  }
+
+  function chooseRestoreRepo(location: string) {
+    const repo = repos?.find((item) => item.location === location)
+    setRestoreRepo(location)
+    const newest = repo?.snapshots[repo.snapshots.length - 1]
+    setRestoreSnapshot(newest?.id ?? '')
+  }
+
+  async function confirmRestore() {
+    if (!restoreRepo || !restoreSnapshot) {
       fail('snapshot')
       return
     }
     const { open } = await import('@tauri-apps/plugin-dialog')
     const output = await open({ directory: true, multiple: false })
     if (typeof output !== 'string') return
+    const snapshot = restoreSnapshot
+    const dest = restoreRepo
+    setRepos(null)
     setWork('restore')
     await paint()
     try {
-      await invoke('backup_restore', { snapshot, output, dest: '' })
+      await invoke('backup_restore', { snapshot, output, dest })
       toast.success(t('settings.backupRestoreOk'))
     } catch (caught) {
       fail(caught)
@@ -270,6 +302,49 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
         event.preventDefault()
       }}
     >
+      <Dialog open={repos !== null} onOpenChange={(open) => !open && setRepos(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('settings.backupRestorePick')}</DialogTitle>
+            <DialogDescription>{t('settings.backupKeepHint')}</DialogDescription>
+          </DialogHeader>
+          <Field>
+            <FieldLabel>{t('settings.backupRestoreRepo')}</FieldLabel>
+            <Select value={restoreRepo} onValueChange={chooseRestoreRepo}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {repos?.map((repo) => (
+                  <SelectItem key={repo.location} value={repo.location}>
+                    {repo.location}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel>{t('settings.backupRestoreSnapshot')}</FieldLabel>
+            <Select value={restoreSnapshot} onValueChange={setRestoreSnapshot}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {repos
+                  ?.find((repo) => repo.location === restoreRepo)
+                  ?.snapshots.map((snapshot) => (
+                    <SelectItem key={snapshot.id} value={snapshot.id}>
+                      {snapshot.id} · {snapshot.time}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Button type="button" onClick={() => void confirmRestore()}>
+            {t('settings.backupRestoreGo')}
+          </Button>
+        </DialogContent>
+      </Dialog>
       <Dialog open={blocking}>
         <DialogContent
           showCloseButton={false}

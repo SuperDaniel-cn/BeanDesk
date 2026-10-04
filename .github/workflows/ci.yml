@@ -52,5 +52,8 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
+      - name: fetch the pinned restic binary
+        run: bash engine/fetch-restic.sh
+
       - name: test
         run: cargo test --manifest-path src-tauri/Cargo.toml

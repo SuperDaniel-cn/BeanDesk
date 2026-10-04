@@ -15,8 +15,10 @@ use crate::engine::resolve_engine;
 
 pub use settings::{BackupSettings, BackupSettingsView, BackupStatus, S3Settings};
 
-use key::{has_key, write_key};
-use restic::{backup_dests, list_snapshots, restore_snapshot, restic_ready, test_s3};
+use key::has_key;
+use restic::{
+    backup_dests, latest_snapshot, list_repos, rekey_existing, restore_snapshot, restic_ready, test_s3,
+};
 use settings::ArchiveDest;
 use watch::{SharedWatch, Watch};
 
@@ -26,6 +28,14 @@ const BACKUP_KEY: &str = "backup";
 pub struct BackupHost {
     watch: SharedWatch,
     status: Mutex<BackupStatus>,
+    snapshot_cache: Mutex<SnapshotCache>,
+}
+
+#[derive(Clone, Default)]
+struct SnapshotCache {
+    fingerprint: String,
+    id: Option<String>,
+    at: Option<String>,
 }
 
 impl Default for BackupHost {
@@ -33,6 +43,7 @@ impl Default for BackupHost {
         Self {
             watch: Arc::new(Mutex::new(Watch::default())),
             status: Mutex::new(BackupStatus::default()),
+            snapshot_cache: Mutex::new(SnapshotCache::default()),
         }
     }
 }
@@ -77,6 +88,7 @@ impl BackupSettingsInput {
                 path_style_access: self.path_style_access,
                 prefix: self.prefix,
             },
+            pending_checks: previous.pending_checks.clone(),
         }
     }
 }
@@ -186,17 +198,53 @@ fn run_watch_tick(app: &AppHandle, directory: &Path, settings: &BackupSettings) 
 
 fn write_dests(app: &AppHandle, directory: &Path, settings: &BackupSettings) -> Result<(), String> {
     let host = app.state::<BackupHost>();
-    let written = backup_dests(Some(app), directory, settings)?;
+    let outcome = backup_dests(Some(app), directory, settings);
+    if outcome.pending_checks != settings.pending_checks {
+        let mut next = settings.clone();
+        next.pending_checks = outcome.pending_checks;
+        let _ = save_settings(app, &next);
+    }
     set_status(&host, |status| {
-        if let Some(item) = written.first() {
+        if let Some(item) = outcome.written.first() {
             status.last_snapshot = Some(item.id.clone());
             status.last_snapshot_at = Some(stamp());
         }
-        if let Some(item) = written.iter().find(|item| item.cloud) {
+        if let Some(item) = outcome.written.iter().find(|item| item.cloud) {
             status.last_upload = Some(item.location.clone());
         }
     });
+    if let Some(item) = outcome.written.first() {
+        remember_snapshot(app, settings, Some(item.id.clone()), Some(stamp()));
+    } else if outcome.error.is_some()
+        && let Some(host) = app.try_state::<BackupHost>()
+        && let Ok(mut cache) = host.snapshot_cache.lock()
+    {
+        cache.fingerprint.clear();
+    }
+    if let Some(error) = outcome.error {
+        return Err(error);
+    }
     Ok(())
+}
+
+fn remember_snapshot(app: &AppHandle, settings: &BackupSettings, id: Option<String>, at: Option<String>) {
+    let Some(host) = app.try_state::<BackupHost>() else {
+        return;
+    };
+    if let Ok(mut cache) = host.snapshot_cache.lock() {
+        cache.fingerprint = dest_fingerprint(settings);
+        cache.id = id;
+        cache.at = at;
+    }
+}
+
+fn dest_fingerprint(settings: &BackupSettings) -> String {
+    settings
+        .ready_dests()
+        .iter()
+        .map(settings::ArchiveDest::location)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn run_backup(app: &AppHandle, directory: &Path, settings: &BackupSettings) -> Result<BackupStatus, String> {
@@ -239,6 +287,38 @@ fn refresh_live_status(
     status.archive_dir_ready = settings.archive_dir_ready();
     status.archive_directory = settings.archive_directory.trim().to_string();
     status.watching = watching;
+    if let Some((id, at)) = cached_snapshot(app, directory, settings) {
+        status.last_snapshot = id;
+        status.last_snapshot_at = at;
+    }
+}
+
+fn cached_snapshot(
+    app: &AppHandle,
+    directory: &Path,
+    settings: &BackupSettings,
+) -> Option<(Option<String>, Option<String>)> {
+    if !status_can_list(directory, settings, app) {
+        return None;
+    }
+    let fingerprint = dest_fingerprint(settings);
+    let host = app.state::<BackupHost>();
+    if let Ok(cache) = host.snapshot_cache.lock()
+        && cache.fingerprint == fingerprint
+        && !fingerprint.is_empty()
+    {
+        return Some((cache.id.clone(), cache.at.clone()));
+    }
+    drop(host);
+    let latest = latest_snapshot(Some(app), directory, settings);
+    let id = latest.as_ref().map(|item| item.id.clone());
+    let at = latest.as_ref().map(|item| item.time.clone());
+    remember_snapshot(app, settings, id.clone(), at.clone());
+    Some((id, at))
+}
+
+fn status_can_list(directory: &Path, settings: &BackupSettings, app: &AppHandle) -> bool {
+    has_key(directory) && restic_ready(Some(app)) && !settings.ready_dests().is_empty()
 }
 
 pub fn shutdown(app: &AppHandle) {
@@ -306,7 +386,8 @@ pub async fn backup_now(app: AppHandle) -> Result<BackupStatus, String> {
 pub async fn backup_set_key(app: AppHandle, password: String) -> Result<BackupStatus, String> {
     spawn_heavy(move || {
         let directory = crate::saved_workdir(&app)?;
-        write_key(&directory, &password)?;
+        let settings = load_settings(&app);
+        rekey_existing(Some(&app), &directory, &settings, &password)?;
         Ok(current_status(&app, &directory))
     })
     .await
@@ -345,31 +426,23 @@ pub async fn backup_restore(
 }
 
 fn restore_dest(settings: &BackupSettings, dest: &str) -> Result<ArchiveDest, String> {
-    let dests = settings.ready_dests();
-    if dests.is_empty() {
+    let dest = dest.trim();
+    if dest.is_empty() {
         return Err("archive-dest".to_string());
     }
-    if dest.trim().is_empty() {
-        return dests.into_iter().next().ok_or_else(|| "archive-dest".to_string());
-    }
-    dests
+    settings
+        .ready_dests()
         .into_iter()
-        .find(|item| match item {
-            ArchiveDest::Local(path) => path.display().to_string() == dest,
-            ArchiveDest::S3(s3) => settings::s3_repository(s3) == dest,
-        })
+        .find(|item| item.location() == dest)
         .ok_or_else(|| "archive-dest".to_string())
 }
 
 #[tauri::command]
-pub async fn backup_snapshots(app: AppHandle) -> Result<Vec<settings::BackupSnapshot>, String> {
+pub async fn backup_snapshots(app: AppHandle) -> Result<Vec<restic::RepoSnapshots>, String> {
     spawn_heavy(move || {
         let directory = crate::saved_workdir(&app)?;
         let settings = load_settings(&app);
-        let Some(dest) = settings.ready_dests().into_iter().next() else {
-            return Ok(Vec::new());
-        };
-        list_snapshots(Some(&app), &directory, &dest)
+        list_repos(Some(&app), &directory, &settings)
     })
     .await
 }

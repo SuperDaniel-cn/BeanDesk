@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub const SNAPSHOT_PATHS: [&str; 4] = ["main.bean", "config", "data", "documents"];
+/// Git stays on the ledger text. Voucher files belong in the restic repositories.
+pub const GIT_PATHS: [&str; 3] = ["main.bean", "config", "data"];
 pub const KEY_FILE: &str = ".backup_key";
 pub const DEFAULT_DEBOUNCE_SECS: u32 = 5;
 pub const HOST: &str = "beandesk";
@@ -44,6 +46,9 @@ pub struct BackupSettings {
     pub archive_directory: String,
     pub s3_enabled: bool,
     pub s3: S3Settings,
+    /// Repository locations whose last integrity check failed.
+    #[serde(default)]
+    pub pending_checks: Vec<String>,
 }
 
 impl Default for S3Settings {
@@ -70,6 +75,7 @@ impl Default for BackupSettings {
             archive_directory: String::new(),
             s3_enabled: false,
             s3: S3Settings::default(),
+            pending_checks: Vec::new(),
         }
     }
 }
@@ -176,6 +182,19 @@ impl BackupSettings {
 pub enum ArchiveDest {
     Local(PathBuf),
     S3(S3Settings),
+}
+
+impl ArchiveDest {
+    pub fn location(&self) -> String {
+        match self {
+            ArchiveDest::Local(path) => path.display().to_string(),
+            ArchiveDest::S3(s3) => s3_repository(s3),
+        }
+    }
+}
+
+pub fn bucket_lookup(path_style: bool) -> &'static str {
+    if path_style { "path" } else { "dns" }
 }
 
 /// HTTPS API host only. No path, query, user, or fragment.
@@ -330,6 +349,9 @@ mod tests {
             SNAPSHOT_PATHS,
             ["main.bean", "config", "data", "documents"]
         );
+        assert_eq!(GIT_PATHS, ["main.bean", "config", "data"]);
+        assert_eq!(bucket_lookup(true), "path");
+        assert_eq!(bucket_lookup(false), "dns");
         assert_eq!(
             require_ledger(Path::new("relative")).err().as_deref(),
             Some("directory")

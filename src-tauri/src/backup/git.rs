@@ -4,7 +4,7 @@ use git2::{Index, IndexAddOption, Oid, Repository, Signature};
 
 use crate::ledger_init::ensure_backup_gitignore;
 
-use super::settings::{SNAPSHOT_PATHS, require_ledger};
+use super::settings::{GIT_PATHS, require_ledger};
 
 pub fn snapshot(directory: &Path) -> Result<Option<String>, String> {
     require_ledger(directory)?;
@@ -29,7 +29,7 @@ pub fn snapshot(directory: &Path) -> Result<Option<String>, String> {
 }
 
 fn stage_snapshot(index: &mut Index, directory: &Path) -> Result<(), String> {
-    for rel in SNAPSHOT_PATHS {
+    for rel in GIT_PATHS {
         let abs = directory.join(rel);
         if abs.is_file() {
             index
@@ -131,6 +131,8 @@ mod tests {
         assert!(root.join(".gitignore").is_file());
         assert_eq!(snapshot(&root).unwrap(), None);
         fs::write(root.join("documents/note.txt"), "keep").unwrap();
+        assert_eq!(snapshot(&root).unwrap(), None);
+        fs::write(root.join("data/2026-10.bean"), "2026-10-01 * \"rent\"\n").unwrap();
         assert!(snapshot(&root).unwrap().is_some());
         let _ = fs::remove_dir_all(&root);
     }

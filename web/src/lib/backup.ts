@@ -22,6 +22,11 @@ export type BackupSnapshot = {
   time: string
 }
 
+export type RepoSnapshots = {
+  location: string
+  snapshots: BackupSnapshot[]
+}
+
 export type BackupStatus = {
   lastGitAt: string | null
   lastGitHash: string | null
@@ -162,5 +167,6 @@ export function explainBackupError(
   if (code === 'backup-partial') return t('settings.backupErrorPartial')
   if (code === 'snapshot') return t('settings.backupErrorSnapshot')
   if (code === 'check') return t('settings.backupErrorCheck')
+  if (code === 'check-pending') return t('settings.backupErrorCheckPending')
   return code || t('common.errorFallback')
 }

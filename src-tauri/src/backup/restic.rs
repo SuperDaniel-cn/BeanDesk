@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager};
 
@@ -9,7 +9,8 @@ use super::key::{has_key, key_path};
 use super::settings::{
     ArchiveDest, BackupSettings, BackupSnapshot, CHECK_GROUPS, HOST, KEEP_WITHIN,
     KEEP_WITHIN_DAILY, KEEP_WITHIN_MONTHLY, KEEP_WITHIN_WEEKLY, SNAPSHOT_PATHS, S3Settings,
-    reject_archive_inside_ledger, require_ledger, s3_repository, validate_archive_directory,
+    bucket_lookup, reject_archive_inside_ledger, require_ledger, s3_repository,
+    validate_archive_directory,
 };
 
 #[derive(Clone, Debug)]
@@ -56,6 +57,20 @@ struct Repo {
     password_file: PathBuf,
     cache: PathBuf,
     env: Vec<(String, String)>,
+    options: Vec<String>,
+}
+
+pub struct BackupOutcome {
+    pub written: Vec<SnapshotWrite>,
+    pub pending_checks: Vec<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoSnapshots {
+    pub location: String,
+    pub snapshots: Vec<BackupSnapshot>,
 }
 
 impl Repo {
@@ -72,6 +87,7 @@ impl Repo {
             password_file: key_path(directory),
             cache: dest.join(".restic-cache"),
             env: Vec::new(),
+            options: Vec::new(),
         })
     }
 
@@ -92,6 +108,10 @@ impl Repo {
                 ("AWS_SECRET_ACCESS_KEY".into(), s3.secret_access_key.clone()),
                 ("AWS_DEFAULT_REGION".into(), s3.region.clone()),
             ],
+            options: vec![
+                "-o".to_string(),
+                format!("s3.bucket-lookup={}", bucket_lookup(s3.path_style_access)),
+            ],
         })
     }
 
@@ -103,12 +123,19 @@ impl Repo {
     }
 
     fn command(&self) -> Command {
+        self.command_unlocked(&self.password_file)
+    }
+
+    fn command_unlocked(&self, password_file: &Path) -> Command {
         let mut command = Command::new(&self.binary);
+        for option in &self.options {
+            command.arg(option);
+        }
         command
             .arg("-r")
             .arg(&self.location)
             .arg("--password-file")
-            .arg(&self.password_file)
+            .arg(password_file)
             .arg("--cache-dir")
             .arg(&self.cache)
             .env("RESTIC_PROGRESS_FPS", "0")
@@ -117,6 +144,20 @@ impl Repo {
             command.env(key, value);
         }
         command
+    }
+
+    fn passwd(&self, current: &Path, next: &Path) -> Result<(), String> {
+        let output = self
+            .command_unlocked(current)
+            .args(["key", "passwd", "--new-password-file"])
+            .arg(next)
+            .output()
+            .map_err(|_| "missing-restic".to_string())?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(map_restic(&output))
+        }
     }
 
     fn run(&self, args: &[&str]) -> Result<Output, String> {
@@ -151,28 +192,59 @@ pub fn backup_dests(
     app: Option<&AppHandle>,
     directory: &Path,
     settings: &BackupSettings,
-) -> Result<Vec<SnapshotWrite>, String> {
+) -> BackupOutcome {
     let dests = settings.ready_dests();
     if dests.is_empty() {
-        return Err("archive-dest".to_string());
+        return BackupOutcome {
+            written: Vec::new(),
+            pending_checks: settings.pending_checks.clone(),
+            error: Some("archive-dest".to_string()),
+        };
     }
-    let binary = resolve_restic(app)?;
+    let binary = match resolve_restic(app) {
+        Ok(binary) => binary,
+        Err(error) => {
+            return BackupOutcome {
+                written: Vec::new(),
+                pending_checks: settings.pending_checks.clone(),
+                error: Some(error),
+            };
+        }
+    };
     let mut written = Vec::new();
+    let mut pending_checks = settings.pending_checks.clone();
     let mut last_error = None;
     for dest in dests {
-        match backup_one(&binary, directory, &dest) {
-            Ok(Some(item)) => written.push(item),
-            Ok(None) => {}
-            Err(error) => last_error = Some(error),
+        let location = dest.location();
+        let pending = pending_checks.iter().any(|item| item == &location);
+        match backup_one(&binary, directory, &dest, pending) {
+            Ok(item) => {
+                pending_checks.retain(|saved| saved != &location);
+                if let Some(item) = item {
+                    written.push(item);
+                }
+            }
+            Err(error) => {
+                if error == "check-pending" && !pending_checks.iter().any(|saved| saved == &location) {
+                    pending_checks.push(location);
+                }
+                last_error = Some(error);
+            }
         }
     }
-    if let Some(error) = last_error {
-        return Err(error);
+    BackupOutcome {
+        written,
+        pending_checks,
+        error: last_error,
     }
-    Ok(written)
 }
 
-fn backup_one(binary: &Path, directory: &Path, dest: &ArchiveDest) -> Result<Option<SnapshotWrite>, String> {
+fn backup_one(
+    binary: &Path,
+    directory: &Path,
+    dest: &ArchiveDest,
+    pending: bool,
+) -> Result<Option<SnapshotWrite>, String> {
     let repo = Repo::from_dest(binary.to_path_buf(), directory, dest)?;
     repo.ensure()?;
     let mut args = vec![
@@ -198,23 +270,25 @@ fn backup_one(binary: &Path, directory: &Path, dest: &ArchiveDest) -> Result<Opt
         .args(&arg_refs)
         .output()
         .map_err(|_| "missing-restic".to_string())?;
-    match output.status.code() {
-        Some(0) => {
-            let id = backup_snapshot_id(&output.stdout);
-            if id.is_empty() {
-                return Ok(None);
-            }
-            forget(&repo)?;
-            check_subset(&repo)?;
-            Ok(Some(SnapshotWrite {
-                id,
-                location: repo.location.clone(),
-                cloud: matches!(dest, ArchiveDest::S3(_)),
-            }))
-        }
-        Some(3) => Err("backup-partial".to_string()),
-        _ => Err(map_restic(&output)),
+    let wrote = match output.status.code() {
+        Some(0) => !backup_snapshot_id(&output.stdout).is_empty(),
+        Some(3) => return Err("backup-partial".to_string()),
+        _ => return Err(map_restic(&output)),
+    };
+    if wrote {
+        forget(&repo)?;
     }
+    if wrote || pending {
+        check_subset(&repo)?;
+    }
+    if !wrote {
+        return Ok(None);
+    }
+    Ok(Some(SnapshotWrite {
+        id: backup_snapshot_id(&output.stdout),
+        location: repo.location.clone(),
+        cloud: matches!(dest, ArchiveDest::S3(_)),
+    }))
 }
 
 fn forget(repo: &Repo) -> Result<(), String> {
@@ -247,7 +321,7 @@ fn check_subset(repo: &Repo) -> Result<(), String> {
     if output.status.success() {
         Ok(())
     } else {
-        Err(map_restic(&output))
+        Err("check-pending".to_string())
     }
 }
 
@@ -263,6 +337,123 @@ pub fn list_snapshots(
         Some(10) => Ok(Vec::new()),
         _ => Err(map_restic(&output)),
     }
+}
+
+pub fn list_repos(
+    app: Option<&AppHandle>,
+    directory: &Path,
+    settings: &BackupSettings,
+) -> Result<Vec<RepoSnapshots>, String> {
+    let dests = settings.ready_dests();
+    if dests.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut listed = Vec::new();
+    let mut last_error = None;
+    for dest in dests {
+        match list_snapshots(app, directory, &dest) {
+            Ok(snapshots) => listed.push(RepoSnapshots {
+                location: dest.location(),
+                snapshots,
+            }),
+            Err(error) => last_error = Some(error),
+        }
+    }
+    if listed.is_empty() {
+        return Err(last_error.unwrap_or_else(|| "archive-dest".to_string()));
+    }
+    Ok(listed)
+}
+
+pub fn latest_snapshot(
+    app: Option<&AppHandle>,
+    directory: &Path,
+    settings: &BackupSettings,
+) -> Option<BackupSnapshot> {
+    let mut best: Option<BackupSnapshot> = None;
+    let Ok(repos) = list_repos(app, directory, settings) else {
+        return None;
+    };
+    for repo in repos {
+        if let Some(item) = repo.snapshots.last() {
+            let newer = best.as_ref().is_none_or(|current| item.time > current.time);
+            if newer {
+                best = Some(item.clone());
+            }
+        }
+    }
+    best
+}
+
+/// Rewrites the key of every repository that already exists. A repository that
+/// does not exist yet stays uninitialized and picks up the new passphrase on the next backup.
+pub fn rekey_existing(
+    app: Option<&AppHandle>,
+    directory: &Path,
+    settings: &BackupSettings,
+    new_password: &str,
+) -> Result<(), String> {
+    let new_password = new_password.trim();
+    if new_password.is_empty() {
+        return Err("backup-key-missing".to_string());
+    }
+    let old = super::key::read_key(directory).ok();
+    if old.as_deref() == Some(new_password) || settings.ready_dests().is_empty() || old.is_none() {
+        return super::key::write_key(directory, new_password);
+    }
+    let binary = resolve_restic(app)?;
+    let next = write_secret_file(new_password)?;
+    let mut changed: Vec<ArchiveDest> = Vec::new();
+    let result = (|| {
+        for dest in settings.ready_dests() {
+            let repo = Repo::from_dest(binary.clone(), directory, &dest)?;
+            let output = repo.run(&["cat", "config"])?;
+            match output.status.code() {
+                Some(0) => {
+                    repo.passwd(&repo.password_file, &next)?;
+                    changed.push(dest);
+                }
+                Some(10) => {}
+                _ => return Err(map_restic(&output)),
+            }
+        }
+        super::key::write_key(directory, new_password)
+    })();
+    if result.is_err() {
+        let old_path = super::key::key_path(directory);
+        for dest in &changed {
+            if let Ok(repo) = Repo::from_dest(binary.clone(), directory, dest) {
+                let _ = repo.passwd(&next, &old_path);
+            }
+        }
+    }
+    let _ = std::fs::remove_file(&next);
+    result
+}
+
+fn write_secret_file(password: &str) -> Result<PathBuf, String> {
+    let path = std::env::temp_dir().join(format!(
+        "beandesk-newkey-{}-{}",
+        std::process::id(),
+        unix_days()
+    ));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&path)
+        .map_err(|error| error.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|error| error.to_string())?;
+    }
+    use std::io::Write;
+    file.write_all(password.as_bytes())
+        .and_then(|_| file.write_all(b"\n"))
+        .map_err(|error| error.to_string())?;
+    Ok(path)
 }
 
 pub fn restore_snapshot(
@@ -418,11 +609,14 @@ mod tests {
             archive_directory: dest.display().to_string(),
             ..BackupSettings::default()
         };
-        let written = backup_dests(None, &root, &settings).unwrap();
-        assert_eq!(written.len(), 1);
-        assert!(!written[0].id.is_empty());
+        let written = backup_dests(None, &root, &settings);
+        assert!(written.error.is_none(), "{}", written.error.unwrap_or_default());
+        assert_eq!(written.written.len(), 1);
+        assert!(!written.written[0].id.is_empty());
         assert!(dest.join("config").is_file());
-        assert!(backup_dests(None, &root, &settings).unwrap().is_empty());
+        let again = backup_dests(None, &root, &settings);
+        assert!(again.error.is_none());
+        assert!(again.written.is_empty());
         let snaps = list_snapshots(None, &root, &ArchiveDest::Local(dest.clone())).unwrap();
         assert!(!snaps.is_empty());
         let out = root.join("restored");
@@ -448,7 +642,7 @@ mod tests {
             ..BackupSettings::default()
         };
         assert_eq!(
-            backup_dests(None, &root, &settings).err().as_deref(),
+            backup_dests(None, &root, &settings).error.as_deref(),
             Some("backup-key-missing")
         );
         let _ = fs::remove_dir_all(&root);
@@ -467,7 +661,7 @@ mod tests {
             ..BackupSettings::default()
         };
         assert_eq!(
-            backup_dests(None, &root, &settings).err().as_deref(),
+            backup_dests(None, &root, &settings).error.as_deref(),
             Some("archive-nested")
         );
         let _ = fs::remove_dir_all(&root);
@@ -479,9 +673,29 @@ mod tests {
         let (root, dest) = scratch("nodest");
         let settings = BackupSettings::default();
         assert_eq!(
-            backup_dests(None, &root, &settings).err().as_deref(),
+            backup_dests(None, &root, &settings).error.as_deref(),
             Some("archive-dest")
         );
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    fn a_new_passphrase_replaces_the_repository_key() {
+        if !have_restic() {
+            return;
+        }
+        let (root, dest) = scratch("rekey");
+        let settings = BackupSettings {
+            archive_local: true,
+            archive_directory: dest.display().to_string(),
+            ..BackupSettings::default()
+        };
+        assert!(backup_dests(None, &root, &settings).error.is_none());
+        rekey_existing(None, &root, &settings, "other-pass").unwrap();
+        assert_eq!(crate::backup::key::read_key(&root).unwrap(), "other-pass");
+        let snaps = list_snapshots(None, &root, &ArchiveDest::Local(dest.clone())).unwrap();
+        assert!(!snaps.is_empty());
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&dest);
     }
