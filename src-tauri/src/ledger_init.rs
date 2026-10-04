@@ -46,7 +46,33 @@ pub fn init_ledger_tree(directory: &Path) -> Result<(), String> {
     write_new(directory.join("config/accounts.bean"), SAMPLE_ACCOUNTS)?;
     write_new(year_dir.join(format!("{year}.bean")), &year_index)?;
     write_new(year_dir.join(&month_file), "")?;
+    write_new(directory.join(".gitignore"), BACKUP_GITIGNORE)?;
     Ok(())
+}
+
+pub const BACKUP_GITIGNORE: &str = "\
+.backup_key
+.env
+backups/
+.DS_Store
+";
+
+pub fn ensure_backup_gitignore(directory: &Path) -> Result<(), String> {
+    let path = directory.join(".gitignore");
+    if path.is_file() {
+        let current = fs::read_to_string(&path).map_err(|error| error.to_string())?;
+        if current.contains(".backup_key") && current.contains("backups/") {
+            return Ok(());
+        }
+        let mut next = current;
+        if !next.ends_with('\n') && !next.is_empty() {
+            next.push('\n');
+        }
+        next.push_str(BACKUP_GITIGNORE);
+        fs::write(&path, next).map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+    write_new(path, BACKUP_GITIGNORE)
 }
 
 fn effectively_empty(directory: &Path) -> Result<bool, String> {
@@ -85,6 +111,8 @@ mod tests {
         assert!(root.join("documents").is_dir());
         let main = fs::read_to_string(root.join("main.bean")).unwrap();
         assert!(main.contains("option \"documents\" \"documents\""));
+        let ignore = fs::read_to_string(root.join(".gitignore")).unwrap();
+        assert!(ignore.contains(".backup_key"));
         assert_eq!(init_ledger_tree(&root).err().as_deref(), Some("ledger-exists"));
         let _ = fs::remove_dir_all(&root);
     }

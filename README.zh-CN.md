@@ -8,7 +8,7 @@ Beancount 与 Fava 的现代财务工作台，基于 React 19、TypeScript、Tai
 
 [![Release](https://img.shields.io/github/v/release/SuperDaniel-cn/BeanDesk?color=blue)](https://github.com/SuperDaniel-cn/BeanDesk/releases)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-[![赞助](https://img.shields.io/badge/Sponsor-加密货币赞助-ea4aaa?logo=githubsponsors&logoColor=white)](#赞助支持)
+[![赞助](https://img.shields.io/badge/Sponsor-Payoneer%20%7C%20加密货币-ea4aaa?logo=githubsponsors&logoColor=white)](#赞助支持)
 
 ![BeanDesk 界面预览](./docs/images/zh/trial-balance.png)
 
@@ -38,13 +38,13 @@ BeanDesk 是壳，围着 **一个** Fava。账本文件在你选的文件夹里�
 
 - 第一阶段：通用财务工作台。完整支持资产负债表、利润表、现金流量表三大法定报表，提供借贷并排呈现的试算平衡表、全局时间切片与原生 BQL 查询控制台。
 - 第二阶段：一人公司财务合规模块。增加法人借款与股东往来监控，防范公私财产混同与连带清偿责任；提供增值税与企业所得税预提测算、合同发票与银行回单三流一致校验、交付证据链归档。
-- 第三阶段：开箱即用的桌面客户端：安装包带冻结引擎，可写下第一本账骨架，仍然只拉一个 Fava。备份是用户自己复制这个文件夹。
+- 第三阶段：开箱即用的桌面客户端：安装包带冻结引擎，可写下第一本账骨架，仍然只拉一个 Fava。备份是工作目录的本地 Git 快照，外加用户可选的加密包，以及用户自己的 S3 兼容桶。
 
 ## 功能边界与非目标
 
 我们只做 Fava 外面的壳：
 
-- 不做账本云、用户账号、备份上传。工作目录就是用户的文件。
+- 不做账本云和用户账号。工作目录就是用户的文件。备份不用 BeanDesk 的桶：本地 Git、可选加密包、用户用自己的 S3 密钥上传密文。
 - 不做应用级换仓库。多本账是同一个 Fava 上的多个根文件和 slug。
 - 不自建会计引擎，不内置生 Python。报表问 Fava。用户填写的启动命令原样执行。
 - 不做网页账本编辑器。改 `.bean` 用桌面编辑器或技能。
@@ -197,6 +197,7 @@ bun run build
 
 BeanDesk 完全开源且免费。如果它为你节省了时间，欢迎赞助支持项目的持续维护与更新：
 
+- **Payoneer (信用卡 / 借记卡 / 外币)**：[通过 Payoneer 赞助](https://link.payoneer.com/Token?t=D6ADDF769F5F4EE7B8F8F188A32AE50C&src=pl)
 - **USDC (Solana 链)**：`CiZxojzWpKwXqxqbQQ8gN6Qb4pdGSuKzYA9MbX8ukFKK`
 - **USDC (Base / Arbitrum / 以太坊)**：`0x43ad55b5fe79d1d8afee3425a6011cfb9a512927`
 

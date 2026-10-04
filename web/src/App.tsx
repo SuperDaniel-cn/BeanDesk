@@ -5,6 +5,7 @@ import { AppShell } from '@/components/app-shell'
 import { AppUpdate } from '@/components/app-update'
 import { DesktopGuard, DesktopProvider } from '@/components/desktop-gate'
 import { KeptReports } from '@/components/kept-reports'
+import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ThemeProvider } from '@/components/theme-provider'
 import { I18nProvider } from '@/i18n'
@@ -40,6 +41,7 @@ export default function App() {
                     </DesktopGuard>
                   </AppShell>
                 </BrowserRouter>
+                <Toaster position="bottom-right" />
               </DesktopProvider>
             </TooltipProvider>
           </TimeFilterProvider>

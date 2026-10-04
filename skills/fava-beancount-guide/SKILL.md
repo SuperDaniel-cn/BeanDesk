@@ -55,6 +55,7 @@ description: 引导用户在其指定的工作目录自建 Beancount 账本，�
 ```
 <用户指定的账本目录>/
 ├── main.bean
+├── .gitignore
 ├── config/
 │   └── accounts.bean
 ├── data/

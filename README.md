@@ -8,7 +8,7 @@ The architecture is analogous to MetaCubeXD for Clash or AriaNg for Aria2: Fava 
 
 [![Release](https://img.shields.io/github/v/release/SuperDaniel-cn/BeanDesk?color=blue)](https://github.com/SuperDaniel-cn/BeanDesk/releases)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-[![Sponsor](https://img.shields.io/badge/Sponsor-Crypto%20USDC-ea4aaa?logo=githubsponsors&logoColor=white)](#sponsorship)
+[![Sponsor](https://img.shields.io/badge/Sponsor-Payoneer%20%2F%20Crypto-ea4aaa?logo=githubsponsors&logoColor=white)](#sponsorship)
 
 ![BeanDesk Trial Balance Preview](./docs/images/en/trial-balance.png)
 
@@ -38,13 +38,13 @@ Roadmap:
 
 - Phase 1: Universal financial workbench. Complete three statutory statements: Balance Sheet, Income Statement, and direct-method Cash Flow Statement, alongside a side-by-side Trial Balance, global time filtering, and a native BQL console.
 - Phase 2: One-person company compliance module. Shareholder loan and advance monitoring to prevent asset commingling and personal liability; tax provision estimates; three-way match checks between contracts, invoices, and bank statements; commercial delivery evidence archive.
-- Phase 3: Out-of-the-box desktop client: bundled engine sidecar, first-ledger skeleton, still one Fava. Backup stays the user's copy of that folder.
+- Phase 3: Out-of-the-box desktop client: bundled engine sidecar, first-ledger skeleton, still one Fava. Backup is a local Git snapshot of the work folder, plus an optional encrypted copy the user can send to their own S3-compatible bucket.
 
 ## Feature Boundaries and Non-Goals
 
 To stay a shell around Fava:
 
-- No cloud ledger, no user accounts, no backup upload. The work directory is the user's files.
+- No cloud ledger and no user accounts. The work directory is the user's files. Backup does not use a BeanDesk bucket: local Git, optional encrypted archives, optional upload the user signs with their own S3 keys.
 - No app-level vault switcher. Several books are several Fava root files and slugs on **one** service.
 - No built-in accounting engine and no raw Python runtime. Reports ask Fava. A custom start command is not rewritten.
 - No web ledger editor. Edit `.bean` files in a desktop editor or via the skill.
@@ -199,6 +199,7 @@ bun run build
 
 BeanDesk is free and open-source. If it saves your time, consider supporting its development:
 
+- **Payoneer**: [Support via Payoneer](https://link.payoneer.com/Token?t=D6ADDF769F5F4EE7B8F8F188A32AE50C&src=pl)
 - **USDC (Solana)**: `CiZxojzWpKwXqxqbQQ8gN6Qb4pdGSuKzYA9MbX8ukFKK`
 - **USDC (Base / Arbitrum / Ethereum)**: `0x43ad55b5fe79d1d8afee3425a6011cfb9a512927`
 

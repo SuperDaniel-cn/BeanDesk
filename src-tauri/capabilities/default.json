@@ -15,6 +15,15 @@
     "allow-fava-host",
     "allow-init-ledger",
     "allow-system-locales",
+    "allow-load-backup-settings",
+    "allow-save-backup-settings",
+    "allow-backup-status",
+    "allow-backup-now",
+    "allow-backup-export",
+    "allow-backup-set-key",
+    "allow-backup-restore",
+    "allow-backup-test-s3",
+    "allow-backup-open-workdir",
     {
       "identifier": "http:default",
       "allow": [

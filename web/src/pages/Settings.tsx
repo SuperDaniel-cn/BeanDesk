@@ -1,16 +1,39 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { ChevronDown, ChevronUp, FilePlus2, FolderOpen, Plug } from 'lucide-react'
+import {
+  Archive,
+  ChevronDown,
+  ChevronUp,
+  FilePlus2,
+  FolderOpen,
+  Plug,
+  Settings as SettingsIcon,
+  Terminal,
+} from 'lucide-react'
 
 import { useAppUpdate } from '@/components/app-update'
+import { BackupSettingsPanel } from '@/components/backup-settings'
 import { formatConnectionLog, formatConnectionLogLine, useDesktop } from '@/components/desktop-gate'
+import { LedgerErrors } from '@/components/ledger-errors'
 import { LocaleToggle } from '@/components/locale-toggle'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from '@/components/ui/sidebar'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
@@ -43,8 +66,8 @@ import {
 } from '@/lib/desktop'
 
 type Kind = LedgerConnection['kind']
-type SettingsTab = 'general' | 'simple' | 'geek'
-type ConnectionVariant = Exclude<SettingsTab, 'general'>
+type SettingsTab = 'general' | 'simple' | 'geek' | 'backup'
+type ConnectionVariant = 'simple' | 'geek'
 
 function GeneralSettings({ tauri }: { tauri: boolean }) {
   const { t } = useI18n()
@@ -55,11 +78,17 @@ function GeneralSettings({ tauri }: { tauri: boolean }) {
         <span className="text-xs text-muted-foreground">{t('theme.label')}</span>
         <ThemeToggle />
       </div>
+      <Separator />
       <div className="flex flex-col items-start gap-1.5">
         <span className="text-xs text-muted-foreground">{t('locale.switcherLabel')}</span>
         <LocaleToggle />
       </div>
-      {tauri ? <UpdateCheck /> : null}
+      {tauri ? (
+        <>
+          <Separator />
+          <UpdateCheck />
+        </>
+      ) : null}
     </section>
   )
 }
@@ -70,27 +99,61 @@ export function Settings() {
   const tauri = isTauri()
   const needsHost = desktop.status !== 'ready'
   const [tab, setTab] = useState<SettingsTab>(needsHost ? 'simple' : 'general')
+  const items = [
+    { value: 'general' as const, icon: SettingsIcon, label: t('settings.tabGeneral') },
+    { value: 'simple' as const, icon: Plug, label: t('settings.tabSimple') },
+    { value: 'geek' as const, icon: Terminal, label: t('settings.tabGeek') },
+    { value: 'backup' as const, icon: Archive, label: t('settings.tabBackup') },
+  ]
+
+  if (!tauri) {
+    return (
+      <section className="flex max-w-xl flex-col gap-4">
+        <GeneralSettings tauri={false} />
+        <Separator />
+        <Alert>
+          <AlertDescription>{t('settings.backupBrowser')}</AlertDescription>
+        </Alert>
+      </section>
+    )
+  }
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
-      {tauri ? (
-        <Tabs value={tab} onValueChange={(value) => setTab(value as SettingsTab)}>
-          <TabsList variant="line">
-            <TabsTrigger value="general">{t('settings.tabGeneral')}</TabsTrigger>
-            <TabsTrigger value="simple">{t('settings.tabSimple')}</TabsTrigger>
-            <TabsTrigger value="geek">{t('settings.tabGeek')}</TabsTrigger>
-          </TabsList>
-          <div className={tab === 'general' ? '' : 'hidden'}>
-            <GeneralSettings tauri />
-          </div>
-          <div className={tab === 'general' ? 'hidden' : 'flex flex-col gap-4'}>
-            <ConnectionSettings variant={tab === 'simple' ? 'simple' : 'geek'} />
-          </div>
-        </Tabs>
-      ) : (
-        <GeneralSettings tauri={false} />
-      )}
-    </div>
+    <SidebarProvider className="h-full min-h-0">
+      <Sidebar collapsible="none">
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {items.map((item) => (
+                  <SidebarMenuItem key={item.value}>
+                    <SidebarMenuButton
+                      type="button"
+                      isActive={tab === item.value}
+                      onClick={() => setTab(item.value)}
+                    >
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+      </Sidebar>
+      <div className="min-w-0 flex-1 overflow-auto px-6 py-8">
+        <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
+          <LedgerErrors />
+          {tab === 'general' ? <GeneralSettings tauri /> : null}
+          {tab === 'simple' ? <ConnectionSettings variant="simple" /> : null}
+          {tab === 'geek' ? <ConnectionSettings variant="geek" /> : null}
+          {tab === 'backup' ? (
+            <BackupSettingsPanel workDirectory={desktop.file?.local?.directory ?? ''} />
+          ) : null}
+        </div>
+      </div>
+    </SidebarProvider>
   )
 }
 
@@ -111,15 +174,13 @@ function UpdateCheck() {
 
   return (
     <div className="flex flex-col items-start gap-1.5">
-      <div className="flex items-baseline gap-2">
-        <span className="text-xs text-muted-foreground">{t('update.label')}</span>
-        <span className="font-mono text-xs text-muted-foreground">
-          {t('update.currentVersion', { version: `v${version}` })}
-        </span>
+      <span className="text-xs text-muted-foreground">{t('update.label')}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm">{`v${version}`}</span>
+        <Button variant="outline" disabled={busy} onClick={() => void check(true)}>
+          {phase === 'checking' ? t('update.checking') : t('update.check')}
+        </Button>
       </div>
-      <Button variant="outline" disabled={busy} onClick={() => void check(true)}>
-        {phase === 'checking' ? t('update.checking') : t('update.check')}
-      </Button>
       {phase === 'none' ? <p className="text-xs text-muted-foreground">{t('update.none')}</p> : null}
       {phase === 'failed' ? (
         <p className="text-xs text-muted-foreground">{t('update.failed')}</p>
@@ -352,11 +413,15 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
     <section className="flex flex-col gap-4">
       <HostStatus
         action={
-          variant === 'simple' ? (
-            <ConnectionButton busy={busy} onConnect={() => void connectSimple()} onStop={() => void stop()} />
-          ) : null
+          <ConnectionButton
+            busy={busy}
+            onConnect={() => void (variant === 'simple' ? connectSimple() : connect())}
+            onStop={() => void stop()}
+          />
         }
       />
+
+      <Separator />
 
       {variant === 'simple' ? (
         <>
@@ -385,22 +450,19 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
         <>
           <div className="flex flex-col gap-1.5">
             <span className="text-xs text-muted-foreground">{t('settings.connectionMode')}</span>
-            <div className="flex w-full flex-wrap items-center justify-between gap-2">
-              <Tabs
-                value={kind}
-                onValueChange={(value) => {
-                  const nextKind = value as Kind
-                  setKind(nextKind)
-                  void persistDraft(nextKind)
-                }}
-              >
-                <TabsList>
-                  <TabsTrigger value="local">{t('settings.local')}</TabsTrigger>
-                  <TabsTrigger value="remote">{t('settings.remote')}</TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <ConnectionButton busy={busy} onConnect={() => void connect()} onStop={() => void stop()} />
-            </div>
+            <Tabs
+              value={kind}
+              onValueChange={(value) => {
+                const nextKind = value as Kind
+                setKind(nextKind)
+                void persistDraft(nextKind)
+              }}
+            >
+              <TabsList>
+                <TabsTrigger value="local">{t('settings.local')}</TabsTrigger>
+                <TabsTrigger value="remote">{t('settings.remote')}</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
           {kind === 'local' ? (
             <>
@@ -444,37 +506,41 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
         </>
       )}
 
-      <Card>
-        <CardContent className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-2">
-            <Button type="button" variant="ghost" size="xs" onClick={() => setLogOpen(!logOpen)}>
-              {logOpen ? <ChevronUp data-icon="inline-start" /> : <ChevronDown data-icon="inline-start" />}
-              {t('settings.log')}
-              {desktop.log.length > 0 ? <Badge variant="secondary">{desktop.log.length}</Badge> : null}
-            </Button>
-            <div className="flex items-center gap-1.5">
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                onClick={desktop.clearLog}
-                disabled={desktop.log.length === 0}
-              >
-                {t('settings.clearLog')}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                onClick={() => void copyLog()}
-                disabled={desktop.log.length === 0}
-              >
-                {copied ? t('settings.copied') : t('settings.copyLog')}
-              </Button>
-            </div>
-          </div>
+      <Separator />
+
+      <div className="flex w-full flex-col items-start gap-1.5">
+        <span className="text-xs text-muted-foreground">{t('settings.log')}</span>
+        <Card className="w-full">
+          <CardHeader>
+            <CardAction>
+              <div className="flex items-center gap-1.5">
+                <Button type="button" variant="ghost" size="xs" onClick={() => setLogOpen(!logOpen)}>
+                  {logOpen ? <ChevronUp data-icon="inline-start" /> : <ChevronDown data-icon="inline-start" />}
+                  {logOpen ? t('settings.logCollapse') : t('settings.logExpand')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={desktop.clearLog}
+                  disabled={desktop.log.length === 0}
+                >
+                  {t('settings.clearLog')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => void copyLog()}
+                  disabled={desktop.log.length === 0}
+                >
+                  {copied ? t('settings.copied') : t('settings.copyLog')}
+                </Button>
+              </div>
+            </CardAction>
+          </CardHeader>
           {logOpen ? (
-            <div>
+            <CardContent>
               <div
                 ref={logRef}
                 aria-live="polite"
@@ -494,10 +560,10 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
                 )}
               </div>
               <p className="pt-2 text-xs text-muted-foreground">{t('settings.logKept')}</p>
-            </div>
+            </CardContent>
           ) : null}
-        </CardContent>
-      </Card>
+        </Card>
+      </div>
     </section>
   )
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-backup-settings"
+description = "Enables the save_backup_settings command without any pre-configured scope."
+commands.allow = ["save_backup_settings"]
+
+[[permission]]
+identifier = "deny-save-backup-settings"
+description = "Denies the save_backup_settings command without any pre-configured scope."
+commands.deny = ["save_backup_settings"]

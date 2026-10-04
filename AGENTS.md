@@ -6,7 +6,7 @@ BeanDesk 前端与桌面端工程规范。
 
 ## 1. 架构定位与职责边界
 
-本项目是壳：只读报表工作台，直连 **一个** Fava，无自建后端、数据库、云账号或备份上传。提供 Web 与 Tauri 2 桌面两种形态。
+本项目是壳：只读报表工作台，直连 **一个** Fava，无自建后端、数据库或云账号。提供 Web 与 Tauri 2 桌面两种形态。
 
 - 零定制后端：报表与查询只通过 HTTP 问 Fava。不算账，不自建会计引擎。
 - 文件是用户的：`.bean` 与 `documents/` 在用户选定的工作目录。应用不托管云同步。需要时只写下第一本账的骨架，不做网页账本编辑器。
@@ -36,8 +36,8 @@ BeanDesk 前端与桌面端工程规范。
 - 配置持久化：桌面端连接地址与本机命令使用 @tauri-apps/plugin-store 存储在本机，不提交进 Git，也不写入 web/public/config.js。同一份记录里 `active` 只有 `local` 或 `remote`。切到仅连接不会清掉本机目录和启动命令，切到本机项目也不会清掉仅连接的地址。启动进程只看当前生效的本机项目。
 - 进程看管原则：启动本机项目前先检测端口。已通则仅连接；未通则在独立进程组执行用户命令，等待就绪后再进入界面。退出时仅终止本次拉起的进程组。设置页展示的是现场快照（会话、端口探测、本窗口是否拥有进程）。Stop 只对 `owned`；PID 只存在本窗口内存里，不写入 store。
 - 运行环境：发布包装冻结的 `beandesk-engine` 目录（onedir：可执行文件加 `_internal`，不是单文件）。空命令才走这条路径。没有冻品时报 `missing-engine`。用户填写的启动命令原样交给 shell，不解析、不改写。不内置生 Python 解释器。
-- 第一本账：`init_ledger` 只在用户选定的工作目录写技能里的骨架。已有 `main.bean` 则报 `ledger-exists`。不开放通用写盘。
-- 不提供云备份：设置只指引用户备份工作目录。不上传、不代登网盘、不自动 Git 快照。
+- 第一本账：`init_ledger` 只在用户选定的工作目录写技能里的骨架。已有 `main.bean` 则报 `ledger-exists`。不开放通用写盘。骨架带上忽略 `.backup_key`、`.env` 与 `backups/` 的 `.gitignore`。
+- 工作目录备份：设置 Backup 页。Git 自动保存只在工作目录里做快照（只纳入 `main.bean`、`config/`、`data/`、`documents/`），靠监听和防抖，没有额外的快照按钮。加密备份常驻：设口令后点备份；自动备份关闭时另存为，开启后写入自选的本地目录和/或用户自己的 S3 兼容桶（字段对齐 PicGo S3：endpoint、bucket、region、access key、secret、path-style、前缀）。不办 BeanDesk 云、不代管桶、不自动 `git push`。备份配置在本机 `backup.json`，口令在工作目录 `.backup_key`，都不进 `connection.json`，也不进本仓库。日志不打密钥。失败的密文删掉，不上传。
 - 启动命令：仓库根没有 package.json。浏览器使用 `make dev`，页面在 http://127.0.0.1:5188。桌面使用 `make desktop`，即 `bunx @tauri-apps/cli dev`。不要改成 `npm run tauri dev`，也不要在仓库根新建 Node 工程。
 - 配置目录：CLI 会先进入 `src-tauri`。`beforeDevCommand` 和 `beforeBuildCommand` 用 `cwd: "../web"` 再执行 `bun run dev` / `bun run build`。不要把 `../web` 写进命令本身：从仓库根启动时前端目录是 `web/`，从 `src-tauri` 启动时前端目录会退回仓库根，命令里的 `../web` 会找不到目录。devUrl 与 Vite 的 host、port 保持一致。打包读取 `web/dist`。
 - 连接日志：设置页上的每一行同时经 log 插件写入本机日志目录。单个文件上限 10MB，超过后从文件开头丢掉最旧的行，最近的内容留在原文件，不按日期另存。页面上的清除只清空当前窗口里的显示。

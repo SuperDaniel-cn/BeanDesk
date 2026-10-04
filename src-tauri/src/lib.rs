@@ -1,9 +1,10 @@
+mod backup;
 mod connection_log;
 mod engine;
 mod ledger_init;
 mod supervisor;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use engine::{resolve_engine, sidecar_command};
@@ -39,17 +40,28 @@ pub fn run() {
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
             connection_log::install(app.handle())?;
+            backup::start_if_enabled(app.handle());
             Ok(())
         })
         .manage(FavaHost {
             supervisor: Mutex::new(Supervisor::default()),
         })
+        .manage(backup::BackupHost::default())
         .invoke_handler(tauri::generate_handler![
             start_saved_fava,
             stop_saved_fava,
             fava_host,
             init_ledger,
-            system_locales
+            system_locales,
+            backup::load_backup_settings,
+            backup::save_backup_settings,
+            backup::backup_status,
+            backup::backup_now,
+            backup::backup_export,
+            backup::backup_set_key,
+            backup::backup_restore,
+            backup::backup_test_s3,
+            backup::backup_open_workdir
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -61,10 +73,10 @@ pub fn run() {
 }
 
 fn shutdown(app: &AppHandle) {
-    let Some(host) = app.try_state::<FavaHost>() else {
-        return;
-    };
-    lock(&host).stop();
+    if let Some(host) = app.try_state::<FavaHost>() {
+        lock(&host).stop();
+    }
+    backup::shutdown(app);
 }
 
 fn lock(host: &FavaHost) -> std::sync::MutexGuard<'_, Supervisor> {
@@ -73,15 +85,46 @@ fn lock(host: &FavaHost) -> std::sync::MutexGuard<'_, Supervisor> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-fn saved_local(app: &AppHandle) -> Result<SavedLocal, String> {
+fn connection_record(app: &AppHandle) -> Result<serde_json::Value, String> {
     let store = app
         .store(CONNECTION_FILE)
         .map_err(|error| error.to_string())?;
     store.reload().map_err(|error| error.to_string())?;
-    let value = store
+    store
         .get(CONNECTION_KEY)
-        .ok_or_else(|| "missing".to_string())?;
-    local_project(&value)
+        .ok_or_else(|| "missing".to_string())
+}
+
+pub(crate) fn saved_local(app: &AppHandle) -> Result<SavedLocal, String> {
+    local_project(&connection_record(app)?)
+}
+
+/// Work folder from the saved local draft. Backup still uses it when `active`
+/// is remote, because switching to connect-only keeps the local directory.
+pub(crate) fn saved_workdir(app: &AppHandle) -> Result<PathBuf, String> {
+    directory_from_connection(&connection_record(app)?)
+}
+
+fn directory_from_connection(value: &serde_json::Value) -> Result<PathBuf, String> {
+    if let Some(directory) = value
+        .get("local")
+        .and_then(|local| local.get("directory"))
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+    {
+        return Ok(PathBuf::from(directory));
+    }
+    if value.get("kind").and_then(|kind| kind.as_str()) == Some("local")
+        && let Some(directory) = value
+            .get("directory")
+            .and_then(|item| item.as_str())
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+    {
+        return Ok(PathBuf::from(directory));
+    }
+    Err("directory".to_string())
 }
 
 /// The active mode is the only one that can start a process. A file written
@@ -153,7 +196,7 @@ fn system_locales() -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::local_project;
+    use super::{directory_from_connection, local_project};
 
     #[test]
     fn reads_the_active_local_project() {
@@ -185,6 +228,36 @@ mod tests {
         let saved = local_project(&value).unwrap();
         assert_eq!(saved.command, "");
         assert_eq!(saved.directory, "/tmp/ledger");
+    }
+
+    #[test]
+    fn backup_reads_the_local_folder_when_connect_only_is_active() {
+        let value = serde_json::json!({
+            "active": "remote",
+            "local": {
+                "directory": "/tmp/ledger",
+                "command": "make run",
+                "origin": "http://127.0.0.1:5000"
+            },
+            "remote": { "origin": "https://books.example" }
+        });
+        assert_eq!(
+            directory_from_connection(&value).unwrap(),
+            std::path::PathBuf::from("/tmp/ledger")
+        );
+    }
+
+    #[test]
+    fn backup_needs_a_local_folder() {
+        let value = serde_json::json!({
+            "active": "remote",
+            "local": null,
+            "remote": { "origin": "https://books.example" }
+        });
+        assert_eq!(
+            directory_from_connection(&value).err().as_deref(),
+            Some("directory")
+        );
     }
 
     #[test]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-backup-set-key"
+description = "Enables the backup_set_key command without any pre-configured scope."
+commands.allow = ["backup_set_key"]
+
+[[permission]]
+identifier = "deny-backup-set-key"
+description = "Denies the backup_set_key command without any pre-configured scope."
+commands.deny = ["backup_set_key"]

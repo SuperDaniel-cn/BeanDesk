@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-load-backup-settings"
+description = "Enables the load_backup_settings command without any pre-configured scope."
+commands.allow = ["load_backup_settings"]
+
+[[permission]]
+identifier = "deny-load-backup-settings"
+description = "Denies the load_backup_settings command without any pre-configured scope."
+commands.deny = ["load_backup_settings"]
