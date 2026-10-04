@@ -51,5 +51,7 @@ describe('journal roots', () => {
     expect(accountInRoot('Activos:Bank', 'Activos')).toBe(true)
     expect(accountInRoot('Activos', 'Activos')).toBe(true)
     expect(accountInRoot('ActivosExtra', 'Activos')).toBe(false)
+    expect(accountInRoot('Assets:Banking', 'Assets:Bank')).toBe(false)
+    expect(accountInRoot('Assets:Bank:Checking', 'Assets:Bank')).toBe(true)
   })
 })

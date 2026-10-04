@@ -51,10 +51,11 @@ export interface StatementPeriod {
 export interface IncomeStatement {
   title: string
   operating_currency: string
+  unconverted_currencies: string[]
   /**
    * Inclusive dates.
    * A period filter comes from Fava's `date_range`.
-   * An all-time report has no range; `fetchIncomeStatement` fills the first and last posting.
+   * An all-time report has no range; `fetchIncomeStatement` fills the first and last income or expense posting.
    * Null when both are missing.
    */
   period: StatementPeriod | null
@@ -76,6 +77,7 @@ export interface TrialBalance {
   title: string
   as_of: string
   operating_currency: string
+  unconverted_currencies: string[]
   sections: TrialBalanceSection[]
   totals: {
     totalDebits: number
@@ -338,6 +340,7 @@ export function buildIncomeStatement(input: {
   names: RootNames
   title?: string
 }): IncomeStatement {
+  const unconverted = new Set<string>()
   const sections: IncomeStatementSection[] = []
 
   for (const tree of input.report.trees ?? []) {
@@ -349,7 +352,7 @@ export function buildIncomeStatement(input: {
           ? 'expenses'
           : null
     if (!section) continue
-    const node = convertNode(tree, input.currency, input.names.equity)
+    const node = convertNode(tree, input.currency, input.names.equity, unconverted)
     sections.push({
       section,
       total: node.total,
@@ -360,6 +363,7 @@ export function buildIncomeStatement(input: {
   return {
     title: input.title ?? '',
     operating_currency: input.currency,
+    unconverted_currencies: [...unconverted].sort(),
     period: periodFromDateRange(input.report.date_range),
     sections,
   }
@@ -396,11 +400,12 @@ export function buildTrialBalance(input: {
   title?: string
   latestDate?: string | null
 }): TrialBalance {
+  const unconverted = new Set<string>()
   const sections: TrialBalanceSection[] = []
 
   for (const tree of forestRoots(input.report.trees)) {
     const account = tree.account || ''
-    const node = convertNode(tree, input.currency, input.names.equity)
+    const node = convertNode(tree, input.currency, input.names.equity, unconverted)
     const root = trialRootOf(account, input.names)
     const { debit, credit } = splitSignedBalance(isDebitNormal(root), node.total)
     sections.push({
@@ -420,6 +425,7 @@ export function buildTrialBalance(input: {
     title: input.title ?? '',
     as_of: asOfFromDateRange(input.report.date_range) ?? input.latestDate ?? '',
     operating_currency: input.currency,
+    unconverted_currencies: [...unconverted].sort(),
     sections,
     totals: {
       totalDebits,
@@ -479,6 +485,27 @@ export function dateInPeriod(date: string, time: string): boolean {
 /** Currency-conversion plugs are not equity of the company. */
 export function isCurrencyPlug(account: string): boolean {
   return /:(?:Conversions|Unrealized)(?::|$)/.test(account)
+}
+
+/** A parent that nets to zero stays visible when a descendant still has a balance. */
+export function visibleAccount(total: number, children: AccountNode[]): boolean {
+  if (total !== 0) return true
+  return children.some((child) => visibleAccount(child.total, child.children))
+}
+
+export function visibleCompared(node: ComparedAccount): boolean {
+  if (node.current !== 0 || node.prior !== 0) return true
+  return node.children.some((child) => visibleCompared(child))
+}
+
+/** All-time income range covers only the profit-and-loss roots, not opening balances. */
+export function incomeActivityQuery(income: string, expenses: string): string {
+  const pattern = [income, expenses].map(escapeRegex).join('|')
+  return `SELECT min(date), max(date) WHERE account ~ "^(${pattern})(:|$)"`
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 export interface ComparedAccount {

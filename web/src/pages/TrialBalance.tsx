@@ -36,7 +36,7 @@ import { fetchTrialBalance, type AccountNode, type TrialBalanceSection } from '@
 import { exportStatementCsv } from '@/lib/csv'
 import { explainFavaError } from '@/lib/fava-error'
 import { displayAccountName } from '@/lib/format'
-import { isDebitNormal, splitSignedBalance, type TrialBalanceRoot } from '@/lib/ledger-model'
+import { isDebitNormal, splitSignedBalance, visibleAccount, type TrialBalanceRoot } from '@/lib/ledger-model'
 import { formatPeriodLabel } from '@/lib/period-label'
 import { useShownTime } from '@/lib/shown-time'
 import { TRIAL_ROOT_TITLE, trialCsvTable } from '@/lib/statement-csv'
@@ -74,14 +74,14 @@ function flatten(
 ): FlatRow[] {
   const rows: FlatRow[] = []
   for (const node of nodes) {
-    if (node.total === 0) continue
+    if (!visibleAccount(node.total, node.children)) continue
     const collapsed = term === '' && !expanded.has(node.account)
     const childRows = collapsed
       ? []
       : flatten(node.children, debitNormal, expanded, term, depth + 1)
     if (term !== '' && !matches(node, term) && childRows.length === 0) continue
     const hasChildren = collapsed
-      ? node.children.some((child) => child.total !== 0)
+      ? node.children.some((child) => visibleAccount(child.total, child.children))
       : childRows.length > 0
     const sides = splitSignedBalance(debitNormal, node.total)
     rows.push({
@@ -102,7 +102,7 @@ function defaultExpanded(sections: TrialBalanceSection[]): Set<string> {
   const walk = (nodes: AccountNode[]): boolean => {
     let shown = false
     for (const node of nodes) {
-      if (node.total === 0) continue
+      if (!visibleAccount(node.total, node.children)) continue
       shown = true
       if (walk(node.children)) open.add(node.account)
     }
@@ -256,6 +256,19 @@ function Statement({ data }: { data: Awaited<ReturnType<typeof fetchTrialBalance
           </Button>
         </div>
       </div>
+
+      {!data.unconverted_currencies.length ? null : (
+        <Alert variant="warning">
+          <TriangleAlertIcon />
+          <AlertTitle>{t('balanceSheet.unconvertedTitle')}</AlertTitle>
+          <AlertDescription>
+            {t('balanceSheet.unconvertedBody', {
+              currency: data.operating_currency,
+              currencies: data.unconverted_currencies.join(', '),
+            })}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {columns.debit.length === 0 && columns.credit.length === 0 ? (
         <Empty className="border border-dashed">

@@ -8,7 +8,10 @@ import {
   buildTrialBalance,
   compareAccounts,
   dateInPeriod,
+  incomeActivityQuery,
   isCurrencyPlug,
+  visibleAccount,
+  visibleCompared,
   periodParts,
   priorPeriod,
   type AccountNode,
@@ -226,6 +229,33 @@ describe('buildIncomeStatement', () => {
       ['expenses', 15],
     ])
     expect(statement.period).toBeNull()
+    expect(statement.unconverted_currencies).toEqual([])
+  })
+
+  test('names a currency the income statement could not convert', () => {
+    const statement = buildIncomeStatement({
+      report: {
+        trees: [
+          {
+            account: 'Income',
+            balance: {},
+            balance_children: { USD: -3 },
+            children: [
+              {
+                account: 'Income:Service',
+                balance: { USD: -3 },
+                balance_children: { USD: -3 },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+      currency: 'CNY',
+      names: NAMES,
+    })
+    expect(statement.unconverted_currencies).toEqual(['USD'])
+    expect(statement.sections[0]?.total).toBe(0)
   })
 
   test('a debit on income stays a debit on the section', () => {
@@ -347,6 +377,24 @@ describe('dateInPeriod', () => {
     expect(dateInPeriod('2026-04-01', '2026-Q1')).toBe(false)
     expect(dateInPeriod('2026-03-15', '2026-03')).toBe(true)
     expect(dateInPeriod('2026-04-01', '2026-03')).toBe(false)
+  })
+})
+
+describe('visibleAccount', () => {
+  test('keeps a zero parent when a child still has a balance', () => {
+    const child = { name: 'In', account: 'Assets:Clearing:In', total: 100, children: [], label_key: null }
+    const parent = { name: 'Clearing', account: 'Assets:Clearing', total: 0, children: [child], label_key: null }
+    expect(visibleAccount(0, [])).toBe(false)
+    expect(visibleAccount(parent.total, parent.children)).toBe(true)
+    expect(visibleCompared({ ...parent, current: 0, prior: 0, children: [{ ...child, current: 8, prior: 0, children: [] }] })).toBe(true)
+  })
+})
+
+describe('incomeActivityQuery', () => {
+  test('limits the all-time range to the profit and loss roots', () => {
+    expect(incomeActivityQuery('Income', 'Expenses')).toBe(
+      'SELECT min(date), max(date) WHERE account ~ "^(Income|Expenses)(:|$)"',
+    )
   })
 })
 

@@ -34,15 +34,14 @@ import {
 import { exportStatementCsv } from '@/lib/csv'
 import { explainFavaError } from '@/lib/fava-error'
 import { displayAccountName, presentBalance } from '@/lib/format'
-import { isCurrencyPlug } from '@/lib/ledger-model'
+import { visibleAccount } from '@/lib/ledger-model'
 import { formatPeriodLabel } from '@/lib/period-label'
 import { useShownTime } from '@/lib/shown-time'
 import { balanceCsvTable } from '@/lib/statement-csv'
 import { cn } from '@/lib/utils'
 
-function includeNode(section: StatementSection, node: AccountNode): boolean {
-  if (isCurrencyPlug(node.account)) return false
-  return presentBalance(section, node.total) !== 0
+function includeNode(_section: StatementSection, node: AccountNode): boolean {
+  return visibleAccount(node.total, node.children)
 }
 
 interface AccountLine {

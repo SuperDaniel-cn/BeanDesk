@@ -34,7 +34,7 @@ import {
   type IncomeStatement as IncomeStatementData,
   type IncomeStatementSection,
 } from '@/lib/api'
-import { compareAccounts, priorPeriod, type ComparedAccount } from '@/lib/ledger-model'
+import { compareAccounts, priorPeriod, visibleCompared, type ComparedAccount } from '@/lib/ledger-model'
 import { exportStatementCsv } from '@/lib/csv'
 import { explainFavaError } from '@/lib/fava-error'
 import { displayAccountName, presentIncome } from '@/lib/format'
@@ -45,8 +45,8 @@ import { cn } from '@/lib/utils'
 
 type FlowSection = IncomeStatementSection['section']
 
-function includeNode(section: FlowSection, node: ComparedAccount): boolean {
-  return presentIncome(section, node.current) !== 0 || presentIncome(section, node.prior) !== 0
+function includeNode(_section: FlowSection, node: ComparedAccount): boolean {
+  return visibleCompared(node)
 }
 
 interface AccountLine {
@@ -460,6 +460,19 @@ export function IncomeStatement() {
       {priorFailed ? (
         <PriorUnavailableAlert onRetry={() => void priorQuery.refetch()} />
       ) : null}
+
+      {!data.unconverted_currencies.length ? null : (
+        <Alert variant="warning">
+          <TriangleAlertIcon />
+          <AlertTitle>{t('balanceSheet.unconvertedTitle')}</AlertTitle>
+          <AlertDescription>
+            {t('balanceSheet.unconvertedBody', {
+              currency: data.operating_currency,
+              currencies: data.unconverted_currencies.join(', '),
+            })}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {active ? (
         <Statement

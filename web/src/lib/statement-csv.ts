@@ -12,7 +12,8 @@ import {
 } from './cash-flow'
 import { displayAccountName, presentBalance, presentIncome } from './format'
 import {
-  isCurrencyPlug,
+  visibleAccount,
+  visibleCompared,
   isDebitNormal,
   splitSignedBalance,
   type AccountNode,
@@ -72,7 +73,7 @@ function walkTrial(
 ): string[][] {
   const rows: string[][] = []
   for (const node of nodes) {
-    if (node.total === 0) continue
+    if (!visibleAccount(node.total, node.children)) continue
     const sides = splitSignedBalance(debitNormal, node.total)
     rows.push([
       indent(depth, displayAccountName(node.name)),
@@ -124,9 +125,8 @@ function walkBalance(
 ): string[][] {
   const rows: string[][] = []
   for (const node of nodes) {
-    if (isCurrencyPlug(node.account)) continue
     const value = presentBalance(section, node.total)
-    if (value === 0) continue
+    if (!visibleAccount(node.total, node.children)) continue
     const title = node.label_key
       ? t('balanceSheet.unclosedEarnings')
       : node.name === 'Earnings'
@@ -178,7 +178,7 @@ function walkIncome(
   for (const node of nodes) {
     const current = presentIncome(section, node.current)
     const prior = presentIncome(section, node.prior)
-    if (current === 0 && prior === 0) continue
+    if (!visibleCompared(node)) continue
     rows.push([
       indent(depth, displayAccountName(node.name)),
       ...amountColumns(

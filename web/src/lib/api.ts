@@ -10,6 +10,7 @@ import {
   buildBalanceSheet,
   buildIncomeStatement,
   buildTrialBalance,
+  incomeActivityQuery,
   operatingCurrency,
   quoteCommodity,
   readInventory,
@@ -56,9 +57,13 @@ async function asOfFallback(report: FavaTreeReport, signal?: AbortSignal): Promi
 }
 
 /** All-time income statements omit `date_range`. The activity span is the period. */
-async function activityPeriod(signal?: AbortSignal): Promise<StatementPeriod | null> {
+async function activityPeriod(
+  income: string,
+  expenses: string,
+  signal?: AbortSignal,
+): Promise<StatementPeriod | null> {
   try {
-    const result = await favaClient.query('SELECT min(date), max(date)', undefined, signal)
+    const result = await favaClient.query(incomeActivityQuery(income, expenses), undefined, signal)
     const from = result.rows?.[0]?.[0]
     const to = result.rows?.[0]?.[1]
     if (!from || !to) return null
@@ -90,7 +95,7 @@ export async function fetchIncomeStatement(time?: string, signal?: AbortSignal) 
     title,
   })
   if (statement.period) return statement
-  const period = await activityPeriod(signal)
+  const period = await activityPeriod(names.income, names.expenses, signal)
   return period ? { ...statement, period } : statement
 }
 

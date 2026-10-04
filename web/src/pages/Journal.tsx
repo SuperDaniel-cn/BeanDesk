@@ -120,7 +120,6 @@ export function Journal() {
   const filtered = useMemo(() => {
     if (!transactions) return []
     const needle = search.toLowerCase()
-    const accountNeedle = selectedAccountFilter.toLowerCase()
     return transactions.filter((tx) => {
       const matchSearch =
         needle === '' ||
@@ -132,7 +131,7 @@ export function Journal() {
         !activeRoot || tx.postings.some((posting) => accountInRoot(posting.account, activeRoot))
       const matchAccount =
         !selectedAccountFilter ||
-        tx.postings.some((p) => p.account.toLowerCase().startsWith(accountNeedle))
+        tx.postings.some((posting) => accountInRoot(posting.account, selectedAccountFilter))
       return matchSearch && matchTag && matchRoot && matchAccount
     })
   }, [transactions, search, selectedTag, activeRoot, selectedAccountFilter])
