@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { DownloadIcon, RefreshCwIcon, TriangleAlertIcon } from 'lucide-react'
 
+import { OneLine } from '@/components/one-line'
 import {
   ComparePanel,
   PeriodAmountCells,
@@ -70,7 +71,9 @@ function AmountTable({
       <TableBody>
         {rows.map((row) => (
           <TableRow key={row.key}>
-            <TableCell className="min-w-0 whitespace-normal break-words">{row.label}</TableCell>
+            <TableCell className="min-w-0 overflow-hidden">
+              <OneLine text={row.label} />
+            </TableCell>
             <PeriodAmountCells
               current={row.amount}
               prior={row.prior}

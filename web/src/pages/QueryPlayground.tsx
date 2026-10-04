@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/tooltip'
 import {
   Empty,
   EmptyDescription,
@@ -164,17 +165,17 @@ export function QueryPlayground() {
 
       <div className="flex flex-wrap gap-1.5">
         {PRESET_QUERIES.map((preset) => (
-          <Button
-            key={preset.titleKey}
-            variant={draft === preset.sql ? 'secondary' : 'outline'}
-            title={t(preset.descriptionKey)}
-            onClick={() => {
-              setDraft(preset.sql)
-              run(preset.sql)
-            }}
-          >
-            {t(preset.titleKey)}
-          </Button>
+          <Hint key={preset.titleKey} label={t(preset.descriptionKey)}>
+            <Button
+              variant={draft === preset.sql ? 'secondary' : 'outline'}
+              onClick={() => {
+                setDraft(preset.sql)
+                run(preset.sql)
+              }}
+            >
+              {t(preset.titleKey)}
+            </Button>
+          </Hint>
         ))}
       </div>
 

@@ -3,7 +3,9 @@ import { FileTextIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { LinkedDocument } from '@/components/linked-document'
+import { OneLine } from '@/components/one-line'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Hint } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -108,14 +110,16 @@ export function Documents() {
                   <CardTitle>{fileLeaf(doc.filename)}</CardTitle>
                   <CardDescription className="font-mono">{formatDate(doc.date)}</CardDescription>
                   <CardAction>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => setSelected(doc)}
-                      title={t('documents.preview')}
-                    >
-                      <FileTextIcon />
-                    </Button>
+                    <Hint label={t('documents.preview')}>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setSelected(doc)}
+                        aria-label={t('documents.preview')}
+                      >
+                        <FileTextIcon />
+                      </Button>
+                    </Hint>
                   </CardAction>
                 </CardHeader>
                 <CardContent>
@@ -144,19 +148,23 @@ export function Documents() {
                   >
                     <TableCell className="font-mono">{formatDate(doc.date)}</TableCell>
                     <TableCell>{displayAccountName(doc.account)}</TableCell>
-                    <TableCell className="truncate">{fileLeaf(doc.filename)}</TableCell>
+                    <TableCell className="overflow-hidden">
+                      <OneLine text={fileLeaf(doc.filename)} />
+                    </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          setSelected(doc)
-                        }}
-                        title={t('documents.preview')}
-                      >
-                        <FileTextIcon />
-                      </Button>
+                      <Hint label={t('documents.preview')}>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setSelected(doc)
+                          }}
+                          aria-label={t('documents.preview')}
+                        >
+                          <FileTextIcon />
+                        </Button>
+                      </Hint>
                     </TableCell>
                   </TableRow>
                 ))}

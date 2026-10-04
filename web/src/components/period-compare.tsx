@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { TriangleAlertIcon } from 'lucide-react'
 
+import { OneLine } from '@/components/one-line'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { TableCell, TableHead, TableRow } from '@/components/ui/table'
@@ -127,7 +128,9 @@ export function PeriodTotals({
           : 'grid-cols-[minmax(0,1fr)_8rem]',
       )}
     >
-      <span className="min-w-0 px-2 text-muted-foreground">{label}</span>
+      <span className="min-w-0 px-2 text-muted-foreground">
+        <OneLine text={label} />
+      </span>
       <span className={cn(AMOUNT, 'px-2 font-medium', comparing ? undefined : 'pe-4', tone)}>
         {current}
       </span>

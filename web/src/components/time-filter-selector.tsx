@@ -1,5 +1,6 @@
 import { Calendar, Check, ChevronDown, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/tooltip'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -113,14 +114,16 @@ export function TimeFilterSelector({ className }: { className?: string }) {
       </DropdownMenu>
 
       {!isAllTime && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={clearFilter}
-          title={t('time.allTime')}
-        >
-          <X />
-        </Button>
+        <Hint label={t('time.allTime')}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={clearFilter}
+            aria-label={t('time.allTime')}
+          >
+            <X />
+          </Button>
+        </Hint>
       )}
     </div>
   )

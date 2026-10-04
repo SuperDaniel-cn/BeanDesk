@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
 import {
@@ -37,8 +37,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { OneLine } from '@/components/one-line'
+import { Hint } from '@/components/ui/tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Spinner } from '@/components/ui/spinner'
 import { Separator } from '@/components/ui/separator'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -257,14 +258,16 @@ export function Journal() {
                       <CardTitle>{tx.payee}</CardTitle>
                       <CardDescription className="font-mono">{tx.date}</CardDescription>
                       <CardAction>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => setSelectedTx(tx)}
-                          title={t('journal.viewDocument')}
-                        >
-                          <FileTextIcon />
-                        </Button>
+                        <Hint label={t('journal.viewDocument')}>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setSelectedTx(tx)}
+                            aria-label={t('journal.viewDocument')}
+                          >
+                            <FileTextIcon />
+                          </Button>
+                        </Hint>
                       </CardAction>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-2">
@@ -296,7 +299,9 @@ export function Journal() {
                         <TableCell className="align-top font-mono text-xs text-muted-foreground">
                           {tx.date}
                         </TableCell>
-                        <TableCell className="max-w-40 align-top whitespace-normal font-medium">{tx.payee}</TableCell>
+                        <TableCell className="max-w-40 overflow-hidden align-top font-medium">
+                          <OneLine text={tx.payee} />
+                        </TableCell>
                         <TableCell className="overflow-hidden align-top">
                           <div className="flex min-w-0 flex-col gap-1">
                             {tx.narration ? <OneLine text={tx.narration} /> : null}
@@ -311,14 +316,16 @@ export function Journal() {
                           <PostingStack postings={credit} />
                         </TableCell>
                         <TableCell className="align-top p-1 text-center">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => setSelectedTx(tx)}
-                            title={t('journal.viewDocument')}
-                          >
-                            <FileTextIcon />
-                          </Button>
+                          <Hint label={t('journal.viewDocument')}>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => setSelectedTx(tx)}
+                              aria-label={t('journal.viewDocument')}
+                            >
+                              <FileTextIcon />
+                            </Button>
+                          </Hint>
                         </TableCell>
                       </TableRow>
                       )
@@ -384,39 +391,6 @@ function splitPostings(postings: PostingItem[]) {
   return { debit, credit }
 }
 
-function OneLine({ text }: { text: string }) {
-  const ref = useRef<HTMLSpanElement>(null)
-  const [overflows, setOverflows] = useState(false)
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    const node = ref.current
-    if (!node) return
-    const measure = () => {
-      const next = node.scrollWidth > node.clientWidth
-      setOverflows(next)
-      if (!next) setOpen(false)
-    }
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [text])
-
-  return (
-    <TooltipProvider delayDuration={400} skipDelayDuration={0}>
-      <Tooltip open={overflows && open} onOpenChange={setOpen}>
-        <TooltipTrigger asChild>
-          <span ref={ref} className="block min-w-0 truncate">
-            {text}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-sm text-left whitespace-normal">{text}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  )
-}
-
 function TagList({ tags }: { tags: string[] }) {
   if (tags.length === 0) return null
   return (
@@ -445,9 +419,7 @@ function PostingStack({ postings }: { postings: PostingItem[] }) {
               tone === 'destructive' && 'bg-destructive/10',
             )}
           >
-            <span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={posting.account}>
-              {posting.account}
-            </span>
+            <OneLine text={posting.account} className="font-mono text-xs text-muted-foreground" />
             <span
               className={cn(
                 'shrink-0 font-mono text-xs tabular-nums',
