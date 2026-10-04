@@ -24,7 +24,6 @@ export function useStartupScreen(): boolean {
   if (desktop.status !== 'ready') opened.current = false
   else if (!firstPage.isPending) opened.current = true
 
-  if (desktop.status === 'boot') return true
   return desktop.status === 'ready' && pathname === '/' && !opened.current && firstPage.isPending
 }
 

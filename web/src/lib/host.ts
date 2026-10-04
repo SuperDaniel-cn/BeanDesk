@@ -52,16 +52,17 @@ export function emptyHostSnapshot(): HostSnapshot {
   return { running: false, pid: null, startedMs: null }
 }
 
-/** Drop a live session when this window's child died, or an attached Fava stopped answering. */
-export function sessionLost(previous: HostView, next: HostView, status: DesktopStatus): boolean {
+/** Drop a live session when this window's child died, or an attached Fava missed twice. */
+export function sessionLost(
+  previous: HostView,
+  next: HostView,
+  status: DesktopStatus,
+  attachedMisses = 0,
+): boolean {
   if (status !== 'ready') return false
   if (previous.owned && !next.owned) return true
-  return (
-    !next.owned &&
-    previous.probe.kind === 'fava' &&
-    next.probe.kind !== 'fava' &&
-    next.probe.kind !== 'idle'
-  )
+  if (next.owned || next.probe.kind === 'fava' || next.probe.kind === 'idle') return false
+  return attachedMisses >= 2
 }
 
 export function connectionAction(input: {
@@ -69,7 +70,7 @@ export function connectionAction(input: {
   owned: boolean
   busy: boolean
 }): ConnectionAction {
-  if (input.status === 'boot') return 'auto'
+  if (input.status === 'boot') return input.owned ? 'stop' : 'auto'
   if (input.busy) return 'busy'
   if (input.status === 'ready' && input.owned) return 'stop'
   if (input.status === 'ready') return 'disconnect'

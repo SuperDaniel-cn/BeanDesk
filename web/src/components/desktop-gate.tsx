@@ -69,6 +69,7 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
   )
   const stateRef = useRef(state)
   const hostRef = useRef(host)
+  const attachedMisses = useRef(0)
   stateRef.current = state
   hostRef.current = host
 
@@ -163,9 +164,16 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
       if (cancelled) return
       const next = hostFromSnapshot(snap, probe, origin, Date.now())
       const previous = hostRef.current
+      if (next.owned || next.probe.kind === 'fava' || next.probe.kind === 'idle') {
+        attachedMisses.current = 0
+      } else if (!next.owned && previous.probe.kind === 'fava') {
+        attachedMisses.current += 1
+      } else if (!next.owned && attachedMisses.current > 0) {
+        attachedMisses.current += 1
+      }
       hostRef.current = next
       setHost(next)
-      if (sessionLost(previous, next, current.status)) {
+      if (sessionLost(previous, next, current.status, attachedMisses.current)) {
         appendLog(tRef.current('settings.hostDown'), 'error')
         release()
       }

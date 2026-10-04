@@ -315,15 +315,13 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
 
   async function connect() {
     if (desktop.status !== 'setup' || busy) return
-    const local = localDraft(directory, command, localOrigin)
+    const local = command.trim()
+      ? localDraft(directory, command, localOrigin)
+      : localWorkdir(directory, localOrigin)
     const remote = remoteDraft(remoteOrigin)
     if (kind === 'local') {
       if (!directory) {
         fail(t('settings.missingDirectory'))
-        return
-      }
-      if (!command.trim()) {
-        fail(t('settings.missingCommand'))
         return
       }
       if (!normalizeOrigin(localOrigin)) {
@@ -343,7 +341,8 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
 
   async function connectSimple() {
     if (desktop.status !== 'setup' || busy) return
-    const local = localWorkdir(directory, localOrigin)
+    const savedCommand = fields.current.saved?.local?.command ?? ''
+    const local = localWorkdir(directory, localOrigin, savedCommand)
     const remote = remoteDraft(remoteOrigin)
     if (!directory) {
       fail(t('settings.missingWorkDirectory'))
