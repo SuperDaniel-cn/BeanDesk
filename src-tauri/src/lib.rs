@@ -16,7 +16,7 @@ use engine::{resolve_engine, sidecar_command};
 use ledger_init::init_ledger_tree;
 use supervisor::{HostSnapshot, Supervisor, accepts_local_origin};
 use tauri::webview::PageLoadEvent;
-use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WebviewWindow, WindowEvent};
 use tauri_plugin_store::StoreExt;
 
 const MAIN_WINDOW: &str = "main";
@@ -119,26 +119,28 @@ pub fn run() {
         });
 }
 
-pub(crate) fn show_main_window(app: &AppHandle) {
-    let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
-        return;
-    };
+fn reveal_window(window: &WebviewWindow) {
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
 }
 
+pub(crate) fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
+        reveal_window(&window);
+    }
+}
+
 fn reveal_main_if_still_hidden(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-        if app
-            .get_webview_window(MAIN_WINDOW)
-            .and_then(|win| win.is_visible().ok())
-            .unwrap_or(false)
-        {
+        let Some(win) = app.get_webview_window(MAIN_WINDOW) else {
+            return;
+        };
+        if win.is_visible().unwrap_or(false) {
             return;
         }
-        show_main_window(&app);
+        reveal_window(&win);
     });
 }
 

@@ -1,11 +1,11 @@
-use tauri::AppHandle;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, include_image};
 
 fn tray_labels(locales: &[String]) -> (&'static str, &'static str) {
     if locales
         .iter()
-        .any(|tag| tag.split(['-', '_']).next() == Some("zh"))
+        .any(|tag| tag.split('-').next() == Some("zh"))
     {
         ("显示", "退出")
     } else {
@@ -17,16 +17,13 @@ pub(crate) fn install(
     app: &AppHandle,
     locales: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let icon = app
-        .default_window_icon()
-        .cloned()
-        .ok_or("missing window icon")?;
     let (show, quit) = tray_labels(locales);
     let show_item = MenuItem::with_id(app, "show", show, true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", quit, true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
     TrayIconBuilder::with_id("beandesk")
-        .icon(icon)
+        .icon(include_image!("icons/tray@2x.png"))
+        .icon_as_template(true)
         .tooltip("BeanDesk")
         .menu(&menu)
         .show_menu_on_left_click(false)
