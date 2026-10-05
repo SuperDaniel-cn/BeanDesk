@@ -1,3 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 8 16 16">
-  <path fill="#000" d="M8 9h16v3.2h-6.4V23h-3.2v-10.8H8z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="100 100 824 824">
+  <rect x="100" y="100" width="824" height="824" rx="185.4" fill="#fff"/>
+  <path fill="#000" transform="translate(100 100) scale(25.75)" d="M8 9h16v3.2h-6.4V23h-3.2v-10.8H8z"/>
 </svg>

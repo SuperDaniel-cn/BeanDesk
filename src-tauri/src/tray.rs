@@ -22,8 +22,7 @@ pub(crate) fn install(
     let quit_item = MenuItem::with_id(app, "quit", quit, true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
     TrayIconBuilder::with_id("beandesk")
-        .icon(include_image!("icons/tray@2x.png"))
-        .icon_as_template(true)
+        .icon(include_image!("icons/tray.png"))
         .tooltip("BeanDesk")
         .menu(&menu)
         .show_menu_on_left_click(false)
