@@ -14,9 +14,10 @@ use engine::{resolve_engine, sidecar_command};
 use ledger_init::init_ledger_tree;
 use supervisor::{HostSnapshot, Supervisor, accepts_local_origin};
 use tauri::webview::PageLoadEvent;
-use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 use tauri_plugin_store::StoreExt;
 
+const MAIN_WINDOW: &str = "main";
 const HANDBOOK_WINDOW: &str = "handbook";
 
 pub(crate) const CONNECTION_FILE: &str = "connection.json";
@@ -60,18 +61,16 @@ pub fn run() {
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
             connection_log::install(app.handle())?;
             backup::start_if_enabled(app.handle());
+            reveal_main_if_still_hidden(app.handle().clone());
             Ok(())
         })
         .on_page_load(|webview, payload| {
-            if webview.label() != HANDBOOK_WINDOW {
-                return;
-            }
             if payload.event() != PageLoadEvent::Finished {
                 return;
             }
-            let window = webview.window();
-            let _ = window.show();
-            let _ = window.set_focus();
+            if webview.label() == HANDBOOK_WINDOW {
+                let _ = webview.app_handle().emit("handbook-ready", ());
+            }
         })
         .manage(FavaHost {
             supervisor: Mutex::new(Supervisor::default()),
@@ -110,7 +109,7 @@ pub fn run() {
                     if let Some(win) = app.get_webview_window(&label) {
                         let _ = win.hide();
                     }
-                } else if label == "main" {
+                } else if label == MAIN_WINDOW {
                     if let Some(win) = app.get_webview_window(HANDBOOK_WINDOW) {
                         let _ = win.destroy();
                     }
@@ -118,6 +117,20 @@ pub fn run() {
             }
             _ => {}
         });
+}
+
+fn reveal_main_if_still_hidden(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        let Some(win) = app.get_webview_window(MAIN_WINDOW) else {
+            return;
+        };
+        if win.is_visible().unwrap_or(false) {
+            return;
+        }
+        let _ = win.show();
+        let _ = win.set_focus();
+    });
 }
 
 fn shutdown(app: &AppHandle) {

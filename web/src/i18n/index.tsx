@@ -85,23 +85,25 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(() => !isTauri() || explicitChoice() !== null)
 
   useEffect(() => {
-    if (!isTauri() || explicitChoice()) {
-      setReady(true)
-      return
-    }
+    if (!isTauri() || explicitChoice()) return
     let cancelled = false
-    invoke<string[]>('system_locales')
-      .then((tags) => {
-        if (cancelled || explicitChoice()) return
-        const preferred = tags.length > 0 ? tags : machineLanguages()
-        setLocaleState(detectLocale(SUPPORTED_LOCALES, null, preferred, DEFAULT_LOCALE))
-      })
-      .catch(() => {
-        // The navigator list from the first render stays in place.
-      })
-      .finally(() => {
-        if (!cancelled) setReady(true)
-      })
+    const locales = invoke<string[]>('system_locales')
+    const timeout = new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), 400)
+    })
+    const apply = (tags: string[]) => {
+      if (cancelled || explicitChoice()) return
+      const preferred = tags.length > 0 ? tags : machineLanguages()
+      setLocaleState(detectLocale(SUPPORTED_LOCALES, null, preferred, DEFAULT_LOCALE))
+    }
+    void Promise.race([locales.catch(() => null), timeout]).then((tags) => {
+      if (cancelled) return
+      if (tags) apply(tags)
+      setReady(true)
+      if (!tags) {
+        void locales.then(apply).catch(() => undefined)
+      }
+    })
     return () => {
       cancelled = true
     }

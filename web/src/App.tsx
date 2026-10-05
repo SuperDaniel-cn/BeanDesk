@@ -8,6 +8,7 @@ import { KeptReports } from '@/components/kept-reports'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ThemeProvider } from '@/components/theme-provider'
+import { WarmMainWindow } from '@/components/warm-main-window'
 import { I18nProvider } from '@/i18n'
 import { TimeFilterProvider } from '@/lib/time-context'
 import { Calendar } from '@/pages/Calendar'
@@ -28,6 +29,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="system">
         <I18nProvider>
+          <WarmMainWindow />
           <AppUpdate>
           <TimeFilterProvider>
             <TooltipProvider>

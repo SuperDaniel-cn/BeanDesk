@@ -2,6 +2,8 @@ import { isTauri } from '@tauri-apps/api/core'
 
 export const HANDBOOK_WINDOW = 'handbook'
 
+export const HANDBOOK_READY_EVENT = 'handbook-ready'
+
 export const HANDBOOK_WINDOW_SIZE = {
   width: 1200,
   height: 800,
@@ -12,7 +14,13 @@ export const HANDBOOK_WINDOW_SIZE = {
 
 export type HandbookTheme = 'dark' | 'light'
 
+let creating: Promise<void> | null = null
 let opening: Promise<void> | null = null
+let resolvePageReady: (() => void) | null = null
+const pageReadyWait = new Promise<void>((resolve) => {
+  resolvePageReady = resolve
+})
+let listening: Promise<void> | null = null
 
 export function handbookWindowUrl(locale: string, theme: HandbookTheme): string {
   const path = locale === 'zh-CN' ? '/docs/zh-CN/index.html' : '/docs/index.html'
@@ -35,30 +43,54 @@ export async function openHandbookWindow(
 ): Promise<void> {
   if (!isTauri()) return
   if (opening) return opening
-  opening = createOrFocusHandbookWindow(title, locale, theme).finally(() => {
+  opening = (async () => {
+    const win = await ensureHandbookWindow(title, locale, theme)
+    await waitHandbookPageReady()
+    if (win) await revealHandbookWindow(win)
+  })().finally(() => {
     opening = null
   })
   return opening
 }
 
-async function createOrFocusHandbookWindow(
+export async function ensureHandbookWindow(
   title: string,
   locale: string,
   theme: HandbookTheme,
-): Promise<void> {
+) {
   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-  const existing = await WebviewWindow.getByLabel(HANDBOOK_WINDOW)
-  if (existing) {
-    await revealHandbookWindow(existing)
-    return
+  if (!creating) {
+    creating = (async () => {
+      if (await WebviewWindow.getByLabel(HANDBOOK_WINDOW)) return
+      await ensureReadyListener()
+      const win = new WebviewWindow(HANDBOOK_WINDOW, {
+        url: handbookWindowUrl(locale, theme),
+        title,
+        ...HANDBOOK_WINDOW_SIZE,
+        ...handbookChrome(theme),
+      })
+      await waitHandbookCreated(win)
+    })().finally(() => {
+      creating = null
+    })
   }
-  const win = new WebviewWindow(HANDBOOK_WINDOW, {
-    url: handbookWindowUrl(locale, theme),
-    title,
-    ...HANDBOOK_WINDOW_SIZE,
-    ...handbookChrome(theme),
-  })
-  await waitHandbookCreated(win)
+  await creating
+  return WebviewWindow.getByLabel(HANDBOOK_WINDOW)
+}
+
+export function waitHandbookPageReady(): Promise<void> {
+  return pageReadyWait
+}
+
+function markHandbookReady() {
+  resolvePageReady?.()
+}
+
+function ensureReadyListener(): Promise<void> {
+  listening ??= import('@tauri-apps/api/event').then(({ listen }) =>
+    listen(HANDBOOK_READY_EVENT, () => markHandbookReady()).then(() => undefined),
+  )
+  return listening
 }
 
 async function revealHandbookWindow(win: {

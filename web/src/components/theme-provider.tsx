@@ -2,6 +2,13 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 
 export type Theme = 'dark' | 'light' | 'system'
 
+function isDarkTheme(theme: Theme): boolean {
+  if (theme === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  }
+  return theme === 'dark'
+}
+
 interface ThemeProviderState {
   theme: Theme
   setTheme: (theme: Theme) => void
@@ -26,22 +33,16 @@ export function ThemeProvider({
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
   )
-  const [isDark, setIsDark] = useState<boolean>(false)
+  const [isDark, setIsDark] = useState(() => isDarkTheme(theme))
 
   useEffect(() => {
     const root = window.document.documentElement
 
     const applyTheme = () => {
-      let resolvedDark = false
-      if (theme === 'system') {
-        resolvedDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      } else {
-        resolvedDark = theme === 'dark'
-      }
-
+      const dark = isDarkTheme(theme)
       root.classList.remove('light', 'dark')
-      root.classList.add(resolvedDark ? 'dark' : 'light')
-      setIsDark(resolvedDark)
+      root.classList.add(dark ? 'dark' : 'light')
+      setIsDark(dark)
     }
 
     applyTheme()
