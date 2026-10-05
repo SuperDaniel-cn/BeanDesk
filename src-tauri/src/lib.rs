@@ -13,8 +13,11 @@ use std::sync::Mutex;
 use engine::{resolve_engine, sidecar_command};
 use ledger_init::init_ledger_tree;
 use supervisor::{HostSnapshot, Supervisor, accepts_local_origin};
-use tauri::{AppHandle, Manager, RunEvent, State};
+use tauri::webview::PageLoadEvent;
+use tauri::{AppHandle, Manager, RunEvent, State, WindowEvent};
 use tauri_plugin_store::StoreExt;
+
+const HANDBOOK_WINDOW: &str = "handbook";
 
 pub(crate) const CONNECTION_FILE: &str = "connection.json";
 pub(crate) const CONNECTION_KEY: &str = "connection";
@@ -59,6 +62,17 @@ pub fn run() {
             backup::start_if_enabled(app.handle());
             Ok(())
         })
+        .on_page_load(|webview, payload| {
+            if webview.label() != HANDBOOK_WINDOW {
+                return;
+            }
+            if payload.event() != PageLoadEvent::Finished {
+                return;
+            }
+            let window = webview.window();
+            let _ = window.show();
+            let _ = window.set_focus();
+        })
         .manage(FavaHost {
             supervisor: Mutex::new(Supervisor::default()),
         })
@@ -84,10 +98,25 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
-            if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
-                shutdown(app);
+        .run(|app, event| match event {
+            RunEvent::ExitRequested { .. } | RunEvent::Exit => shutdown(app),
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::CloseRequested { api, .. },
+                ..
+            } => {
+                if label == HANDBOOK_WINDOW {
+                    api.prevent_close();
+                    if let Some(win) = app.get_webview_window(&label) {
+                        let _ = win.hide();
+                    }
+                } else if label == "main" {
+                    if let Some(win) = app.get_webview_window(HANDBOOK_WINDOW) {
+                        let _ = win.destroy();
+                    }
+                }
             }
+            _ => {}
         });
 }
 

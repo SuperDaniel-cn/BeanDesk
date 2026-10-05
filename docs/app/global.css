@@ -9,6 +9,11 @@ html {
 /* Keep the page tree open in the desktop handbook window (same size as main). */
 #nd-docs-layout {
   --fd-sidebar-width: 268px;
+  transition: none;
+}
+
+#nd-docs-layout #nd-sidebar {
+  transition: none;
 }
 
 @media (min-width: 48rem) {

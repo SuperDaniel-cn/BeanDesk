@@ -2,11 +2,13 @@
   "title": "Handbook",
   "pages": [
     "index",
-    "---Setup---",
+    "---Getting Started---",
     "...setup",
+    "---Core Features---",
+    "reports",
     "desktop",
     "calendar",
-    "mcp",
-    "reports"
+    "---Integrations---",
+    "mcp"
   ]
 }

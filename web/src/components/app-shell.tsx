@@ -16,6 +16,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
+import { useTheme } from '@/components/theme-provider'
 import { useI18n } from '@/i18n'
 import { openHandbookWindow } from '@/lib/handbook-window'
 import { cn } from '@/lib/utils'
@@ -34,13 +35,14 @@ function HandbookControl({
   onOpened?: () => void
 }) {
   const { t, locale } = useI18n()
+  const { isDark } = useTheme()
   const label = t('handbook.title')
   if (!isTauri()) return null
   const windowTitle = `${label} - ${t('brand.short')}`
 
   const open = () => {
     onOpened?.()
-    void openHandbookWindow(windowTitle, locale).catch(() => undefined)
+    void openHandbookWindow(windowTitle, locale, isDark ? 'dark' : 'light').catch(() => undefined)
   }
 
   if (appearance === 'icon') {

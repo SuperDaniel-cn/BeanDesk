@@ -6,6 +6,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   HANDBOOK_WINDOW,
   HANDBOOK_WINDOW_SIZE,
+  handbookChrome,
   handbookWindowUrl,
 } from './handbook-window'
 
@@ -20,8 +21,18 @@ describe('handbook window', () => {
     expect(main.minWidth).toBe(HANDBOOK_WINDOW_SIZE.minWidth)
     expect(main.minHeight).toBe(HANDBOOK_WINDOW_SIZE.minHeight)
     expect(HANDBOOK_WINDOW_SIZE.resizable).toBe(true)
-    expect(handbookWindowUrl('en')).toBe('/docs/index.html')
-    expect(handbookWindowUrl('zh-CN')).toBe('/docs/zh-CN/index.html')
+    expect(handbookWindowUrl('en', 'dark')).toBe('/docs/index.html?theme=dark')
+    expect(handbookWindowUrl('zh-CN', 'light')).toBe('/docs/zh-CN/index.html?theme=light')
+    expect(handbookChrome('dark')).toEqual({
+      visible: false,
+      theme: 'dark',
+      backgroundColor: '#171717',
+    })
+    expect(handbookChrome('light')).toEqual({
+      visible: false,
+      theme: 'light',
+      backgroundColor: '#ffffff',
+    })
   })
 })
 
@@ -33,5 +44,16 @@ describe('handbook window capability', () => {
   test('loads the bundled site and nothing privileged', () => {
     expect(capability.windows).toEqual([HANDBOOK_WINDOW])
     expect(capability.permissions).toEqual(['core:default'])
+  })
+})
+
+describe('main window handbook chrome', () => {
+  const capability = JSON.parse(
+    readFileSync(join(import.meta.dir, '../../../src-tauri/capabilities/default.json'), 'utf8'),
+  ) as { permissions: Array<string | { identifier: string }> }
+
+  test('can show a window that was created hidden', () => {
+    const names = capability.permissions.filter((item): item is string => typeof item === 'string')
+    expect(names).toContain('core:window:allow-show')
   })
 })

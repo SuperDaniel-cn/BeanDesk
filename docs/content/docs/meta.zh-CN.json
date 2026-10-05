@@ -2,11 +2,13 @@
   "title": "手册",
   "pages": [
     "index",
-    "---开始---",
+    "---起步---",
     "...setup",
+    "---功能---",
+    "reports",
     "desktop",
     "calendar",
-    "mcp",
-    "reports"
+    "---集成---",
+    "mcp"
   ]
 }
