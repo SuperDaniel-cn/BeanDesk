@@ -10,6 +10,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { ThemeProvider } from '@/components/theme-provider'
 import { I18nProvider } from '@/i18n'
 import { TimeFilterProvider } from '@/lib/time-context'
+import { Calendar } from '@/pages/Calendar'
 import { Settings } from '@/pages/Settings'
 
 const queryClient = new QueryClient({
@@ -36,6 +37,7 @@ export default function App() {
                     <DesktopGuard>
                       <KeptReports />
                       <Routes>
+                        <Route path="/calendar" element={<Calendar />} />
                         <Route path="/settings" element={<Settings />} />
                       </Routes>
                     </DesktopGuard>

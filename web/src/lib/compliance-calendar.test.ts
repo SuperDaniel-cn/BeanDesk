@@ -7,8 +7,12 @@ import type { MessageKey } from '@/i18n/locales/en'
 
 import {
   bundledCatalogEvents,
+  calendarSourceDetail,
+  emptyCalendarFile,
   eventsFromIcs,
+  eventsInRange,
   generateIcs,
+  monthGridRange,
   noticeKey,
   noticesDue,
   normalizeCalendarUrl,
@@ -16,6 +20,7 @@ import {
   publicCatalogEvents,
   readCalendarFile,
   rememberNotices,
+  sourceReady,
   upcomingEvents,
   withCalendarSource,
 } from './compliance-calendar'
@@ -84,6 +89,18 @@ describe('bundled China small-scale quarterly catalog', () => {
     expect(merged.some((event) => event.uid === 'annual-filing@example.com')).toBe(true)
     expect(merged.some((event) => event.kind === 'vat' && event.date === '2026-10-15')).toBe(true)
   })
+
+  test('a month grid still keeps due dates that are already past', () => {
+    const today = '2026-10-05'
+    const catalog = bundledCatalogEvents(today)
+    expect(upcomingEvents(catalog, today).some((event) => event.date === '2026-05-31')).toBe(false)
+    const may = eventsInRange(catalog, '2026-05-01', '2026-05-31')
+    expect(may.some((event) => event.date === '2026-05-31' && event.kind === 'cit-annual')).toBe(true)
+    const october = monthGridRange('2026-10')
+    expect(october.start < '2026-10-01').toBe(true)
+    expect(october.end > '2026-10-31').toBe(true)
+    expect(eventsInRange(catalog, october.start, october.end).map((event) => event.date)).toContain('2026-10-15')
+  })
 })
 
 describe('ICS generate and parse', () => {
@@ -136,6 +153,16 @@ describe('one active source and notice keys', () => {
     expect(url.url).toBe('https://calendar.google.com/calendar/ical/demo/basic.ics')
     expect(readCalendarFile({ active: 'both' })).toBeNull()
     expect(readCalendarFile(url)?.active).toBe('url')
+    expect(sourceReady(emptyCalendarFile())).toBe(true)
+    expect(sourceReady(withCalendarSource('file', {}, null))).toBe(false)
+    expect(sourceReady(file)).toBe(true)
+    expect(sourceReady(withCalendarSource('url', {}, null))).toBe(false)
+    expect(sourceReady(withCalendarSource('url', { url: 'http://example.com/cal.ics' }, null))).toBe(false)
+    expect(sourceReady(url)).toBe(true)
+    expect(sourceReady(withCalendarSource('url', { url: 'webcal://example.com/cal.ics' }, null))).toBe(true)
+    expect(calendarSourceDetail(file)).toBe('custom.ics')
+    expect(calendarSourceDetail(url)).toBe('calendar.google.com')
+    expect(calendarSourceDetail(emptyCalendarFile())).toBe('')
   })
 
   test('the same occurrence does not notify twice; a later RRULE day can', () => {

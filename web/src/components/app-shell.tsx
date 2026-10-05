@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
 import { isTauri } from '@tauri-apps/api/core'
 import { NavLink, useLocation } from 'react-router'
-import { Menu, Settings } from 'lucide-react'
+import { CalendarDays, Menu, Settings } from 'lucide-react'
 
 import { REPORT_PAGES } from '@/app-pages'
 import { BrandMark } from '@/components/brand-mark'
@@ -32,9 +32,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const pageKey =
     REPORT_PAGES.find((page) => page.path === pathname)?.key
-    ?? (pathname === '/settings' ? 'settings.title' : REPORT_PAGES[0].key)
+    ?? (pathname === '/calendar' ? 'calendar.title' : pathname === '/settings' ? 'settings.title' : REPORT_PAGES[0].key)
   const brand = t('brand.short')
   const settingsDesktop = pathname === '/settings' && isTauri()
+  const hidePeriod = pathname === '/settings' || pathname === '/calendar'
+  const hideLedgerErrors = settingsDesktop || pathname === '/calendar'
   useDocumentTitle(`${t(pageKey)} - ${brand}`)
   useLayoutEffect(() => {
     window.scrollTo(0, 0)
@@ -85,6 +87,21 @@ export function AppShell({ children }: { children: ReactNode }) {
                       <span>{t(key)}</span>
                     </NavLink>
                   ))}
+                  <NavLink
+                    to="/calendar"
+                    onClick={() => setMobileOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-secondary text-secondary-foreground'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                      )
+                    }
+                  >
+                    <CalendarDays className="size-4 shrink-0" />
+                    <span>{t('calendar.title')}</span>
+                  </NavLink>
                 </nav>
               </SheetContent>
             </Sheet>
@@ -118,7 +135,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="flex items-center gap-1 sm:gap-2">
-            <TimeFilterSelector />
+            {hidePeriod ? null : <TimeFilterSelector />}
+            <NavLink
+              to="/calendar"
+              aria-label={t('calendar.title')}
+              className={({ isActive }) =>
+                cn(buttonVariants({ variant: isActive ? 'secondary' : 'ghost', size: 'icon-sm' }))
+              }
+            >
+              <CalendarDays />
+            </NavLink>
             <NavLink
               to="/settings"
               aria-label={t('settings.title')}
@@ -139,7 +165,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             : 'mx-auto flex w-full max-w-7xl flex-col gap-6 px-3 py-6 sm:px-6 sm:py-8 lg:px-8'
         }
       >
-        {settingsDesktop ? null : <LedgerErrors />}
+        {hideLedgerErrors ? null : <LedgerErrors />}
         {children}
       </main>
     </div>

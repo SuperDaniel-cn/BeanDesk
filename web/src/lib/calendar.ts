@@ -1,15 +1,17 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 
 import type { Vars } from '@/i18n/catalog'
 import type { MessageKey } from '@/i18n/locales/en'
 import {
   bundledCatalogEvents,
   calendarToday,
+  catalogWindow,
   emptyCalendarFile,
   eventsFromIcs,
   generateIcs,
   normalizeCalendarUrl,
   noticesDue,
+  parseIcs,
   presentCalendarSummary,
   readCalendarFile,
   rememberNotices,
@@ -22,12 +24,14 @@ const STORE_FILE = 'calendar.json'
 const STORE_KEY = 'calendar'
 
 export async function loadCalendar(): Promise<CalendarFile> {
+  if (!isTauri()) return emptyCalendarFile()
   const { load } = await import('@tauri-apps/plugin-store')
   const store = await load(STORE_FILE, { autoSave: false })
   return readCalendarFile(await store.get<unknown>(STORE_KEY)) ?? emptyCalendarFile()
 }
 
 export async function saveCalendar(file: CalendarFile): Promise<void> {
+  if (!isTauri()) return
   const { load } = await import('@tauri-apps/plugin-store')
   const store = await load(STORE_FILE, { autoSave: false })
   await store.set(STORE_KEY, file)
@@ -37,13 +41,14 @@ export async function saveCalendar(file: CalendarFile): Promise<void> {
 export async function resolveCalendar(
   file: CalendarFile,
   today = calendarToday(),
-): Promise<{ events: CalendarEvent[]; ics: string }> {
-  if (file.active === 'bundled') {
+): Promise<{ catalog: CalendarEvent[]; ics: string }> {
+  if (file.active === 'bundled' || !isTauri()) {
     const catalog = bundledCatalogEvents(today)
-    return { events: upcomingEvents(catalog, today), ics: generateIcs(catalog) }
+    return { catalog, ics: generateIcs(catalog) }
   }
   const ics = await loadActiveIcs(file)
-  return { events: eventsFromIcs(ics, today), ics }
+  const { start, end } = catalogWindow(today)
+  return { catalog: parseIcs(ics, start, end), ics }
 }
 
 export async function loadActiveEvents(
@@ -72,10 +77,10 @@ export function explainCalendarError(
   t: (key: MessageKey, vars?: Vars) => string,
 ): string {
   const code = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
-  if (code === 'calendar-file') return t('settings.calendarMissingFile')
-  if (code === 'file' || code === 'path' || code === 'too-large') return t('settings.calendarErrorFile')
-  if (code === 'calendar-url') return t('settings.calendarInvalidUrl')
-  if (code === 'calendar-http') return t('settings.calendarErrorUrl')
+  if (code === 'calendar-file') return t('calendar.missingFile')
+  if (code === 'file' || code === 'path' || code === 'too-large') return t('calendar.errorFile')
+  if (code === 'calendar-url') return t('calendar.invalidUrl')
+  if (code === 'calendar-http') return t('calendar.errorUrl')
   return code || t('common.errorFallback')
 }
 

@@ -90,7 +90,7 @@ Includes query templates, keyboard execution shortcuts, sortable table output, a
 ![BQL Query Console](./docs/images/en/query.png)
 
 ### Calendar subscription
-BeanDesk is a subscriber, not a reminder host. Settings → Calendar picks one source:
+BeanDesk is a subscriber, not a reminder host. The Calendar page (`/calendar`) shows a month grid and the upcoming list. Source and ICS copy live in the Subscribe calendar drawer. It picks one source:
 
 - **Bundled**: China small-scale taxpayer, quarterly statutory due dates (VAT and surcharges, CIT prepayment, CIT annual settlement). Public dates only — no accounts, amounts, or company names.
 - **Local `.ics`**: your own dates. That file does not leave this computer.
@@ -160,7 +160,7 @@ The desktop shell connects directly to Fava via Tauri's native HTTP layer, bypas
 
 ![BeanDesk Desktop Settings & Supervisor](./docs/images/en/settings.png)
 
-The desktop client runs cross-platform on macOS, Windows, and Linux, with built-in update checks and live connection logs. Calendar subscription lives on the Settings Calendar page (desktop only). Local MCP config is on Settings → General (desktop only).
+The desktop client runs cross-platform on macOS, Windows, and Linux, with built-in update checks and live connection logs. The Calendar page is in the top bar. Local-file and HTTPS sources are desktop only. Local MCP config is on Settings → General (desktop only).
 
 ## Deployment and Security Guidelines
 

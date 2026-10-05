@@ -90,7 +90,7 @@ BeanDesk 是壳，围着 **一个** Fava。账本文件在你选的文件夹里�
 ![BQL 查询控制台](./docs/images/zh/query.png)
 
 ### 日历订阅
-BeanDesk 是订阅方，不是提醒主机。设置 → 日历只选一份来源：
+BeanDesk 是订阅方，不是提醒主机。日历页（`/calendar`）是月份台历加即将到期列表。来源和复制 ICS 在「订阅日历」抽屉里。只选一份来源：
 
 - **随包装目录**：中国小规模纳税人、按季的法定公开日（增值税及附加、企业所得税预缴、年度汇算清缴）。不含科目、金额或公司名。
 - **本机 `.ics`**：个性化日期放这里。这份文件出不了这台电脑。
@@ -160,7 +160,7 @@ make desktop
 
 ![BeanDesk 桌面设置与进程托管](./docs/images/zh/settings.png)
 
-桌面客户端支持 macOS、Windows 与 Linux 跨平台运行，内置自动更新检测与连接状态监控。日历订阅在设置里的日历页（仅桌面）。本机 MCP 配置在设置 → 常规（仅桌面）。推送与 `tauri.conf.json` 版本一致的 `v` 标签后，GitHub Actions 构建 Apple Silicon、Intel、Windows、Linux x64 与 Linux Arm 的安装包，并写入草稿 Release。五个任务都成功后再发布；发布之前，已安装的客户端看不到这次更新。这个版本没有手机端。更新包用仓库里的公钥验签。macOS 安装包是临时签名，没有 Apple 公证证书时，系统打开前仍会要求确认。
+桌面客户端支持 macOS、Windows 与 Linux 跨平台运行，内置自动更新检测与连接状态监控。日历在顶栏日历页。本机文件和 HTTPS 来源仅桌面。本机 MCP 配置在设置 → 常规（仅桌面）。推送与 `tauri.conf.json` 版本一致的 `v` 标签后，GitHub Actions 构建 Apple Silicon、Intel、Windows、Linux x64 与 Linux Arm 的安装包，并写入草稿 Release。五个任务都成功后再发布；发布之前，已安装的客户端看不到这次更新。这个版本没有手机端。更新包用仓库里的公钥验签。macOS 安装包是临时签名，没有 Apple 公证证书时，系统打开前仍会要求确认。
 
 ## 部署与安全规范
 

@@ -205,7 +205,7 @@ export function DesktopGuard({ children }: { children: ReactNode }) {
   const desktop = useDesktop()
   const { pathname } = useLocation()
 
-  if (desktop.status === 'setup' && pathname !== '/settings') {
+  if (desktop.status === 'setup' && pathname !== '/settings' && pathname !== '/calendar') {
     return <Navigate to="/settings" replace />
   }
   return children

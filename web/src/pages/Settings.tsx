@@ -3,7 +3,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import {
   Archive,
-  CalendarDays,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -16,7 +15,6 @@ import {
 
 import { useAppUpdate } from '@/components/app-update'
 import { BackupSettingsPanel } from '@/components/backup-settings'
-import { CalendarSettingsPanel } from '@/components/calendar-settings'
 import { formatConnectionLog, formatConnectionLogLine, useDesktop } from '@/components/desktop-gate'
 import { LedgerErrors } from '@/components/ledger-errors'
 import { LocaleToggle } from '@/components/locale-toggle'
@@ -70,7 +68,7 @@ import {
 import { loadMcpHostConfig, mcpHostConfigText } from '@/lib/mcp-host'
 
 type Kind = LedgerConnection['kind']
-type SettingsTab = 'general' | 'simple' | 'geek' | 'backup' | 'calendar'
+type SettingsTab = 'general' | 'simple' | 'geek' | 'backup'
 type ConnectionVariant = 'simple' | 'geek'
 
 function GeneralSettings({ tauri }: { tauri: boolean }) {
@@ -110,7 +108,6 @@ export function Settings() {
     { value: 'simple' as const, icon: Plug, label: t('settings.tabSimple') },
     { value: 'geek' as const, icon: Terminal, label: t('settings.tabGeek') },
     { value: 'backup' as const, icon: Archive, label: t('settings.tabBackup') },
-    { value: 'calendar' as const, icon: CalendarDays, label: t('settings.tabCalendar') },
   ]
 
   if (!tauri) {
@@ -160,7 +157,6 @@ export function Settings() {
           {tab === 'backup' ? (
             <BackupSettingsPanel workDirectory={desktop.file?.local?.directory ?? ''} />
           ) : null}
-          {tab === 'calendar' ? <CalendarSettingsPanel /> : null}
         </div>
       </div>
     </SidebarProvider>

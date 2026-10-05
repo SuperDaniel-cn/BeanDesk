@@ -62,6 +62,21 @@ export function withCalendarSource(
   }
 }
 
+export function sourceReady(file: CalendarFile): boolean {
+  if (file.active === 'bundled') return true
+  if (file.active === 'file') return file.file.trim().length > 0
+  return normalizeCalendarUrl(file.url) !== null
+}
+
+export function calendarSourceDetail(file: CalendarFile): string {
+  if (file.active === 'file') return file.file.trim().split(/[/\\]/).pop() ?? ''
+  if (file.active === 'url') {
+    const href = normalizeCalendarUrl(file.url)
+    return href ? new URL(href).host : ''
+  }
+  return ''
+}
+
 export function noticeKey(event: CalendarEvent): string {
   return `${event.uid}:${event.date}`
 }
@@ -76,15 +91,32 @@ export function bundledCatalogEvents(today: string, yearCount = 3): CalendarEven
   return catalogDueInRange(`${year}-01-01`, `${year + yearCount - 1}-12-31`)
 }
 
+export function eventsInRange(events: CalendarEvent[], start: string, end: string): CalendarEvent[] {
+  return events
+    .filter((event) => event.date >= start && event.date <= end)
+    .sort((left, right) => left.date.localeCompare(right.date) || left.uid.localeCompare(right.uid))
+}
+
 export function upcomingEvents(
   events: CalendarEvent[],
   today: string,
   months = UPCOMING_MONTHS,
 ): CalendarEvent[] {
-  const end = addMonths(today, months)
-  return events
-    .filter((event) => event.date >= today && event.date <= end)
-    .sort((left, right) => left.date.localeCompare(right.date) || left.uid.localeCompare(right.uid))
+  return eventsInRange(events, today, addMonths(today, months))
+}
+
+export function catalogWindow(today: string): { start: string; end: string } {
+  const year = Number(today.slice(0, 4))
+  if (!Number.isFinite(year)) return { start: today, end: today }
+  return { start: `${year - 1}-01-01`, end: `${year + 2}-12-31` }
+}
+
+export function monthGridRange(yearMonth: string): { start: string; end: string } {
+  const start = `${yearMonth}-01`
+  const parsed = parseDate(start)
+  if (!parsed) return { start, end: start }
+  const last = `${yearMonth}-${pad(daysInMonth(parsed.y, parsed.m))}`
+  return { start: addDays(start, -6), end: addDays(last, 6) }
 }
 
 export function noticesDue(events: CalendarEvent[], today: string, seenUids: string[]): CalendarEvent[] {
@@ -103,8 +135,12 @@ export function eventsFromIcs(text: string, today: string, months = UPCOMING_MON
   return parseIcs(text, today, addMonths(today, months))
 }
 
+export function calendarDateKey(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
 export function calendarToday(now = new Date()): string {
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+  return calendarDateKey(now)
 }
 
 export function presentCalendarSummary(
