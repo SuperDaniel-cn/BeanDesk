@@ -46,14 +46,83 @@ pub struct S3Settings {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum StoredDest {
+    Local {
+        id: String,
+        directory: String,
+    },
+    S3 {
+        id: String,
+        access_key_id: String,
+        secret_access_key: String,
+        bucket_name: String,
+        region: String,
+        endpoint: String,
+        path_style_access: bool,
+        prefix: String,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DestInput {
+    #[serde(default)]
+    pub id: String,
+    pub kind: String,
+    #[serde(default)]
+    pub directory: String,
+    #[serde(default)]
+    pub access_key_id: String,
+    #[serde(default)]
+    pub secret_access_key: String,
+    #[serde(default)]
+    pub bucket_name: String,
+    #[serde(default)]
+    pub region: String,
+    #[serde(default)]
+    pub endpoint: String,
+    #[serde(default)]
+    pub path_style_access: bool,
+    #[serde(default)]
+    pub prefix: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DestView {
+    pub id: String,
+    pub kind: String,
+    pub directory: String,
+    pub access_key_id: String,
+    pub bucket_name: String,
+    pub region: String,
+    pub endpoint: String,
+    pub path_style_access: bool,
+    pub prefix: String,
+    pub secret_configured: bool,
+    pub location: String,
+    pub ready: bool,
+    pub missing: bool,
+    pub check_failed: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct BackupSettings {
     pub watch: bool,
     pub debounce_secs: u32,
     pub archive_auto: bool,
+    #[serde(default)]
+    pub dests: Vec<StoredDest>,
+    /// Legacy one-local / one-S3 slots. Migrated into `dests` on load.
+    #[serde(default)]
     pub archive_local: bool,
+    #[serde(default)]
     pub archive_directory: String,
+    #[serde(default)]
     pub s3_enabled: bool,
+    #[serde(default)]
     pub s3: S3Settings,
     /// Repository locations whose last integrity check failed.
     #[serde(default)]
@@ -80,6 +149,7 @@ impl Default for BackupSettings {
             watch: true,
             debounce_secs: DEFAULT_DEBOUNCE_SECS,
             archive_auto: false,
+            dests: Vec::new(),
             archive_local: false,
             archive_directory: String::new(),
             s3_enabled: false,
@@ -95,16 +165,7 @@ pub struct BackupSettingsView {
     pub watch: bool,
     pub debounce_secs: u32,
     pub archive_auto: bool,
-    pub archive_local: bool,
-    pub archive_directory: String,
-    pub s3_enabled: bool,
-    pub access_key_id: String,
-    pub bucket_name: String,
-    pub region: String,
-    pub endpoint: String,
-    pub path_style_access: bool,
-    pub prefix: String,
-    pub secret_configured: bool,
+    pub dests: Vec<DestView>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -116,19 +177,33 @@ pub struct BackupSnapshot {
 
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DestPulse {
+    pub id: String,
+    pub last_snapshot: Option<String>,
+    pub last_snapshot_at: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DestSnap {
+    pub id: String,
+    pub location: String,
+    pub last_snapshot: Option<String>,
+    pub last_snapshot_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BackupStatus {
     pub last_git_at: Option<String>,
     pub last_git_hash: Option<String>,
     pub last_snapshot: Option<String>,
     pub last_snapshot_at: Option<String>,
-    pub last_upload: Option<String>,
     pub last_error: Option<String>,
     pub watching: bool,
     pub has_key: bool,
     pub restic_ready: bool,
-    pub archive_dir_ready: bool,
-    pub archive_directory: String,
     pub app_ledger: bool,
+    pub dests: Vec<DestPulse>,
 }
 
 impl BackupSettings {
@@ -137,33 +212,16 @@ impl BackupSettings {
             watch: self.watch,
             debounce_secs: self.debounce_secs,
             archive_auto: self.archive_auto,
-            archive_local: self.archive_local,
-            archive_directory: self.archive_directory.clone(),
-            s3_enabled: self.s3_enabled,
-            access_key_id: self.s3.access_key_id.clone(),
-            bucket_name: self.s3.bucket_name.clone(),
-            region: self.s3.region.clone(),
-            endpoint: self.s3.endpoint.clone(),
-            path_style_access: self.s3.path_style_access,
-            prefix: self.s3.prefix.clone(),
-            secret_configured: !self.s3.secret_access_key.is_empty(),
+            dests: self
+                .dests
+                .iter()
+                .map(|dest| dest.view(&self.pending_checks))
+                .collect(),
         }
     }
 
-    pub fn archive_dir_ready(&self) -> bool {
-        !self.archive_local || Path::new(self.archive_directory.trim()).is_dir()
-    }
-
-    pub fn local_dest_ready(&self) -> bool {
-        self.archive_local && Path::new(self.archive_directory.trim()).is_dir()
-    }
-
-    pub fn cloud_dest_ready(&self) -> bool {
-        self.s3_enabled && s3_ready(&self.s3).is_ok()
-    }
-
     pub fn has_ready_archive_dest(&self) -> bool {
-        self.local_dest_ready() || self.cloud_dest_ready()
+        !self.ready_dests().is_empty()
     }
 
     pub fn archives_on_change(&self) -> bool {
@@ -174,19 +232,271 @@ impl BackupSettings {
         self.watch || self.archives_on_change()
     }
 
-    pub fn ready_dests(&self) -> Vec<ArchiveDest> {
-        let mut dests = Vec::new();
-        if self.local_dest_ready() {
-            dests.push(ArchiveDest::Local(PathBuf::from(
-                self.archive_directory.trim(),
-            )));
+    pub fn ready_dests(&self) -> Vec<ReadyDest> {
+        self.dests.iter().filter_map(StoredDest::archive).collect()
+    }
+
+    pub fn reject_nested_dests(&self, workdir: &Path) -> Result<(), String> {
+        for dest in &self.dests {
+            if let StoredDest::Local { directory, .. } = dest {
+                let path = Path::new(directory.trim());
+                if !directory.trim().is_empty() {
+                    reject_archive_inside_ledger(workdir, path)?;
+                }
+            }
         }
-        if let Ok(s3) = s3_ready(&self.s3)
-            && self.s3_enabled
-        {
-            dests.push(ArchiveDest::S3(s3));
+        Ok(())
+    }
+}
+
+impl StoredDest {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Local { id, .. } | Self::S3 { id, .. } => id,
         }
-        dests
+    }
+
+    pub fn location_key(&self) -> String {
+        match self {
+            Self::Local { directory, .. } => directory.trim().to_string(),
+            Self::S3 { .. } => s3_repository(&self.s3_settings().unwrap_or_default()),
+        }
+    }
+
+    pub(crate) fn local(id: String, directory: &str) -> Self {
+        Self::Local {
+            id,
+            directory: directory.to_string(),
+        }
+    }
+
+    pub(crate) fn from_s3(id: String, s3: S3Settings) -> Self {
+        Self::S3 {
+            id,
+            access_key_id: s3.access_key_id,
+            secret_access_key: s3.secret_access_key,
+            bucket_name: s3.bucket_name,
+            region: s3.region,
+            endpoint: s3.endpoint,
+            path_style_access: s3.path_style_access,
+            prefix: s3.prefix,
+        }
+    }
+
+    fn s3_settings(&self) -> Option<S3Settings> {
+        match self {
+            Self::S3 {
+                access_key_id,
+                secret_access_key,
+                bucket_name,
+                region,
+                endpoint,
+                path_style_access,
+                prefix,
+                ..
+            } => Some(S3Settings {
+                access_key_id: access_key_id.clone(),
+                secret_access_key: secret_access_key.clone(),
+                bucket_name: bucket_name.clone(),
+                region: region.clone(),
+                endpoint: endpoint.clone(),
+                path_style_access: *path_style_access,
+                prefix: prefix.clone(),
+            }),
+            Self::Local { .. } => None,
+        }
+    }
+
+    fn archive(&self) -> Option<ReadyDest> {
+        let dest = match self {
+            Self::Local { directory, .. } => {
+                let path = PathBuf::from(directory.trim());
+                path.is_dir().then_some(ArchiveDest::Local(path))?
+            }
+            Self::S3 { .. } => self
+                .s3_settings()
+                .and_then(|s3| s3_ready(&s3).ok().map(ArchiveDest::S3))?,
+        };
+        Some(ReadyDest {
+            id: self.id().to_string(),
+            dest,
+        })
+    }
+
+    fn view(&self, pending_checks: &[String]) -> DestView {
+        match self {
+            Self::Local { id, directory } => {
+                let directory = directory.trim().to_string();
+                let missing = !Path::new(&directory).is_dir();
+                DestView {
+                    id: id.clone(),
+                    kind: "local".into(),
+                    directory: directory.clone(),
+                    access_key_id: String::new(),
+                    bucket_name: String::new(),
+                    region: String::new(),
+                    endpoint: String::new(),
+                    path_style_access: true,
+                    prefix: String::new(),
+                    secret_configured: false,
+                    location: directory.clone(),
+                    ready: !missing,
+                    missing,
+                    check_failed: pending_checks.iter().any(|item| item == &directory),
+                }
+            }
+            Self::S3 {
+                id,
+                access_key_id,
+                bucket_name,
+                region,
+                endpoint,
+                path_style_access,
+                prefix,
+                secret_access_key,
+                ..
+            } => {
+                let s3 = self.s3_settings().unwrap_or_default();
+                let ready = s3_ready(&s3).is_ok();
+                let location = s3_repository(&s3);
+                DestView {
+                    id: id.clone(),
+                    kind: "s3".into(),
+                    directory: String::new(),
+                    access_key_id: access_key_id.clone(),
+                    bucket_name: bucket_name.clone(),
+                    region: region.clone(),
+                    endpoint: endpoint.clone(),
+                    path_style_access: *path_style_access,
+                    prefix: prefix.clone(),
+                    secret_configured: !secret_access_key.is_empty(),
+                    location: location.clone(),
+                    ready,
+                    missing: false,
+                    check_failed: pending_checks.iter().any(|item| item == &location),
+                }
+            }
+        }
+    }
+}
+
+pub fn dest_pulses(settings: &BackupSettings, snaps: &[DestSnap]) -> Vec<DestPulse> {
+    settings
+        .dests
+        .iter()
+        .map(|dest| {
+            let location = dest.location_key();
+            let snap = snaps
+                .iter()
+                .find(|item| item.id == dest.id() && item.location == location);
+            DestPulse {
+                id: dest.id().to_string(),
+                last_snapshot: snap.and_then(|item| item.last_snapshot.clone()),
+                last_snapshot_at: snap.and_then(|item| item.last_snapshot_at.clone()),
+            }
+        })
+        .collect()
+}
+
+pub fn new_dest_id(offset: u128) -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or(0);
+    format!("{now:x}{offset:x}")
+}
+
+/// Move the old one-local / one-S3 slots into `dests` when the list is empty.
+pub fn migrate_legacy_dests(settings: &mut BackupSettings) -> bool {
+    if !settings.dests.is_empty() {
+        return false;
+    }
+    let mut dests = Vec::new();
+    if settings.archive_local {
+        let directory = settings.archive_directory.trim();
+        if !directory.is_empty() {
+            dests.push(StoredDest::local(new_dest_id(0), directory));
+        }
+    }
+    if settings.s3_enabled {
+        dests.push(StoredDest::from_s3(new_dest_id(1), settings.s3.clone()));
+    }
+    if dests.is_empty() {
+        return false;
+    }
+    settings.dests = dests;
+    settings.archive_local = false;
+    settings.archive_directory.clear();
+    settings.s3_enabled = false;
+    settings.s3 = S3Settings::default();
+    true
+}
+
+pub fn dests_from_input(
+    inputs: Vec<DestInput>,
+    previous: &[StoredDest],
+) -> Result<Vec<StoredDest>, String> {
+    let mut dests = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (index, input) in inputs.into_iter().enumerate() {
+        let id = if input.id.trim().is_empty() {
+            new_dest_id(index as u128)
+        } else {
+            input.id.trim().to_string()
+        };
+        if !seen.insert(id.clone()) {
+            return Err("archive-dest".to_string());
+        }
+        match input.kind.as_str() {
+            "local" => {
+                let directory = input.directory.trim();
+                if directory.is_empty() {
+                    return Err("archive-dir".to_string());
+                }
+                dests.push(StoredDest::local(id, directory));
+            }
+            "s3" => {
+                let previous_secret = previous.iter().find_map(|dest| match dest {
+                    StoredDest::S3 {
+                        id: existing,
+                        secret_access_key,
+                        ..
+                    } if existing == &id => Some(secret_access_key.clone()),
+                    _ => None,
+                });
+                let secret = if input.secret_access_key.is_empty() {
+                    previous_secret.unwrap_or_default()
+                } else {
+                    input.secret_access_key
+                };
+                dests.push(StoredDest::from_s3(
+                    id,
+                    S3Settings {
+                        access_key_id: input.access_key_id,
+                        secret_access_key: secret,
+                        bucket_name: input.bucket_name,
+                        region: input.region,
+                        endpoint: input.endpoint,
+                        path_style_access: input.path_style_access,
+                        prefix: input.prefix,
+                    },
+                ));
+            }
+            _ => return Err("archive-dest".to_string()),
+        }
+    }
+    Ok(dests)
+}
+
+#[derive(Clone, Debug)]
+pub struct ReadyDest {
+    pub id: String,
+    pub dest: ArchiveDest,
+}
+
+impl ReadyDest {
+    pub fn location(&self) -> String {
+        self.dest.location()
     }
 }
 
@@ -464,16 +774,132 @@ mod tests {
         settings.archive_auto = true;
         assert!(!settings.archives_on_change());
         assert!(!settings.should_watch());
-        settings.archive_local = true;
-        assert!(!settings.archives_on_change());
-        assert!(!settings.should_watch());
-        settings.archive_directory = "/tmp".to_string();
-        assert!(settings.local_dest_ready());
+        settings.dests.push(StoredDest::local("one".into(), "/tmp"));
+        assert!(settings.has_ready_archive_dest());
         assert!(settings.archives_on_change());
         assert!(settings.should_watch());
-        settings.archive_directory = format!("/tmp/beandesk-missing-ready-{}", std::process::id());
-        assert!(!settings.archive_dir_ready());
+        settings.dests = vec![StoredDest::local(
+            "gone".into(),
+            &format!("/tmp/beandesk-missing-ready-{}", std::process::id()),
+        )];
+        assert!(!settings.has_ready_archive_dest());
         assert!(!settings.archives_on_change());
+    }
+
+    #[test]
+    fn legacy_slots_move_into_dests_once() {
+        let mut settings = BackupSettings {
+            archive_local: true,
+            archive_directory: "/tmp/out".into(),
+            s3_enabled: true,
+            s3: S3Settings {
+                access_key_id: "ak".into(),
+                secret_access_key: "sk".into(),
+                bucket_name: "books".into(),
+                endpoint: "https://example.r2.cloudflarestorage.com".into(),
+                ..S3Settings::default()
+            },
+            ..BackupSettings::default()
+        };
+        assert!(migrate_legacy_dests(&mut settings));
+        assert_eq!(settings.dests.len(), 2);
+        assert!(!settings.archive_local);
+        assert!(settings.archive_directory.is_empty());
+        assert!(!settings.s3_enabled);
+        assert!(settings.s3.secret_access_key.is_empty());
+        assert!(!migrate_legacy_dests(&mut settings));
+        assert_eq!(settings.dests.len(), 2);
+        assert_eq!(
+            settings
+                .ready_dests()
+                .iter()
+                .filter(|dest| matches!(dest.dest, ArchiveDest::S3(_)))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn dest_pulses_keep_a_snap_only_for_the_same_location() {
+        let mut settings = BackupSettings::default();
+        settings.dests = vec![StoredDest::local("local".into(), "/tmp/out")];
+        settings.pending_checks = vec![settings.dests[0].location_key()];
+        let pulses = dest_pulses(
+            &settings,
+            &[DestSnap {
+                id: "local".into(),
+                location: "/tmp/out".into(),
+                last_snapshot: Some("abc".into()),
+                last_snapshot_at: Some("2026-10-05T00:00:00Z".into()),
+            }],
+        );
+        assert_eq!(pulses[0].last_snapshot.as_deref(), Some("abc"));
+        assert!(settings.view().dests[0].check_failed);
+        settings.dests = vec![StoredDest::local("local".into(), "/tmp/moved")];
+        let moved = dest_pulses(
+            &settings,
+            &[DestSnap {
+                id: "local".into(),
+                location: "/tmp/out".into(),
+                last_snapshot: Some("abc".into()),
+                last_snapshot_at: Some("2026-10-05T00:00:00Z".into()),
+            }],
+        );
+        assert!(moved[0].last_snapshot.is_none());
+    }
+
+    #[test]
+    fn dests_keep_a_secret_when_the_input_omits_it() {
+        let previous = vec![StoredDest::from_s3(
+            "cloud".into(),
+            S3Settings {
+                secret_access_key: "kept".into(),
+                access_key_id: "ak".into(),
+                bucket_name: "books".into(),
+                endpoint: "https://example.r2.cloudflarestorage.com".into(),
+                ..S3Settings::default()
+            },
+        )];
+        let next = dests_from_input(
+            vec![DestInput {
+                id: "cloud".into(),
+                kind: "s3".into(),
+                access_key_id: "ak2".into(),
+                secret_access_key: String::new(),
+                bucket_name: "books".into(),
+                endpoint: "https://example.r2.cloudflarestorage.com".into(),
+                path_style_access: true,
+                ..empty_dest_input()
+            }],
+            &previous,
+        )
+        .unwrap();
+        match &next[0] {
+            StoredDest::S3 {
+                secret_access_key,
+                access_key_id,
+                ..
+            } => {
+                assert_eq!(secret_access_key, "kept");
+                assert_eq!(access_key_id, "ak2");
+            }
+            StoredDest::Local { .. } => panic!("expected s3"),
+        }
+    }
+
+    fn empty_dest_input() -> DestInput {
+        DestInput {
+            id: String::new(),
+            kind: String::new(),
+            directory: String::new(),
+            access_key_id: String::new(),
+            secret_access_key: String::new(),
+            bucket_name: String::new(),
+            region: String::new(),
+            endpoint: String::new(),
+            path_style_access: true,
+            prefix: String::new(),
+        }
     }
 
     #[test]
@@ -530,13 +956,36 @@ mod tests {
     fn settings_round_trip() {
         let settings = BackupSettings {
             archive_auto: true,
-            archive_local: true,
-            archive_directory: "/tmp/out".to_string(),
+            dests: vec![StoredDest::local("one".into(), "/tmp/out")],
             ..BackupSettings::default()
         };
         let parsed: BackupSettings =
             serde_json::from_value(serde_json::to_value(&settings).unwrap()).unwrap();
         assert!(parsed.archive_auto);
-        assert_eq!(parsed.archive_directory, "/tmp/out");
+        assert_eq!(parsed.dests.len(), 1);
+    }
+
+    #[test]
+    fn old_slot_files_still_deserialize() {
+        let value = serde_json::json!({
+            "watch": true,
+            "debounceSecs": 5,
+            "archiveAuto": false,
+            "archiveLocal": true,
+            "archiveDirectory": "/tmp/out",
+            "s3Enabled": false,
+            "s3": {
+                "accessKeyId": "",
+                "secretAccessKey": "",
+                "bucketName": "",
+                "region": "",
+                "endpoint": "",
+                "pathStyleAccess": true,
+                "prefix": ""
+            }
+        });
+        let parsed: BackupSettings = serde_json::from_value(value).unwrap();
+        assert!(parsed.archive_local);
+        assert!(parsed.dests.is_empty());
     }
 }

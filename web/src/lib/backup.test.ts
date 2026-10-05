@@ -8,12 +8,20 @@ import {
   backupBannerError,
   backupErrorCode,
   canWriteArchive,
-  destFolderMissing,
+  destDraftReady,
+  destPath,
+  destsForSave,
+  destStatus,
+  destTitle,
+  destToDraft,
   emptyBackupSettings,
+  emptyDestDraft,
   explainBackupError,
   presentBackupRepo,
   presentBackupSnapshot,
+  presentBackupTime,
   validateS3Endpoint,
+  type BackupDestView,
 } from './backup'
 
 describe('validateS3Endpoint', () => {
@@ -31,68 +39,128 @@ describe('validateS3Endpoint', () => {
 })
 
 describe('backup dests', () => {
-  const ready = { hasKey: true, resticReady: true, archiveDirReady: false, archiveDirectory: '' }
+  const ready = { hasKey: true, resticReady: true }
 
-  test('an empty dest is incomplete, not a vanished folder', () => {
-    const settings = emptyBackupSettings()
-    expect(destFolderMissing(settings, { archiveDirReady: false, archiveDirectory: '' })).toBe(false)
+  function dest(patch: Partial<BackupDestView>): BackupDestView {
+    return {
+      id: 'one',
+      kind: 'local',
+      directory: '/backups',
+      accessKeyId: '',
+      bucketName: '',
+      region: '',
+      endpoint: '',
+      pathStyleAccess: true,
+      prefix: '',
+      secretConfigured: false,
+      location: '/backups',
+      ready: true,
+      missing: false,
+      checkFailed: false,
+      ...patch,
+    }
+  }
+
+  test('a draft stays off disk until local path or S3 fields are complete', () => {
+    expect(destDraftReady(emptyDestDraft('local'))).toBe(false)
+    expect(destDraftReady({ ...emptyDestDraft('local'), directory: '/backups' })).toBe(true)
+    expect(destDraftReady(emptyDestDraft('s3'))).toBe(false)
     expect(
-      destFolderMissing(
-        { ...settings, archiveLocal: true },
-        { archiveDirReady: false, archiveDirectory: '' },
-      ),
-    ).toBe(false)
-    expect(
-      destFolderMissing(
-        { ...settings, archiveLocal: true, archiveDirectory: '/backups' },
-        { archiveDirReady: false, archiveDirectory: '' },
-      ),
-    ).toBe(false)
-    expect(
-      destFolderMissing(
-        { ...settings, archiveLocal: true, archiveDirectory: '/backups' },
-        { archiveDirReady: false, archiveDirectory: '/backups' },
-      ),
+      destDraftReady({
+        ...emptyDestDraft('s3'),
+        endpoint: 'https://example.r2.cloudflarestorage.com',
+        accessKeyId: 'ak',
+        secretAccessKey: 'sk',
+        bucketName: 'books',
+      }),
     ).toBe(true)
-    expect(
-      destFolderMissing(
-        { ...settings, archiveLocal: true, archiveDirectory: '/backups' },
-        { archiveDirReady: true, archiveDirectory: '/backups' },
-      ),
-    ).toBe(false)
   })
 
-  test('a backup needs a key, restic, and at least one dest', () => {
+  test('an edit draft can keep the stored secret', () => {
+    expect(
+      destDraftReady({
+        ...destToDraft(
+          dest({
+            id: 'cloud',
+            kind: 's3',
+            accessKeyId: 'ak',
+            bucketName: 'books',
+            endpoint: 'https://example.r2.cloudflarestorage.com',
+            secretConfigured: true,
+          }),
+        ),
+        secretAccessKey: '',
+      }),
+    ).toBe(true)
+  })
+
+  test('saving dests omits secrets already stored on a row', () => {
+    const saved = destsForSave([dest({ id: 'keep', kind: 's3', accessKeyId: 'ak' })])
+    expect(saved[0]?.secretAccessKey).toBe('')
+    expect(saved[0]?.id).toBe('keep')
+  })
+
+  test('saving dests replaces a row with the same id', () => {
+    const saved = destsForSave(
+      [dest({ id: 'keep', directory: '/old' })],
+      [
+        {
+          id: 'keep',
+          kind: 'local',
+          directory: '/new',
+          accessKeyId: '',
+          secretAccessKey: '',
+          bucketName: '',
+          region: '',
+          endpoint: '',
+          pathStyleAccess: true,
+          prefix: '',
+        },
+      ],
+    )
+    expect(saved).toHaveLength(1)
+    expect(saved[0]?.directory).toBe('/new')
+  })
+
+  test('card copy uses a short title and path, not the restic URL', () => {
+    const cloud = dest({
+      kind: 's3',
+      bucketName: 'opc-ledger-backup',
+      prefix: 'beandesk',
+      endpoint: 'https://fab90.r2.cloudflarestorage.com',
+      location: 's3:https://fab90.r2.cloudflarestorage.com/opc-ledger-backup/beandesk',
+    })
+    expect(destTitle(cloud)).toBe('opc-ledger-backup/beandesk')
+    expect(destPath(cloud)).toBe('fab90.r2.cloudflarestorage.com/opc-ledger-backup/beandesk')
+    expect(destPath(cloud).startsWith('s3:')).toBe(false)
+    expect(destTitle(dest({ directory: '/Users/me/Backups/ledger' }))).toBe('ledger')
+    expect(destStatus(dest({ missing: true, ready: false }))).toBe('missing')
+    expect(destStatus(dest({ ready: true, checkFailed: true }))).toBe('check-pending')
+    expect(presentBackupTime('2026-10-05T00:37:38+08:00')).toBe('2026-10-05 00:37')
+    expect(presentBackupTime('')).toBe('')
+  })
+
+  test('a backup needs a key, restic, and at least one ready dest', () => {
     const settings = emptyBackupSettings()
     expect(archiveBlockReason(settings, { ...ready, hasKey: false })).toBe('backup-key-missing')
     expect(archiveBlockReason(settings, { ...ready, resticReady: false })).toBe('missing-restic')
     expect(archiveBlockReason(settings, ready)).toBe('archive-dest')
+    expect(canWriteArchive({ ...settings, dests: [dest({ ready: true })] }, ready)).toBe(true)
     expect(
-      canWriteArchive(
-        { ...settings, archiveLocal: true, archiveDirectory: '/backups' },
-        { ...ready, archiveDirReady: true, archiveDirectory: '/backups' },
-      ),
-    ).toBe(true)
+      archiveBlockReason({ ...settings, dests: [dest({ ready: false, missing: true })] }, ready),
+    ).toBe('archive-dir-gone')
     expect(
       archiveBlockReason(
-        { ...settings, archiveAuto: true, archiveLocal: true },
+        { ...settings, dests: [dest({ ready: false, directory: '', missing: false })] },
         ready,
       ),
     ).toBe('archive-dir')
     expect(
       canWriteArchive(
-        { ...settings, archiveAuto: true, archiveLocal: true, archiveDirectory: '/backups' },
-        { ...ready, archiveDirReady: false, archiveDirectory: '' },
+        { ...settings, dests: [dest({ kind: 's3', ready: true, directory: '', location: 's3:https://x/b' })] },
+        ready,
       ),
     ).toBe(true)
-    expect(
-      archiveBlockReason(
-        { ...settings, archiveAuto: true, archiveLocal: true, archiveDirectory: '/backups' },
-        { ...ready, archiveDirReady: false, archiveDirectory: '/backups' },
-      ),
-    ).toBe('archive-dir-gone')
-    expect(archiveBlockReason({ ...settings, archiveAuto: true }, ready)).toBe('archive-dest')
-    expect(canWriteArchive({ ...settings, archiveAuto: true, s3Enabled: true }, ready)).toBe(true)
   })
 
   test('restore labels keep the dest kind and drop the long URL', () => {

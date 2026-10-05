@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { invoke } from '@tauri-apps/api/core'
-import { FolderOpen } from 'lucide-react'
+import { FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Dialog,
@@ -14,6 +22,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from '@/components/ui/empty'
 import {
   Field,
   FieldContent,
@@ -36,20 +50,35 @@ import {
 } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Switch } from '@/components/ui/switch'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useI18n } from '@/i18n'
 import {
   archiveBlockReason,
   archiveNestsLedger,
   backupBannerError,
   canWriteArchive,
-  destFolderMissing,
+  destDraftReady,
+  destPath,
+  destPulseOf,
+  destStatus,
+  destsForSave,
+  destTitle,
+  destToDraft,
+  draftToSave,
   emptyBackupSettings,
   emptyBackupStatus,
+  emptyDestDraft,
   explainBackupError,
   presentBackupRepo,
   presentBackupSnapshot,
+  presentBackupTime,
   validateS3Endpoint,
+  type BackupDestDraft,
+  type BackupDestKind,
+  type BackupDestSave,
+  type BackupDestView,
   type BackupSettings,
+  type DestPulse,
   type RepoSnapshots,
   type BackupStatus,
 } from '@/lib/backup'
@@ -59,12 +88,17 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
   const [settings, setSettings] = useState(emptyBackupSettings)
   const [status, setStatus] = useState(emptyBackupStatus)
   const [statusLoaded, setStatusLoaded] = useState(false)
-  const [secret, setSecret] = useState('')
   const [passphrase, setPassphrase] = useState('')
-  const [work, setWork] = useState<'backup' | 'restore' | 'list' | 'pick' | 'key' | 's3' | null>(null)
+  const [work, setWork] = useState<
+    'backup' | 'restore' | 'list' | 'pick' | 'key' | 's3' | 'add' | 'edit' | 'remove' | null
+  >(null)
   const [repos, setRepos] = useState<RepoSnapshots[] | null>(null)
   const [restoreRepo, setRestoreRepo] = useState('')
   const [restoreSnapshot, setRestoreSnapshot] = useState('')
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState<BackupDestDraft>(emptyDestDraft)
+  const [removeId, setRemoveId] = useState<string | null>(null)
   const busy = work !== null
   const blocking = work === 'backup' || work === 'restore' || work === 'list'
   const settingsRef = useRef(settings)
@@ -72,25 +106,32 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
   const ready = Boolean(workDirectory)
   const foreign = statusLoaded && ready && !status.appLedger
   const locked = !ready || busy || foreign
-  const destMissing = destFolderMissing(settings, status)
   const hasKey = ready && status.hasKey
   const canArchive = ready && !busy && !foreign && canWriteArchive(settings, status)
-  const endpointInvalid = Boolean(settings.endpoint.trim() && !validateS3Endpoint(settings.endpoint))
-  const destNested = settings.archiveLocal && archiveNestsLedger(workDirectory, settings.archiveDirectory)
   const folderError = backupBannerError(status.lastError, status.appLedger)
+  const draftNested =
+    draft.kind === 'local' && archiveNestsLedger(workDirectory, draft.directory)
+  const draftEndpointInvalid = Boolean(
+    draft.kind === 's3' && draft.endpoint.trim() && !validateS3Endpoint(draft.endpoint),
+  )
+  const canConfirmDraft = destDraftReady(draft) && !draftNested && !draftEndpointInvalid
+  const editing = editingId !== null
+  const removing = settings.dests.find((dest) => dest.id === removeId) ?? null
 
   async function refreshStatus() {
     const next = await invoke<BackupStatus>('backup_status')
-    setStatus(next)
+    const saved = { ...emptyBackupStatus(), ...next }
+    setStatus(saved)
     setStatusLoaded(true)
-    return next
+    return saved
   }
 
   useEffect(() => {
     void invoke<BackupSettings>('load_backup_settings')
       .then((next) => {
-        settingsRef.current = next
-        setSettings(next)
+        const saved = { ...emptyBackupSettings(), ...next }
+        settingsRef.current = saved
+        setSettings(saved)
       })
       .catch(() => undefined)
     void refreshStatus().catch(() => undefined)
@@ -113,16 +154,17 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
     return run
   }
 
-  async function persist(next: BackupSettings, secretOverride = secret) {
-    if (next.s3Enabled && next.endpoint.trim() && !validateS3Endpoint(next.endpoint)) {
-      throw new Error('s3-endpoint')
-    }
+  async function persist(next: BackupSettings, extra: BackupDestSave[] = []) {
     const saved = await invoke<BackupSettings>('save_backup_settings', {
-      input: { ...next, secretAccessKey: secretOverride },
+      input: {
+        watch: next.watch,
+        debounceSecs: next.debounceSecs,
+        archiveAuto: next.archiveAuto,
+        dests: destsForSave(next.dests, extra),
+      },
     })
     settingsRef.current = saved
     setSettings(saved)
-    setSecret('')
     await refreshStatus().catch(() => undefined)
     return saved
   }
@@ -262,20 +304,78 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
     }
   }
 
-  async function pickArchiveDirectory() {
+  function closeEditor() {
+    if (busy) return
+    setEditorOpen(false)
+    setEditingId(null)
+    setDraft(emptyDestDraft())
+  }
+
+  function openAdd() {
+    setEditingId(null)
+    setDraft(emptyDestDraft('local'))
+    setEditorOpen(true)
+  }
+
+  function openEdit(dest: BackupDestView) {
+    setEditingId(dest.id)
+    setDraft(destToDraft(dest))
+    setEditorOpen(true)
+  }
+
+  async function pickDraftDirectory() {
     const { open } = await import('@tauri-apps/plugin-dialog')
     const picked = await open({
       directory: true,
       multiple: false,
       title: t('settings.browse'),
-      defaultPath: settings.archiveDirectory || undefined,
+      defaultPath: draft.directory || undefined,
     })
     if (typeof picked !== 'string') return
     if (archiveNestsLedger(workDirectory, picked)) {
       toast.error(explainBackupError('archive-nested', t))
       return
     }
-    update({ archiveDirectory: picked })
+    setDraft((current) => ({ ...current, directory: picked }))
+  }
+
+  async function confirmDest() {
+    if (!canConfirmDraft || locked) return
+    const wasEdit = editing
+    setWork(wasEdit ? 'edit' : 'add')
+    try {
+      await enqueue(async () => {
+        await persist(settingsRef.current, [draftToSave(draft)])
+      })
+      setEditorOpen(false)
+      setEditingId(null)
+      setDraft(emptyDestDraft())
+      toast.success(t(wasEdit ? 'settings.backupDestSaved' : 'settings.backupDestAdded'))
+    } catch (caught) {
+      fail(caught)
+    } finally {
+      setWork(null)
+    }
+  }
+
+  async function confirmRemove() {
+    if (!removing) return
+    setWork('remove')
+    try {
+      const next = {
+        ...settingsRef.current,
+        dests: settingsRef.current.dests.filter((dest) => dest.id !== removing.id),
+      }
+      await enqueue(async () => {
+        await persist(next)
+      })
+      setRemoveId(null)
+      toast.success(t('settings.backupDestRemoved'))
+    } catch (caught) {
+      fail(caught)
+    } finally {
+      setWork(null)
+    }
   }
 
   function debounceField(id: string) {
@@ -297,17 +397,25 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
     )
   }
 
-  async function testS3() {
-    if (settings.endpoint.trim() && !validateS3Endpoint(settings.endpoint)) {
+  async function testDraftS3() {
+    if (draft.endpoint.trim() && !validateS3Endpoint(draft.endpoint)) {
       toast.error(t('settings.backupErrorS3Endpoint'))
       return
     }
     setWork('s3')
     try {
-      await enqueue(async () => {
-        await persist(settingsRef.current)
+      await invoke('backup_test_s3', {
+        input: {
+          accessKeyId: draft.accessKeyId,
+          secretAccessKey: draft.secretAccessKey,
+          bucketName: draft.bucketName,
+          region: draft.region,
+          endpoint: draft.endpoint,
+          pathStyleAccess: draft.pathStyleAccess,
+          prefix: draft.prefix,
+          destId: draft.id,
+        },
       })
-      await invoke('backup_test_s3')
       toast.success(t('settings.backupS3TestOk'))
     } catch (caught) {
       fail(caught)
@@ -374,6 +482,178 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
             >
               {work === 'restore' ? <Spinner data-icon="inline-start" /> : null}
               {t('settings.backupRestoreGo')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={editorOpen} onOpenChange={(open) => !open && closeEditor()}>
+        <DialogContent className="flex max-h-[min(40rem,calc(100dvh-2rem))] min-w-0 flex-col overflow-hidden sm:max-w-lg">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>
+              {editing ? t('settings.backupEditDest') : t('settings.backupAddDest')}
+            </DialogTitle>
+            <DialogDescription>{t('settings.backupAddDestHint')}</DialogDescription>
+          </DialogHeader>
+          <FieldGroup className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <Field>
+              <FieldLabel>{t('settings.backupDestKind')}</FieldLabel>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                spacing={0}
+                disabled={editing}
+                value={draft.kind}
+                onValueChange={(value) => {
+                  if (value === 'local' || value === 's3') {
+                    setDraft(emptyDestDraft(value as BackupDestKind))
+                  }
+                }}
+              >
+                <ToggleGroupItem value="local" className="px-3">
+                  {t('settings.backupArchiveLocal')}
+                </ToggleGroupItem>
+                <ToggleGroupItem value="s3" className="px-3">
+                  {t('settings.backupArchiveCloud')}
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </Field>
+            {draft.kind === 'local' ? (
+              <Field data-invalid={draftNested || undefined}>
+                <FieldLabel htmlFor="backup-add-dir">{t('settings.backupArchiveDirectory')}</FieldLabel>
+                <div className="flex w-full gap-2">
+                  <Input
+                    id="backup-add-dir"
+                    value={draft.directory}
+                    readOnly
+                    placeholder={t('settings.browse')}
+                    className="min-w-0 flex-1 font-mono"
+                    aria-invalid={draftNested || undefined}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={locked}
+                    className="shrink-0"
+                    onClick={() => void pickDraftDirectory()}
+                  >
+                    <FolderOpen data-icon="inline-start" />
+                    {t('settings.browse')}
+                  </Button>
+                </div>
+                {draftNested ? (
+                  <FieldError>{t('settings.backupErrorArchiveNested')}</FieldError>
+                ) : null}
+              </Field>
+            ) : (
+              <>
+                <FieldDescription>{t('settings.backupS3Hint')}</FieldDescription>
+                <Field data-invalid={draftEndpointInvalid || undefined}>
+                  <FieldLabel htmlFor="backup-add-endpoint">{t('settings.backupS3Endpoint')}</FieldLabel>
+                  <Input
+                    id="backup-add-endpoint"
+                    value={draft.endpoint}
+                    spellCheck={false}
+                    aria-invalid={draftEndpointInvalid || undefined}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, endpoint: event.target.value }))
+                    }
+                  />
+                  {draftEndpointInvalid ? (
+                    <FieldError>{t('settings.backupErrorS3Endpoint')}</FieldError>
+                  ) : null}
+                </Field>
+                <DraftField
+                  id="backup-add-bucket"
+                  label={t('settings.backupS3Bucket')}
+                  value={draft.bucketName}
+                  onChange={(bucketName) => setDraft((current) => ({ ...current, bucketName }))}
+                />
+                <DraftField
+                  id="backup-add-region"
+                  label={t('settings.backupS3Region')}
+                  value={draft.region}
+                  onChange={(region) => setDraft((current) => ({ ...current, region }))}
+                />
+                <DraftField
+                  id="backup-add-access"
+                  label={t('settings.backupS3AccessKey')}
+                  value={draft.accessKeyId}
+                  onChange={(accessKeyId) => setDraft((current) => ({ ...current, accessKeyId }))}
+                />
+                <Field>
+                  <FieldLabel htmlFor="backup-add-secret">{t('settings.backupS3Secret')}</FieldLabel>
+                  <Input
+                    id="backup-add-secret"
+                    type="password"
+                    value={draft.secretAccessKey}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, secretAccessKey: event.target.value }))
+                    }
+                  />
+                </Field>
+                <Field orientation="horizontal">
+                  <FieldLabel htmlFor="backup-add-path">{t('settings.backupS3PathStyle')}</FieldLabel>
+                  <Switch
+                    id="backup-add-path"
+                    checked={draft.pathStyleAccess}
+                    onCheckedChange={(pathStyleAccess) =>
+                      setDraft((current) => ({ ...current, pathStyleAccess }))
+                    }
+                  />
+                </Field>
+                <DraftField
+                  id="backup-add-prefix"
+                  label={t('settings.backupS3Prefix')}
+                  value={draft.prefix}
+                  onChange={(prefix) => setDraft((current) => ({ ...current, prefix }))}
+                />
+                <Field>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={locked || !canConfirmDraft}
+                    onClick={() => void testDraftS3()}
+                  >
+                    {work === 's3' ? <Spinner data-icon="inline-start" /> : null}
+                    {t('settings.backupS3Test')}
+                  </Button>
+                </Field>
+              </>
+            )}
+          </FieldGroup>
+          <DialogFooter className="shrink-0">
+            <Button type="button" variant="outline" disabled={busy} onClick={closeEditor}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={locked || !canConfirmDraft}
+              onClick={() => void confirmDest()}
+            >
+              {work === 'add' || work === 'edit' ? <Spinner data-icon="inline-start" /> : null}
+              {editing ? t('settings.backupDestSave') : t('settings.backupDestAdd')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={removeId !== null} onOpenChange={(open) => !open && !busy && setRemoveId(null)}>
+        <DialogContent className="min-w-0 overflow-hidden sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('settings.backupDestRemoveTitle')}</DialogTitle>
+            <DialogDescription>{t('settings.backupDestRemoveBody')}</DialogDescription>
+          </DialogHeader>
+          {removing ? (
+            <FieldDescription className="font-mono break-all">
+              {presentBackupRepo(removing.location, t)}
+            </FieldDescription>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => setRemoveId(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="button" disabled={locked} onClick={() => void confirmRemove()}>
+              {work === 'remove' ? <Spinner data-icon="inline-start" /> : null}
+              {t('settings.backupDestRemove')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -539,148 +819,43 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
               <FieldLabel>{t('settings.backupKeep')}</FieldLabel>
               <FieldDescription>{t('settings.backupKeepHint')}</FieldDescription>
             </Field>
-            <Field orientation="horizontal" data-disabled={locked || undefined}>
-              <FieldLabel htmlFor="backup-local">{t('settings.backupArchiveLocal')}</FieldLabel>
-              <Switch
-                id="backup-local"
-                checked={settings.archiveLocal}
-                disabled={locked}
-                onCheckedChange={(archiveLocal) => update({ archiveLocal })}
-              />
-            </Field>
-            <Field
-              data-disabled={locked || undefined}
-              data-invalid={destNested || destMissing || undefined}
-            >
-              <FieldLabel htmlFor="backup-archive-dir">
-                {t('settings.backupArchiveDirectory')}
-              </FieldLabel>
-              <div className="flex w-full gap-2">
-                <Input
-                  id="backup-archive-dir"
-                  value={settings.archiveDirectory}
-                  readOnly
-                  placeholder={t('settings.browse')}
-                  className="min-w-0 flex-1 font-mono"
-                  aria-invalid={destNested || destMissing || undefined}
-                />
+            <Field>
+              <div className="flex items-center justify-between gap-2">
+                <FieldLabel>{t('settings.backupDests')}</FieldLabel>
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   disabled={locked}
-                  className="shrink-0"
-                  onClick={() => void pickArchiveDirectory()}
+                  onClick={openAdd}
                 >
-                  <FolderOpen data-icon="inline-start" />
-                  {t('settings.browse')}
+                  <Plus data-icon="inline-start" />
+                  {t('settings.backupAddDest')}
                 </Button>
               </div>
-              {destNested ? (
-                <FieldError>{t('settings.backupErrorArchiveNested')}</FieldError>
-              ) : destMissing ? (
-                <FieldError>{t('settings.backupErrorArchiveDirGone')}</FieldError>
-              ) : null}
+              <FieldDescription>{t('settings.backupDestsHint')}</FieldDescription>
             </Field>
-            <Field orientation="horizontal" data-disabled={locked || undefined}>
-              <FieldContent>
-                <FieldLabel htmlFor="backup-cloud">{t('settings.backupArchiveCloud')}</FieldLabel>
-                <FieldDescription>{t('settings.backupS3Hint')}</FieldDescription>
-              </FieldContent>
-              <Switch
-                id="backup-cloud"
-                checked={settings.s3Enabled}
-                disabled={locked}
-                onCheckedChange={(s3Enabled) => update({ s3Enabled })}
-              />
-            </Field>
-            {settings.s3Enabled ? (
+            {settings.dests.length === 0 ? (
+              <Empty className="border">
+                <EmptyHeader>
+                  <EmptyTitle>{t('settings.backupDestsEmpty')}</EmptyTitle>
+                  <EmptyDescription>{t('settings.backupAddDestHint')}</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
               <FieldGroup>
-                <Field
-                  data-disabled={locked || undefined}
-                  data-invalid={endpointInvalid || undefined}
-                >
-                  <FieldLabel htmlFor="backup-s3-endpoint">
-                    {t('settings.backupS3Endpoint')}
-                  </FieldLabel>
-                  <Input
-                    id="backup-s3-endpoint"
-                    value={settings.endpoint}
-                    disabled={locked}
-                    spellCheck={false}
-                    aria-invalid={endpointInvalid || undefined}
-                    onChange={(event) => patchString('endpoint', event.target.value)}
-                    onBlur={persistCurrent}
+                {settings.dests.map((dest) => (
+                  <DestCard
+                    key={dest.id}
+                    dest={dest}
+                    pulse={destPulseOf(status, dest.id)}
+                    locked={locked}
+                    onEdit={() => openEdit(dest)}
+                    onRemove={() => setRemoveId(dest.id)}
                   />
-                  {endpointInvalid ? (
-                    <FieldError>{t('settings.backupErrorS3Endpoint')}</FieldError>
-                  ) : null}
-                </Field>
-                <TextField
-                  id="backup-s3-bucket"
-                  label={t('settings.backupS3Bucket')}
-                  value={settings.bucketName}
-                  disabled={locked}
-                  onChange={(bucketName) => patchString('bucketName', bucketName)}
-                  onBlur={persistCurrent}
-                />
-                <TextField
-                  id="backup-s3-region"
-                  label={t('settings.backupS3Region')}
-                  value={settings.region}
-                  disabled={locked}
-                  onChange={(region) => patchString('region', region)}
-                  onBlur={persistCurrent}
-                />
-                <TextField
-                  id="backup-s3-access"
-                  label={t('settings.backupS3AccessKey')}
-                  value={settings.accessKeyId}
-                  disabled={locked}
-                  onChange={(accessKeyId) => patchString('accessKeyId', accessKeyId)}
-                  onBlur={persistCurrent}
-                />
-                <Field data-disabled={locked || undefined}>
-                  <FieldLabel htmlFor="backup-s3-secret">{t('settings.backupS3Secret')}</FieldLabel>
-                  <Input
-                    id="backup-s3-secret"
-                    type="password"
-                    value={secret}
-                    placeholder={settings.secretConfigured ? '••••••••' : undefined}
-                    disabled={locked}
-                    onChange={(event) => setSecret(event.target.value)}
-                    onBlur={persistCurrent}
-                  />
-                </Field>
-                <Field orientation="horizontal" data-disabled={locked || undefined}>
-                  <FieldLabel htmlFor="backup-s3-path">{t('settings.backupS3PathStyle')}</FieldLabel>
-                  <Switch
-                    id="backup-s3-path"
-                    checked={settings.pathStyleAccess}
-                    disabled={locked}
-                    onCheckedChange={(pathStyleAccess) => update({ pathStyleAccess })}
-                  />
-                </Field>
-                <TextField
-                  id="backup-s3-prefix"
-                  label={t('settings.backupS3Prefix')}
-                  value={settings.prefix}
-                  disabled={locked}
-                  onChange={(prefix) => patchString('prefix', prefix)}
-                  onBlur={persistCurrent}
-                />
-                <Field orientation="horizontal">
-                  <Button type="button" variant="outline" disabled={locked} onClick={() => void testS3()}>
-                    {work === 's3' ? <Spinner data-icon="inline-start" /> : null}
-                    {t('settings.backupS3Test')}
-                  </Button>
-                </Field>
-                {status.lastUpload ? (
-                  <FieldDescription>
-                    {t('settings.backupLastUpload')}: {presentBackupRepo(status.lastUpload, t)}
-                  </FieldDescription>
-                ) : null}
+                ))}
               </FieldGroup>
-            ) : null}
+            )}
           </FieldGroup>
         </FieldSet>
       </FieldGroup>
@@ -688,31 +863,97 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
   )
 }
 
-function TextField({
+function DestCard({
+  dest,
+  pulse,
+  locked,
+  onEdit,
+  onRemove,
+}: {
+  dest: BackupDestView
+  pulse: DestPulse | undefined
+  locked: boolean
+  onEdit: () => void
+  onRemove: () => void
+}) {
+  const { t } = useI18n()
+  const path = destPath(dest)
+  const state = destStatus(dest)
+  const when = presentBackupTime(pulse?.lastSnapshotAt ?? '')
+  const stateLabel =
+    state === 'missing'
+      ? t('settings.backupDestMissing')
+      : state === 'check-pending'
+        ? t('settings.backupDestCheckPending')
+        : state === 'ready'
+          ? t('settings.backupDestReady')
+          : t('settings.backupDestIncomplete')
+  return (
+    <Card className="min-w-0" data-invalid={dest.missing || undefined}>
+      <CardHeader>
+        <CardTitle className="min-w-0 truncate" title={destTitle(dest)}>
+          {destTitle(dest)}
+        </CardTitle>
+        <CardDescription>
+          {dest.kind === 's3' ? t('settings.backupArchiveCloud') : t('settings.backupArchiveLocal')}
+        </CardDescription>
+        <CardAction className="flex gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={locked}
+            onClick={onEdit}
+          >
+            <Pencil data-icon="inline-start" />
+            {t('settings.backupDestEdit')}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={locked}
+            onClick={onRemove}
+          >
+            <Trash2 data-icon="inline-start" />
+            {t('settings.backupDestRemove')}
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-1.5">
+        <p className="min-w-0 truncate font-mono text-muted-foreground" title={path}>
+          {t('settings.backupDestPath')}: {path}
+        </p>
+        <p className={state === 'ready' ? 'text-muted-foreground' : 'text-destructive'}>
+          {t('settings.backupDestStatus')}: {stateLabel}
+        </p>
+        <p className="text-muted-foreground">
+          {t('settings.backupDestLast')}: {when || t('settings.backupDestNever')}
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function DraftField({
   id,
   label,
   value,
-  disabled,
   onChange,
-  onBlur,
 }: {
   id: string
   label: string
   value: string
-  disabled: boolean
   onChange: (value: string) => void
-  onBlur: () => void
 }) {
   return (
-    <Field data-disabled={disabled || undefined}>
+    <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Input
         id={id}
         value={value}
-        disabled={disabled}
         spellCheck={false}
         onChange={(event) => onChange(event.target.value)}
-        onBlur={onBlur}
       />
     </Field>
   )

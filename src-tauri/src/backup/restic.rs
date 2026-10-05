@@ -8,16 +8,16 @@ use tauri::{AppHandle, Manager};
 use super::key::{has_key, key_path};
 use super::settings::{
     ArchiveDest, BackupSettings, BackupSnapshot, CHECK_GROUPS, HOST, KEEP_WITHIN,
-    KEEP_WITHIN_DAILY, KEEP_WITHIN_MONTHLY, KEEP_WITHIN_WEEKLY, S3Settings, SNAPSHOT_PATHS,
-    bucket_lookup, reject_archive_inside_ledger, require_ledger, s3_repository,
+    KEEP_WITHIN_DAILY, KEEP_WITHIN_MONTHLY, KEEP_WITHIN_WEEKLY, ReadyDest, S3Settings,
+    SNAPSHOT_PATHS, bucket_lookup, reject_archive_inside_ledger, require_ledger, s3_repository,
     validate_archive_directory,
 };
 
 #[derive(Clone, Debug)]
 pub struct SnapshotWrite {
     pub id: String,
+    pub dest_id: String,
     pub location: String,
-    pub cloud: bool,
 }
 
 fn restic_name() -> &'static str {
@@ -73,6 +73,7 @@ pub struct BackupOutcome {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoSnapshots {
+    pub dest_id: String,
     pub location: String,
     pub snapshots: Vec<BackupSnapshot>,
 }
@@ -249,10 +250,10 @@ pub fn backup_dests(
 fn backup_one(
     binary: &Path,
     directory: &Path,
-    dest: &ArchiveDest,
+    dest: &ReadyDest,
     pending: bool,
 ) -> Result<Option<SnapshotWrite>, String> {
-    let repo = Repo::from_dest(binary.to_path_buf(), directory, dest)?;
+    let repo = Repo::from_dest(binary.to_path_buf(), directory, &dest.dest)?;
     repo.ensure()?;
     let mut args = vec![
         "backup".to_string(),
@@ -293,8 +294,8 @@ fn backup_one(
     }
     Ok(Some(SnapshotWrite {
         id: backup_snapshot_id(&output.stdout),
+        dest_id: dest.id.clone(),
         location: repo.location.clone(),
-        cloud: matches!(dest, ArchiveDest::S3(_)),
     }))
 }
 
@@ -358,8 +359,9 @@ pub fn list_repos(
     let mut listed = Vec::new();
     let mut last_error = None;
     for dest in dests {
-        match list_snapshots(app, directory, &dest) {
+        match list_snapshots(app, directory, &dest.dest) {
             Ok(snapshots) => listed.push(RepoSnapshots {
+                dest_id: dest.id.clone(),
                 location: dest.location(),
                 snapshots,
             }),
@@ -370,26 +372,6 @@ pub fn list_repos(
         return Err(last_error.unwrap_or_else(|| "archive-dest".to_string()));
     }
     Ok(listed)
-}
-
-pub fn latest_snapshot(
-    app: Option<&AppHandle>,
-    directory: &Path,
-    settings: &BackupSettings,
-) -> Option<BackupSnapshot> {
-    let mut best: Option<BackupSnapshot> = None;
-    let Ok(repos) = list_repos(app, directory, settings) else {
-        return None;
-    };
-    for repo in repos {
-        if let Some(item) = repo.snapshots.last() {
-            let newer = best.as_ref().is_none_or(|current| item.time > current.time);
-            if newer {
-                best = Some(item.clone());
-            }
-        }
-    }
-    best
 }
 
 /// Rewrites the key of every repository that already exists. A repository that
@@ -413,12 +395,12 @@ pub fn rekey_existing(
     let mut changed: Vec<ArchiveDest> = Vec::new();
     let result = (|| {
         for dest in settings.ready_dests() {
-            let repo = Repo::from_dest(binary.clone(), directory, &dest)?;
+            let repo = Repo::from_dest(binary.clone(), directory, &dest.dest)?;
             let output = repo.run(&["cat", "config"])?;
             match output.status.code() {
                 Some(0) => {
                     repo.passwd(&repo.password_file, &next)?;
-                    changed.push(dest);
+                    changed.push(dest.dest);
                 }
                 Some(10) => {}
                 _ => return Err(map_restic(&output)),
@@ -571,6 +553,7 @@ fn simple_hash(value: &str) -> u64 {
 mod tests {
     use super::*;
     use crate::backup::key::write_key;
+    use crate::backup::settings::StoredDest;
     use std::fs;
 
     fn scratch(name: &str) -> (PathBuf, PathBuf) {
@@ -599,6 +582,13 @@ mod tests {
         (root, dest)
     }
 
+    fn dest_settings(dest: &Path) -> BackupSettings {
+        BackupSettings {
+            dests: vec![StoredDest::local("one".into(), &dest.display().to_string())],
+            ..BackupSettings::default()
+        }
+    }
+
     fn have_restic() -> bool {
         resolve_restic(None).is_ok()
     }
@@ -618,11 +608,7 @@ mod tests {
             return;
         }
         let (root, dest) = scratch("round");
-        let settings = BackupSettings {
-            archive_local: true,
-            archive_directory: dest.display().to_string(),
-            ..BackupSettings::default()
-        };
+        let settings = dest_settings(&dest);
         let written = backup_dests(None, &root, &settings);
         assert!(
             written.error.is_none(),
@@ -660,11 +646,7 @@ mod tests {
         }
         let (root, dest) = scratch("nokey");
         fs::remove_file(key_path(&root)).unwrap();
-        let settings = BackupSettings {
-            archive_local: true,
-            archive_directory: dest.display().to_string(),
-            ..BackupSettings::default()
-        };
+        let settings = dest_settings(&dest);
         assert_eq!(
             backup_dests(None, &root, &settings).error.as_deref(),
             Some("backup-key-missing")
@@ -679,11 +661,7 @@ mod tests {
             return;
         }
         let (root, dest) = scratch("nested");
-        let settings = BackupSettings {
-            archive_local: true,
-            archive_directory: root.display().to_string(),
-            ..BackupSettings::default()
-        };
+        let settings = dest_settings(&root);
         assert_eq!(
             backup_dests(None, &root, &settings).error.as_deref(),
             Some("archive-nested")
@@ -710,11 +688,7 @@ mod tests {
             return;
         }
         let (root, dest) = scratch("rekey");
-        let settings = BackupSettings {
-            archive_local: true,
-            archive_directory: dest.display().to_string(),
-            ..BackupSettings::default()
-        };
+        let settings = dest_settings(&dest);
         assert!(backup_dests(None, &root, &settings).error.is_none());
         rekey_existing(None, &root, &settings, "other-pass").unwrap();
         assert_eq!(crate::backup::key::read_key(&root).unwrap(), "other-pass");
