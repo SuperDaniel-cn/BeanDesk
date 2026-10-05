@@ -6,7 +6,6 @@ use ureq::{Agent, AgentBuilder, Error as UreqError};
 const DEFAULT_SLUG: &str = "beancount";
 const TIMEOUT: Duration = Duration::from_secs(8);
 
-#[derive(Clone)]
 pub(crate) struct FavaHttp {
     origin: String,
     api: Agent,
@@ -19,20 +18,16 @@ struct HttpResponse {
 }
 
 impl FavaHttp {
-    pub(crate) fn new(origin: &str) -> Result<Self, String> {
-        let origin = origin.trim().trim_end_matches('/');
-        if origin.is_empty() {
-            return Err("No Fava origin in Settings.".into());
-        }
-        Ok(Self {
-            origin: origin.to_string(),
+    pub(crate) fn new(origin: String) -> Self {
+        Self {
+            origin,
             api: AgentBuilder::new().timeout(TIMEOUT).redirects(4).build(),
             probe: AgentBuilder::new().timeout(TIMEOUT).redirects(0).build(),
-        })
+        }
     }
 
-    pub(crate) fn resolve_slug(&self) -> Result<String, String> {
-        Ok(self.resolve_ledger()?.0)
+    pub(crate) fn origin(&self) -> &str {
+        &self.origin
     }
 
     pub(crate) fn resolve_ledger(&self) -> Result<(String, Value), String> {
@@ -52,34 +47,25 @@ impl FavaHttp {
     }
 
     pub(crate) fn get_data(&self, path: &str, query: &[(&str, &str)]) -> Result<Value, String> {
-        let envelope = self.api_get_query(path, query)?;
-        if let Some(error) = envelope.get("error").and_then(Value::as_str) {
-            if !error.is_empty() {
-                return Err(error.to_string());
-            }
-        }
-        Ok(envelope.get("data").cloned().unwrap_or(Value::Null))
-    }
-
-    fn api_get_query(&self, path: &str, query: &[(&str, &str)]) -> Result<Value, String> {
         let url = format!("{}{path}", self.origin);
         let mut request = self.api.get(&url);
         for (key, value) in query {
             request = request.query(key, value);
         }
-        let response = request.call().map_err(explain_ureq)?;
-        let status = response.status();
-        let text = response.into_string().map_err(|error| error.to_string())?;
+        let text = request
+            .call()
+            .map_err(explain_ureq)?
+            .into_string()
+            .map_err(|error| error.to_string())?;
         let json: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-        if !(200..300).contains(&status) {
-            let detail = json
-                .get("error")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .unwrap_or_else(|| format!("{status}"));
-            return Err(detail);
+        if let Some(error) = json
+            .get("error")
+            .and_then(Value::as_str)
+            .filter(|error| !error.is_empty())
+        {
+            return Err(error.to_string());
         }
-        Ok(json)
+        Ok(json.get("data").cloned().unwrap_or(Value::Null))
     }
 
     fn probe_root(&self) -> Result<HttpResponse, String> {
@@ -181,19 +167,14 @@ pub(crate) fn slug_from_redirect(url: &str) -> Option<String> {
         rest.split_once('/').map_or("", |(_, path)| path)
     });
     let path = path.split('?').next().unwrap_or(path);
-    let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
-    if parts.first() == Some(&"api") && parts.get(1) == Some(&"fava") {
-        return parts
-            .get(2)
-            .copied()
-            .filter(|slug| *slug != "api" && *slug != "document")
-            .map(str::to_string);
-    }
-    parts
-        .first()
-        .copied()
-        .filter(|slug| *slug != "api" && *slug != "document")
-        .map(str::to_string)
+    let mut parts = path.split('/').filter(|part| !part.is_empty());
+    let first = parts.next()?;
+    let slug = if first == "api" && parts.next() == Some("fava") {
+        parts.next()?
+    } else {
+        first
+    };
+    (!matches!(slug, "api" | "document")).then(|| slug.to_string())
 }
 
 #[cfg(test)]

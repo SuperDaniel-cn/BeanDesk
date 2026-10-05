@@ -63,9 +63,7 @@ fn signature(repo: &Repository) -> Result<Signature<'static>, String> {
         .map(|sig| {
             (
                 sig.name().unwrap_or("BeanDesk").to_string(),
-                sig.email()
-                    .unwrap_or("backup@beandesk.local")
-                    .to_string(),
+                sig.email().unwrap_or("backup@beandesk.local").to_string(),
             )
         })
         .unwrap_or_else(|| ("BeanDesk".into(), "backup@beandesk.local".into()));

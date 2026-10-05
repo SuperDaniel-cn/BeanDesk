@@ -4,16 +4,16 @@ use std::process::Command;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::directory_from_connection;
 use crate::engine::resolve_engine;
 use crate::ledger_init::{app_created_ledger, init_ledger_tree};
 use crate::supervisor::accepts_local_origin;
-use crate::{CONNECTION_KEY, directory_from_connection};
 
 use super::card::Card;
 use super::store::{connection_value, load_saved_connection};
 
 pub(crate) const PREVIEW_LINES: usize = 12;
-pub(crate) const PREVIEW_CHARS: usize = 160;
+const PREVIEW_CHARS: usize = 160;
 
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -73,10 +73,7 @@ pub(crate) fn resolve_connection(
     store: Option<&serde_json::Value>,
 ) -> Result<ResolvedConnection<'_>, String> {
     match store {
-        Some(value) if value.get(CONNECTION_KEY).is_some() => {
-            Ok(ResolvedConnection::Borrowed(connection_value(value)?))
-        }
-        Some(value) => Ok(ResolvedConnection::Borrowed(value)),
+        Some(value) => Ok(ResolvedConnection::Borrowed(connection_value(value)?)),
         None => Ok(ResolvedConnection::Owned(load_saved_connection()?)),
     }
 }
@@ -325,7 +322,7 @@ fn explain_write(code: String) -> String {
 }
 
 #[cfg(test)]
-pub(crate) fn fixture_store_for_tests(
+pub(crate) fn fixture_store(
     directory: impl Into<std::path::PathBuf>,
     active: &str,
 ) -> serde_json::Value {
@@ -350,10 +347,6 @@ mod tests {
 
     use super::*;
     use crate::ledger_init::APP_MARKER;
-
-    fn fixture_store(directory: impl Into<PathBuf>, active: &str) -> serde_json::Value {
-        fixture_store_for_tests(directory, active)
-    }
 
     fn temp_dir(tag: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(

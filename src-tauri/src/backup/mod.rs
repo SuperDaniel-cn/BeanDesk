@@ -17,7 +17,8 @@ pub use settings::{BackupSettings, BackupSettingsView, BackupStatus, S3Settings}
 
 use key::has_key;
 use restic::{
-    backup_dests, latest_snapshot, list_repos, rekey_existing, restore_snapshot, restic_ready, test_s3,
+    backup_dests, latest_snapshot, list_repos, rekey_existing, restic_ready, restore_snapshot,
+    test_s3,
 };
 use settings::ArchiveDest;
 use watch::{SharedWatch, Watch};
@@ -227,7 +228,12 @@ fn write_dests(app: &AppHandle, directory: &Path, settings: &BackupSettings) -> 
     Ok(())
 }
 
-fn remember_snapshot(app: &AppHandle, settings: &BackupSettings, id: Option<String>, at: Option<String>) {
+fn remember_snapshot(
+    app: &AppHandle,
+    settings: &BackupSettings,
+    id: Option<String>,
+    at: Option<String>,
+) {
     let Some(host) = app.try_state::<BackupHost>() else {
         return;
     };
@@ -255,7 +261,11 @@ fn require_app_ledger(directory: &Path) -> Result<(), String> {
     }
 }
 
-fn run_backup(app: &AppHandle, directory: &Path, settings: &BackupSettings) -> Result<BackupStatus, String> {
+fn run_backup(
+    app: &AppHandle,
+    directory: &Path,
+    settings: &BackupSettings,
+) -> Result<BackupStatus, String> {
     require_app_ledger(directory)?;
     let host = app.state::<BackupHost>();
     match write_dests(app, directory, settings) {
@@ -358,7 +368,10 @@ pub async fn save_backup_settings(
             settings.archive_auto = false;
         }
         let dest = settings.archive_directory.trim();
-        if settings.archive_local && !dest.is_empty() && let Some(directory) = &workdir {
+        if settings.archive_local
+            && !dest.is_empty()
+            && let Some(directory) = &workdir
+        {
             settings::reject_archive_inside_ledger(directory, Path::new(dest))?;
         }
         save_settings(&app, &settings)?;
@@ -416,7 +429,13 @@ pub async fn backup_restore(
         require_app_ledger(&directory)?;
         let settings = load_settings(&app);
         let target = restore_dest(&settings, &dest)?;
-        restore_snapshot(Some(&app), &directory, &target, &snapshot, Path::new(&output))?;
+        restore_snapshot(
+            Some(&app),
+            &directory,
+            &target,
+            &snapshot,
+            Path::new(&output),
+        )?;
         let ledger = Path::new(&output).join("main.bean");
         if !ledger.is_file() {
             return Err("encrypt".to_string());

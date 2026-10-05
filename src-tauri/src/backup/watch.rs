@@ -74,7 +74,10 @@ impl Watch {
                     .unwrap_or(Duration::from_secs(5));
                 if dirty_at.is_some_and(|started| started.elapsed() >= debounce) {
                     dirty_at = None;
-                    let snapshot = settings.lock().map(|current| current.clone()).unwrap_or_default();
+                    let snapshot = settings
+                        .lock()
+                        .map(|current| current.clone())
+                        .unwrap_or_default();
                     on_quiet(directory.clone(), snapshot);
                 }
             }
@@ -82,7 +85,9 @@ impl Watch {
     }
 
     pub fn running(&self) -> bool {
-        self.handle.as_ref().is_some_and(|handle| !handle.is_finished())
+        self.handle
+            .as_ref()
+            .is_some_and(|handle| !handle.is_finished())
     }
 }
 

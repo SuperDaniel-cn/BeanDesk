@@ -168,7 +168,9 @@ impl BackupSettings {
     pub fn ready_dests(&self) -> Vec<ArchiveDest> {
         let mut dests = Vec::new();
         if self.local_dest_ready() {
-            dests.push(ArchiveDest::Local(PathBuf::from(self.archive_directory.trim())));
+            dests.push(ArchiveDest::Local(PathBuf::from(
+                self.archive_directory.trim(),
+            )));
         }
         if let Ok(s3) = s3_ready(&self.s3)
             && self.s3_enabled
@@ -346,10 +348,7 @@ mod tests {
 
     #[test]
     fn snapshot_paths_are_the_ledger_trees() {
-        assert_eq!(
-            SNAPSHOT_PATHS,
-            ["main.bean", "config", "data", "documents"]
-        );
+        assert_eq!(SNAPSHOT_PATHS, ["main.bean", "config", "data", "documents"]);
         assert_eq!(GIT_PATHS, ["main.bean", "config", "data"]);
         assert_eq!(bucket_lookup(true), "path");
         assert_eq!(bucket_lookup(false), "dns");
@@ -370,7 +369,9 @@ mod tests {
     #[test]
     fn s3_endpoint_rejects_http_path_and_bucket_path() {
         assert_eq!(
-            validate_s3_endpoint("http://minio.example:9000").err().as_deref(),
+            validate_s3_endpoint("http://minio.example:9000")
+                .err()
+                .as_deref(),
             Some("s3-endpoint")
         );
         assert_eq!(
@@ -443,13 +444,13 @@ mod tests {
     #[test]
     fn archive_directory_must_be_an_absolute_folder() {
         assert_eq!(
-            validate_archive_directory(Path::new("relative")).err().as_deref(),
+            validate_archive_directory(Path::new("relative"))
+                .err()
+                .as_deref(),
             Some("archive-dir")
         );
-        let missing = std::env::temp_dir().join(format!(
-            "beandesk-missing-dest-{}",
-            std::process::id()
-        ));
+        let missing =
+            std::env::temp_dir().join(format!("beandesk-missing-dest-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&missing);
         assert_eq!(
             validate_archive_directory(&missing).err().as_deref(),
@@ -467,7 +468,10 @@ mod tests {
         std::fs::create_dir_all(root.join("documents")).unwrap();
         assert!(archive_nests_ledger(&root, &root));
         assert!(archive_nests_ledger(&root, &root.join("documents")));
-        assert!(!archive_nests_ledger(&root, &root.parent().unwrap().join("elsewhere")));
+        assert!(!archive_nests_ledger(
+            &root,
+            &root.parent().unwrap().join("elsewhere")
+        ));
         assert_eq!(
             reject_archive_inside_ledger(&root, &root.join("documents"))
                 .err()

@@ -39,7 +39,8 @@ pub fn write_key(directory: &Path, password: &str) -> Result<(), String> {
 }
 
 pub fn read_key(directory: &Path) -> Result<String, String> {
-    let raw = fs::read_to_string(key_path(directory)).map_err(|_| "backup-key-missing".to_string())?;
+    let raw =
+        fs::read_to_string(key_path(directory)).map_err(|_| "backup-key-missing".to_string())?;
     let line = raw.lines().next().unwrap_or("").trim_end_matches('\r');
     if line.is_empty() {
         return Err("backup-key-missing".to_string());
@@ -61,7 +62,10 @@ mod tests {
     #[test]
     fn empty_passphrase_is_not_a_key() {
         let root = scratch("empty");
-        assert_eq!(write_key(&root, "   ").err().as_deref(), Some("backup-key-missing"));
+        assert_eq!(
+            write_key(&root, "   ").err().as_deref(),
+            Some("backup-key-missing")
+        );
         assert!(!key_path(&root).exists());
         let _ = fs::remove_dir_all(&root);
     }

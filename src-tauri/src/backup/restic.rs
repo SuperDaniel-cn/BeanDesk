@@ -8,7 +8,7 @@ use tauri::{AppHandle, Manager};
 use super::key::{has_key, key_path};
 use super::settings::{
     ArchiveDest, BackupSettings, BackupSnapshot, CHECK_GROUPS, HOST, KEEP_WITHIN,
-    KEEP_WITHIN_DAILY, KEEP_WITHIN_MONTHLY, KEEP_WITHIN_WEEKLY, SNAPSHOT_PATHS, S3Settings,
+    KEEP_WITHIN_DAILY, KEEP_WITHIN_MONTHLY, KEEP_WITHIN_WEEKLY, S3Settings, SNAPSHOT_PATHS,
     bucket_lookup, reject_archive_inside_ledger, require_ledger, s3_repository,
     validate_archive_directory,
 };
@@ -36,7 +36,11 @@ pub fn resolve_restic(app: Option<&AppHandle>) -> Result<PathBuf, String> {
             dirs.push(path);
         }
     }
-    dirs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries").join("restic"));
+    dirs.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("binaries")
+            .join("restic"),
+    );
 
     for dir in dirs {
         let path = dir.join(name);
@@ -97,7 +101,8 @@ impl Repo {
             return Err("backup-key-missing".to_string());
         }
         let location = s3_repository(s3);
-        let cache = std::env::temp_dir().join(format!("beandesk-restic-{}", simple_hash(&location)));
+        let cache =
+            std::env::temp_dir().join(format!("beandesk-restic-{}", simple_hash(&location)));
         Ok(Self {
             binary,
             location,
@@ -225,7 +230,9 @@ pub fn backup_dests(
                 }
             }
             Err(error) => {
-                if error == "check-pending" && !pending_checks.iter().any(|saved| saved == &location) {
+                if error == "check-pending"
+                    && !pending_checks.iter().any(|saved| saved == &location)
+                {
                     pending_checks.push(location);
                 }
                 last_error = Some(error);
@@ -517,7 +524,8 @@ struct RawSnapshot {
 }
 
 fn parse_snapshots(stdout: &[u8]) -> Result<Vec<BackupSnapshot>, String> {
-    let snaps: Vec<RawSnapshot> = serde_json::from_slice(stdout).map_err(|_| "restic".to_string())?;
+    let snaps: Vec<RawSnapshot> =
+        serde_json::from_slice(stdout).map_err(|_| "restic".to_string())?;
     Ok(snaps
         .into_iter()
         .map(|item| BackupSnapshot {
@@ -570,8 +578,14 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|elapsed| elapsed.as_nanos())
             .unwrap_or(0);
-        let root = std::env::temp_dir().join(format!("beandesk-restic-{name}-{}-{stamp}", std::process::id()));
-        let dest = std::env::temp_dir().join(format!("beandesk-restic-{name}-dest-{}-{stamp}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "beandesk-restic-{name}-{}-{stamp}",
+            std::process::id()
+        ));
+        let dest = std::env::temp_dir().join(format!(
+            "beandesk-restic-{name}-dest-{}-{stamp}",
+            std::process::id()
+        ));
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&dest);
         fs::create_dir_all(root.join("config")).unwrap();
@@ -610,7 +624,11 @@ mod tests {
             ..BackupSettings::default()
         };
         let written = backup_dests(None, &root, &settings);
-        assert!(written.error.is_none(), "{}", written.error.unwrap_or_default());
+        assert!(
+            written.error.is_none(),
+            "{}",
+            written.error.unwrap_or_default()
+        );
         assert_eq!(written.written.len(), 1);
         assert!(!written.written[0].id.is_empty());
         assert!(dest.join("config").is_file());
@@ -620,8 +638,14 @@ mod tests {
         let snaps = list_snapshots(None, &root, &ArchiveDest::Local(dest.clone())).unwrap();
         assert!(!snaps.is_empty());
         let out = root.join("restored");
-        restore_snapshot(None, &root, &ArchiveDest::Local(dest.clone()), &snaps.last().unwrap().id, &out)
-            .unwrap();
+        restore_snapshot(
+            None,
+            &root,
+            &ArchiveDest::Local(dest.clone()),
+            &snaps.last().unwrap().id,
+            &out,
+        )
+        .unwrap();
         assert!(out.join("main.bean").is_file());
         assert!(out.join("config/accounts.bean").is_file());
         assert!(out.join("documents/Assets/note.txt").is_file());

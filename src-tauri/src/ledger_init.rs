@@ -121,7 +121,10 @@ mod tests {
         let ignore = fs::read_to_string(root.join(".gitignore")).unwrap();
         assert!(ignore.contains(".backup_key"));
         assert!(app_created_ledger(&root));
-        assert_eq!(init_ledger_tree(&root).err().as_deref(), Some("ledger-exists"));
+        assert_eq!(
+            init_ledger_tree(&root).err().as_deref(),
+            Some("ledger-exists")
+        );
         let _ = fs::remove_dir_all(&root);
     }
 

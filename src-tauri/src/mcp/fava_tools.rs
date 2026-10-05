@@ -84,10 +84,9 @@ pub(crate) struct DocumentRow {
     pub filename: String,
 }
 
-fn fava_from(store: Option<&Value>) -> Result<(FavaHttp, String), String> {
+fn fava_from(store: Option<&Value>) -> Result<FavaHttp, String> {
     let resolved = resolve_connection(store)?;
-    let origin = active_origin(resolved.value())?;
-    Ok((FavaHttp::new(&origin)?, origin))
+    Ok(FavaHttp::new(active_origin(resolved.value())?))
 }
 
 fn down_fava(message: impl Into<String>, origin: String) -> Card<FavaStatusBody> {
@@ -105,8 +104,8 @@ fn down_fava(message: impl Into<String>, origin: String) -> Card<FavaStatusBody>
 }
 
 pub(crate) fn get_fava_card(store: Option<&Value>) -> Result<Card<FavaStatusBody>, String> {
-    let (fava, origin) = match fava_from(store) {
-        Ok(pair) => pair,
+    let fava = match fava_from(store) {
+        Ok(fava) => fava,
         Err(error) => return Ok(down_fava(error, String::new())),
     };
     match fava.resolve_ledger() {
@@ -136,25 +135,26 @@ pub(crate) fn get_fava_card(store: Option<&Value>) -> Result<Card<FavaStatusBody
                     title,
                     account_count,
                     error_count,
-                    origin,
+                    origin: fava.origin().to_string(),
                 },
             ))
         }
-        Err(error) => Ok(down_fava(error, origin)),
+        Err(error) => Ok(down_fava(error, fava.origin().to_string())),
     }
 }
 
 pub(crate) fn get_ledger_card(store: Option<&Value>) -> Result<Card<LedgerBody>, String> {
-    let (fava, _) = fava_from(store)?;
+    let fava = fava_from(store)?;
     let (slug, data) = fava.resolve_ledger()?;
-    let account_names: Vec<String> = data
-        .get("accounts")
-        .and_then(Value::as_array)
+    let accounts = data.get("accounts").and_then(Value::as_array);
+    let account_count = accounts.map(Vec::len).unwrap_or(0);
+    let account_names: Vec<String> = accounts
         .map(|items| {
             items
                 .iter()
                 .filter_map(Value::as_str)
                 .map(str::to_string)
+                .take(BODY_ROWS)
                 .collect()
         })
         .unwrap_or_default();
@@ -165,21 +165,18 @@ pub(crate) fn get_ledger_card(store: Option<&Value>) -> Result<Card<LedgerBody>,
         .unwrap_or("Ledger")
         .to_string();
     let currency = operating_currency(data.get("options").unwrap_or(&Value::Null));
-    let body = LedgerBody {
-        title: title.clone(),
-        currency: currency.clone(),
-        account_count: account_names.len(),
-        error_count: errors.len(),
-        accounts: account_names.iter().take(BODY_ROWS).cloned().collect(),
-        errors: errors.iter().take(PREVIEW_LINES).cloned().collect(),
-        slug,
-    };
+    let error_count = errors.len();
     Ok(Card::new(
-        format!(
-            "{title} uses {currency}. {} accounts. {} loader errors.",
-            body.account_count, body.error_count
-        ),
-        body,
+        format!("{title} uses {currency}. {account_count} accounts. {error_count} loader errors."),
+        LedgerBody {
+            title,
+            currency,
+            account_count,
+            error_count,
+            accounts: account_names,
+            errors: errors.into_iter().take(PREVIEW_LINES).collect(),
+            slug,
+        },
     ))
 }
 
@@ -202,8 +199,8 @@ pub(crate) fn get_journal_card(
 }
 
 fn query_card(store: Option<&Value>, query: &str, time: &str) -> Result<Card<QueryBody>, String> {
-    let (fava, _) = fava_from(store)?;
-    let slug = fava.resolve_slug()?;
+    let fava = fava_from(store)?;
+    let (slug, _) = fava.resolve_ledger()?;
     let time = query_time(time)?;
     let mut params = vec![("query_string", query)];
     if let Some(token) = time {
@@ -220,14 +217,12 @@ fn query_card(store: Option<&Value>, query: &str, time: &str) -> Result<Card<Que
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let all_rows = data
-        .get("rows")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let row_count = all_rows.len();
+    let all_rows = data.get("rows").and_then(Value::as_array);
+    let row_count = all_rows.map(Vec::len).unwrap_or(0);
     let truncated = row_count > BODY_ROWS;
-    let rows = all_rows.into_iter().take(BODY_ROWS).collect::<Vec<_>>();
+    let rows: Vec<Value> = all_rows
+        .map(|items| items.iter().take(BODY_ROWS).cloned().collect())
+        .unwrap_or_default();
     let preview = rows
         .iter()
         .take(PREVIEW_LINES)
@@ -282,7 +277,7 @@ fn report_card(
     endpoint: &str,
     time: &str,
 ) -> Result<Card<ReportBody>, String> {
-    let (fava, _) = fava_from(store)?;
+    let fava = fava_from(store)?;
     let (slug, ledger) = fava.resolve_ledger()?;
     let currency = quote_commodity(&operating_currency(
         ledger.get("options").unwrap_or(&Value::Null),
@@ -317,14 +312,15 @@ fn report_card(
 }
 
 pub(crate) fn list_documents_card(store: Option<&Value>) -> Result<Card<DocumentsBody>, String> {
-    let (fava, _) = fava_from(store)?;
-    let slug = fava.resolve_slug()?;
+    let fava = fava_from(store)?;
+    let (slug, _) = fava.resolve_ledger()?;
     let data = fava.get_data(&format!("/{slug}/api/documents"), &[])?;
-    let items = data.as_array().cloned().unwrap_or_default();
-    let count = items.len();
+    let items = data.as_array();
+    let count = items.map(Vec::len).unwrap_or(0);
     let truncated = count > BODY_ROWS;
     let documents = items
         .into_iter()
+        .flatten()
         .take(BODY_ROWS)
         .map(|item| DocumentRow {
             date: item
@@ -392,14 +388,14 @@ fn collect_accounts(nodes: Option<&Value>, names: &mut Vec<String>, limit: usize
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mcp::tools::fixture_store_for_tests;
+    use crate::mcp::tools::fixture_store;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::{Arc, Mutex};
     use std::thread;
 
     fn store_for(origin: &str) -> Value {
-        let mut store = fixture_store_for_tests("/private/tmp/named-repo-must-not-appear", "local");
+        let mut store = fixture_store("/private/tmp/named-repo-must-not-appear", "local");
         store["connection"]["local"]["origin"] = Value::String(origin.into());
         store
     }
