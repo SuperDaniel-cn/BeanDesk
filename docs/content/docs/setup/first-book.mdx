@@ -1,0 +1,30 @@
+---
+title: First book
+description: Initialize a new ledger in an empty directory and configure backups.
+---
+
+## 1. Select an Empty Directory
+
+In Settings → Ledger Connection, choose an empty folder. If the folder already contains files, initialization aborts to protect existing data.
+
+## 2. Initialize Ledger
+
+Click Initialize Ledger. BeanDesk creates standard Beancount ledger files (`main.bean`, `config/`, `data/`, `documents/`) and a `.beandesk` marker.
+
+Edit your `.bean` files in any text editor. BeanDesk provides read-only financial reporting.
+
+## 3. Connect Service
+
+Click Connect. BeanDesk uses its bundled engine to start or attach to a local Fava service. Custom commands can be configured in Advanced Connection.
+
+## 4. Configure Backups
+
+In Settings → Backup:
+
+- Git Auto-Snapshot: Commits ledger file changes locally; never pushed remotely. Keys and temporary files are excluded.
+- Encrypted Backup: Client-side encrypted incremental backups via restic to local folders or S3-compatible buckets.
+  - Backup Now: Manual on-demand snapshot.
+  - Automatic backup: Syncs changes automatically to ready destinations.
+  - Retention policy: Retains past 48 hours of snapshots, daily snapshots for 30 days, weekly for 12 weeks, monthly for 24 months. Skips unchanged ledgers.
+
+Next: [Settings](/desktop) and [Reports](/reports).

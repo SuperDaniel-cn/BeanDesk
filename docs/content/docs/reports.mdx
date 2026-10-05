@@ -1,0 +1,57 @@
+---
+title: Reports
+description: Trial Balance, financial statements, journal entries, and BQL queries.
+---
+
+Financial statements are computed directly from the connected ledger. The Accounting Period filter applies across all statements, the journal, documents, and BQL queries.
+
+## Trial Balance
+
+Displays debit and credit balances in parallel columns with a collapsible account hierarchy. Filter by account name, and click any row to inspect postings in the journal.
+
+![Trial balance](/images/en/trial-balance.png)
+
+## Balance Sheet
+
+Presents assets, liabilities, and equity, verifying that assets equal liabilities plus equity. Unclosed period earnings are grouped into the equity section.
+
+![Balance sheet](/images/en/balance-sheet.png)
+
+## Income Statement
+
+Aggregates operating revenue, costs, and expenses to calculate net profit, with comparative analysis against prior periods.
+
+![Income statement](/images/en/income-statement.png)
+
+## Cash Flow Statement
+
+Computed via the direct method across operating, investing, and financing activities. Non-cash accrual entries are excluded.
+
+Mark cash attributes on account opening directives:
+
+```beancount
+2020-01-01 open Assets:Bank:Checking CNY
+  cash: TRUE
+2020-01-01 open Income:Services:Delivery CNY
+  cashflow: "sales"
+```
+
+- `cash: TRUE`: Designates the account as cash or bank balances.
+- `cashflow: "<line>"`: Maps the counter-account to a statutory cash flow line.
+- `cashflow-in` / `cashflow-out`: Separates inflows and outflows for the same account.
+
+If no cash accounts are configured, the page displays setup guidance. Cash activity without line mapping is grouped under Unclassified Items.
+
+![Cash flow statement](/images/en/cash-flow.png)
+
+## Journal & Document Drilldown
+
+Filter transactions by counterparty, narration, element, and tags. Clicking an entry opens a modal displaying postings and linked documents.
+
+![Journal](/images/en/journal.png)
+
+## BQL Query Console
+
+Interactive console for native Beancount Query Language (BQL). Includes presets, keyboard shortcuts, sortable columns, and CSV export.
+
+![BQL query](/images/en/query.png)

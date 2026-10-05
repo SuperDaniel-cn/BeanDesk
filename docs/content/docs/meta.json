@@ -1,0 +1,12 @@
+{
+  "title": "Handbook",
+  "pages": [
+    "index",
+    "---Setup---",
+    "...setup",
+    "desktop",
+    "calendar",
+    "mcp",
+    "reports"
+  ]
+}

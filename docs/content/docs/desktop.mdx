@@ -1,0 +1,32 @@
+---
+title: Settings
+description: Ledger connection, service supervision, backups, and app preferences.
+---
+
+![Desktop settings](/images/en/settings.png)
+
+## Ledger Connection
+
+- Ledger Directory: Select your local ledger folder.
+- Initialize Ledger: Create a standard Beancount ledger in an empty folder.
+- Connect / Stop: Launch or attach to the bundled engine. Stopping only terminates processes launched by the current window.
+
+## Advanced Connection
+
+- Local Service: Specify a local start command (e.g. `fava --host 127.0.0.1 --port 5000 main.bean`). Probes the port first, attaching directly if a local Fava service is already running.
+- External Service: Connect directly to an active Fava service URL (e.g. `http://127.0.0.1:5000`).
+
+## Settings Tabs
+
+- General: Language, theme, and local MCP configuration.
+- Ledger Connection: Local working directory and bundled engine management.
+- Advanced Connection: Custom commands and remote service URLs.
+- Backup: Git Auto-Snapshot and restic encrypted backups (available for BeanDesk-initialized ledgers; see [First book](/setup/first-book)).
+
+## Connection Logs
+
+Connection events are recorded to local log files (10 MB cap with rolling eviction). Clear resets only the on-screen log view.
+
+## Software Updates
+
+The desktop application includes automated update checks for macOS, Windows, and Linux.
