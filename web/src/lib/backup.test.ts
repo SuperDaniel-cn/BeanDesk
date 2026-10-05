@@ -5,6 +5,7 @@ import type { MessageKey } from '@/i18n/locales/en'
 import {
   archiveNestsLedger,
   archiveBlockReason,
+  backupBannerError,
   backupErrorCode,
   canWriteArchive,
   destFolderMissing,
@@ -139,5 +140,13 @@ describe('explainBackupError', () => {
     expect(explainBackupError('archive-nested', t)).toBe('settings.backupErrorArchiveNested')
     expect(explainBackupError('check', t)).toBe('settings.backupErrorCheck')
     expect(explainBackupError('check-pending', t)).toBe('settings.backupErrorCheckPending')
+  })
+
+  test('a leftover missing-folder code is dropped after the book exists', () => {
+    expect(backupBannerError('directory', true)).toBeNull()
+    expect(backupBannerError('missing', true)).toBeNull()
+    expect(backupBannerError('directory', false)).toBe('directory')
+    expect(backupBannerError('git', true)).toBe('git')
+    expect(backupBannerError(null, true)).toBeNull()
   })
 })

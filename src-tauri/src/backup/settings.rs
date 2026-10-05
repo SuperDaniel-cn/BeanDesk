@@ -24,6 +24,15 @@ pub fn require_ledger(directory: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// `directory` / `missing` are left over from before the book existed. Drop them once `main.bean` is there.
+pub fn clear_resolved_directory_error(last_error: &mut Option<String>, directory: &Path) {
+    if matches!(last_error.as_deref(), Some("directory") | Some("missing"))
+        && require_ledger(directory).is_ok()
+    {
+        *last_error = None;
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct S3Settings {
@@ -356,6 +365,32 @@ mod tests {
             require_ledger(Path::new("relative")).err().as_deref(),
             Some("directory")
         );
+    }
+
+    #[test]
+    fn directory_error_clears_once_the_ledger_file_exists() {
+        let root = std::env::temp_dir().join(format!(
+            "beandesk-clear-dir-err-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let mut last_error = Some("directory".to_string());
+        clear_resolved_directory_error(&mut last_error, &root);
+        assert_eq!(last_error.as_deref(), Some("directory"));
+        std::fs::write(root.join("main.bean"), "option \"title\" \"Ledger\"\n").unwrap();
+        clear_resolved_directory_error(&mut last_error, &root);
+        assert_eq!(last_error, None);
+        last_error = Some("missing".to_string());
+        clear_resolved_directory_error(&mut last_error, &root);
+        assert_eq!(last_error, None);
+        last_error = Some("git".to_string());
+        clear_resolved_directory_error(&mut last_error, &root);
+        assert_eq!(last_error.as_deref(), Some("git"));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

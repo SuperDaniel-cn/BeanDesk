@@ -307,6 +307,7 @@ fn refresh_live_status(
     status.archive_directory = settings.archive_directory.trim().to_string();
     status.app_ledger = crate::ledger_init::app_created_ledger(directory);
     status.watching = watching && status.app_ledger;
+    settings::clear_resolved_directory_error(&mut status.last_error, directory);
     if let Some((id, at)) = cached_snapshot(app, directory, settings) {
         status.last_snapshot = id;
         status.last_snapshot_at = at;

@@ -40,6 +40,7 @@ import { useI18n } from '@/i18n'
 import {
   archiveBlockReason,
   archiveNestsLedger,
+  backupBannerError,
   canWriteArchive,
   destFolderMissing,
   emptyBackupSettings,
@@ -76,6 +77,7 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
   const canArchive = ready && !busy && !foreign && canWriteArchive(settings, status)
   const endpointInvalid = Boolean(settings.endpoint.trim() && !validateS3Endpoint(settings.endpoint))
   const destNested = settings.archiveLocal && archiveNestsLedger(workDirectory, settings.archiveDirectory)
+  const folderError = backupBannerError(status.lastError, status.appLedger)
 
   async function refreshStatus() {
     const next = await invoke<BackupStatus>('backup_status')
@@ -468,9 +470,9 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                 <AlertDescription>{t('settings.backupErrorRestic')}</AlertDescription>
               </Alert>
             ) : null}
-            {status.lastError ? (
+            {folderError ? (
               <Alert>
-                <AlertDescription>{explainBackupError(status.lastError, t)}</AlertDescription>
+                <AlertDescription>{explainBackupError(folderError, t)}</AlertDescription>
               </Alert>
             ) : null}
             <Field data-disabled={locked || undefined}>

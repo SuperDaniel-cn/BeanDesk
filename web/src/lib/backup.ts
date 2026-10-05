@@ -172,6 +172,15 @@ export function validateS3Endpoint(input: string): string | null {
   return url.origin
 }
 
+/** A leftover `directory` / `missing` code after the book is on disk is not a missing folder. */
+export function backupBannerError(
+  lastError: string | null,
+  appLedger: boolean,
+): string | null {
+  if (appLedger && (lastError === 'directory' || lastError === 'missing')) return null
+  return lastError
+}
+
 export function backupErrorCode(error: unknown): string {
   if (typeof error === 'string') return error
   if (error instanceof Error) return error.message
