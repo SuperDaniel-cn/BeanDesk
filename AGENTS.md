@@ -13,7 +13,7 @@ BeanDesk 前端与桌面端工程规范。
 - 一个服务：桌面只拉起或连接一个 Fava。多本账是 Fava 多个根文件与 slug（`fava a.bean b.bean`），不是应用级换仓库、换连接。
 - 引擎可换：外行空启动命令走发布包里的冻结 sidecar。极客填自己的启动命令，或只填已有地址。不解析、不改写用户命令。不内置生 Python。
 - 前端核心：React 19、TypeScript、Vite、Tailwind CSS、shadcn/ui，代码在 web。
-- 桌面外壳：src-tauri，窗口、HTTP 插件、这一个 Fava 进程的看管。主窗口创建时隐藏；主题和手册窗在内存里热好再 `show()`，不等 Fava。语言 `invoke` 必须有超时。Rust 只在几秒后仍看不见时兜底，避免再把显示挂在页面 Finished 上。
+- 桌面外壳：src-tauri，窗口、HTTP 插件、这一个 Fava 进程的看管。主窗口创建时隐藏；主题和手册窗在内存里热好再 `show()`，不等 Fava。语言 `invoke` 必须有超时。Rust 只在几秒后仍看不见时兜底，避免再把显示挂在页面 Finished 上。托盘常驻：关主窗口或手册窗只隐藏；左键托盘或菜单「显示」聚焦主窗口；「退出」才结束进程并停 Fava。不办登录时启动。
 - 职责隔离：本规范约束壳。复式记账与记分录由技能在用户目录里完成。
 
 ## 2. 接口通信与双通道规范
@@ -42,8 +42,8 @@ BeanDesk 前端与桌面端工程规范。
 - 配置目录：CLI 会先进入 `src-tauri`。`beforeDevCommand` 和 `beforeBuildCommand` 用 `cwd: "../web"` 再执行 `bun run ensure-docs && bun run dev` / `bun run ensure-docs && bun run build`。不要把 `../web` 写进命令本身：从仓库根启动时前端目录是 `web/`，从 `src-tauri` 启动时前端目录会退回仓库根，命令里的 `../web` 会找不到目录。devUrl 与 Vite 的 host、port 保持一致。打包读取 `web/dist`。
 - 连接日志：设置页上的每一行同时经 log 插件写入本机日志目录。单个文件上限 10MB，超过后从文件开头丢掉最旧的行，最近的内容留在原文件，不按日期另存。页面上的清除只清空当前窗口里的显示。
 - 桌面更新：安装包只覆盖 macOS、Windows 和 Linux。推送与 `tauri.conf.json`、`web/package.json`、`src-tauri/Cargo.toml` 版本一致的 `v*` 标签才触发 `.github/workflows/release.yml`。先在一台小的 Ubuntu 上核对版本、签名密钥和前端构建，再开五个平台任务。产物写入草稿 Release，五个任务都成功后再手动发布；草稿不会成为 updater 的 latest。Linux 用 `ubuntu-22.04` 和公开仓库的 `ubuntu-22.04-arm`，不要换成模拟的 Arm 环境。更新签名的私钥只放在 GitHub Secret，公钥写在 `tauri.conf.json`。不提交私钥。这个版本不构建 Android 或 iOS。
-- 日历订阅：日历页 `/calendar`，不进报表通道，也不进设置。来源和复制 ICS 在日历页右侧抽屉，不在设置。同一时间只有一份来源：随包装的中国小规模按季目录、本机 `.ics`、或用户粘贴的 HTTPS ICS（`webcal://` 保存成 `https://`）。本机文件和 HTTPS 只在桌面可用；浏览器只看随包装目录。配置在本机 `calendar.json`，不进 `connection.json` / `backup.json`。打开时读一次当前来源；7 天内到期的事项每条 UID+日期只弹一次 Sonner 和系统横幅。关掉应用不再提醒。不办提醒云、不轮询、不写 CalDAV、不把账本当日历。公开仓库里的 `calendars/*.ics` 是静态文件，不是我们运营的服务。手机提醒用同一条 HTTPS。读本机文件只走 `read_user_text_file`，只读用户选中的绝对路径。未连 Fava 也能打开日历页。
-- 用户手册：桌面第二个窗口（label `handbook`），不进报表通道，也不进设置。主窗口就绪后先隐藏创建该窗口，手册图标只显示或聚焦，主窗口不离开当前页。关手册窗隐藏不销毁；关主窗口再拆掉手册窗。窗口加载随包装的 Fumadocs 静态导出（`/docs/index.html` 或 `/docs/zh-CN/index.html`），初始宽高与主窗口相同。未连 Fava 也能打开。不跑 DesktopProvider 启动或 AppUpdate 检查。不要把 Next 放进 `web/`。不办在线文档站。
+- 日历订阅：日历页 `/calendar`，不进报表通道，也不进设置。来源和复制 ICS 在日历页右侧抽屉，不在设置。同一时间只有一份来源：随包装的中国小规模按季目录、本机 `.ics`、或用户粘贴的 HTTPS ICS（`webcal://` 保存成 `https://`）。本机文件和 HTTPS 只在桌面可用；浏览器只看随包装目录。配置在本机 `calendar.json`，不进 `connection.json` / `backup.json`。打开时读一次当前来源；7 天内到期的事项每条 UID+日期只弹一次 Sonner 和系统横幅。关到托盘时进程还在；从托盘退出后不再提醒。不办提醒云、不轮询、不写 CalDAV、不把账本当日历。公开仓库里的 `calendars/*.ics` 是静态文件，不是我们运营的服务。手机提醒用同一条 HTTPS。读本机文件只走 `read_user_text_file`，只读用户选中的绝对路径。未连 Fava 也能打开日历页。
+- 用户手册：桌面第二个窗口（label `handbook`），不进报表通道，也不进设置。主窗口就绪后先隐藏创建该窗口，手册图标只显示或聚焦，主窗口不离开当前页。关手册窗或主窗口都只隐藏；从托盘退出再一起拆掉。窗口加载随包装的 Fumadocs 静态导出（`/docs/index.html` 或 `/docs/zh-CN/index.html`），初始宽高与主窗口相同。未连 Fava 也能打开。不跑 DesktopProvider 启动或 AppUpdate 检查。不要把 Next 放进 `web/`。不办在线文档站。
 - 本机 MCP：同一桌面二进制，参数只认独立的 `mcp`（不是 `--mcp`，也不看 argv0）。stdio JSON-RPC。读本机 `connection.json`，与设置页同一份工作目录和 Fava origin。目录工具：`get_connection`、`init_ledger`（写入必须 `confirmWrite`）、`check_ledger`。只读 Fava 工具转发界面已在用的 GET：`get_fava`、`get_ledger`、`run_bql`、三张表、`get_journal`、`list_documents`。手册工具 `get_handbook` 读随包装的 `docs/content` MDX：不传 `page` 列出目录，传入 slug 或标题读一页；`locale` 为 `en` 或 `zh-CN`。不需要 Fava。记分录仍由技能写月文件，不转发 `add_entries` / `source`。不猜账本仓库名，不开放备份、日历或凭证字节。设置页只复制 `{ command: 当前可执行文件, args: ["mcp"] }`。不办云 MCP，不监听 HTTP。
 
 ## 5. 技术栈与包管理约束

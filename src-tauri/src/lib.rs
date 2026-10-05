@@ -4,6 +4,8 @@ mod engine;
 mod ledger_init;
 mod mcp;
 mod supervisor;
+#[cfg(desktop)]
+mod tray;
 
 pub use mcp::{is_mcp_launch, run_mcp};
 
@@ -61,6 +63,8 @@ pub fn run() {
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
             connection_log::install(app.handle())?;
             backup::start_if_enabled(app.handle());
+            #[cfg(desktop)]
+            tray::install(app.handle(), &system_locales())?;
             reveal_main_if_still_hidden(app.handle().clone());
             Ok(())
         })
@@ -98,38 +102,43 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| match event {
-            RunEvent::ExitRequested { .. } | RunEvent::Exit => shutdown(app),
+            #[cfg(desktop)]
+            RunEvent::ExitRequested { api, code, .. } if code.is_none() => api.prevent_exit(),
+            RunEvent::Exit => shutdown(app),
             RunEvent::WindowEvent {
                 label,
                 event: WindowEvent::CloseRequested { api, .. },
                 ..
-            } => {
-                if label == HANDBOOK_WINDOW {
-                    api.prevent_close();
-                    if let Some(win) = app.get_webview_window(&label) {
-                        let _ = win.hide();
-                    }
-                } else if label == MAIN_WINDOW {
-                    if let Some(win) = app.get_webview_window(HANDBOOK_WINDOW) {
-                        let _ = win.destroy();
-                    }
+            } if label == MAIN_WINDOW || label == HANDBOOK_WINDOW => {
+                api.prevent_close();
+                if let Some(win) = app.get_webview_window(&label) {
+                    let _ = win.hide();
                 }
             }
             _ => {}
         });
 }
 
+pub(crate) fn show_main_window(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
+        return;
+    };
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
 fn reveal_main_if_still_hidden(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-        let Some(win) = app.get_webview_window(MAIN_WINDOW) else {
-            return;
-        };
-        if win.is_visible().unwrap_or(false) {
+        if app
+            .get_webview_window(MAIN_WINDOW)
+            .and_then(|win| win.is_visible().ok())
+            .unwrap_or(false)
+        {
             return;
         }
-        let _ = win.show();
-        let _ = win.set_focus();
+        show_main_window(&app);
     });
 }
 

@@ -4,7 +4,9 @@ use serde_json::Value;
 
 use super::card::Card;
 use super::fava::{FavaHttp, operating_currency, query_time, quote_commodity};
-use super::tools::{PREVIEW_LINES, active_origin, explain_store, preview_output, resolve_connection};
+use super::tools::{
+    PREVIEW_LINES, active_origin, explain_store, preview_output, resolve_connection,
+};
 
 const BODY_ROWS: usize = 50;
 const JOURNAL_BQL: &str = "SELECT id, date, flag, payee, narration, account, units(position) as units, tags, links ORDER BY date DESC LIMIT 51";
@@ -598,7 +600,9 @@ mod tests {
                 (404, vec![], String::new())
             }
         });
-        let err = list_documents_card(Some(&store_for(&origin))).err().unwrap();
+        let err = list_documents_card(Some(&store_for(&origin)))
+            .err()
+            .unwrap();
         assert!(err.contains("not a list"));
     }
 }

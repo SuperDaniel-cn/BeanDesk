@@ -276,8 +276,12 @@ pub(crate) fn preview_output(text: &str) -> String {
 
 pub(crate) fn active_origin(connection: &serde_json::Value) -> Result<String, String> {
     let origin = match connection.get("active").and_then(|item| item.as_str()) {
-        Some("local") => connection.pointer("/local/origin").and_then(|item| item.as_str()),
-        Some("remote") => connection.pointer("/remote/origin").and_then(|item| item.as_str()),
+        Some("local") => connection
+            .pointer("/local/origin")
+            .and_then(|item| item.as_str()),
+        Some("remote") => connection
+            .pointer("/remote/origin")
+            .and_then(|item| item.as_str()),
         _ => None,
     }
     .map(|origin| origin.trim().trim_end_matches('/'))

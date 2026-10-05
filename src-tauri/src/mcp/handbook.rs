@@ -325,7 +325,11 @@ mod tests {
         assert!(card.display_block.contains("# 手册"));
         assert!(card.display_block.contains("| 页面 | 标题 | 说明 |"));
         assert!(!card.display_block.contains("# Handbook"));
-        assert!(!card.display_block.contains("| page | title | description |"));
+        assert!(
+            !card
+                .display_block
+                .contains("| page | title | description |")
+        );
         let calendar = card
             .body
             .pages
