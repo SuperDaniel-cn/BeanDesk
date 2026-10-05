@@ -43,7 +43,7 @@ export function readCalendarFile(value: unknown): CalendarFile | null {
   return {
     active: record.active,
     file: typeof record.file === 'string' ? record.file : '',
-    url: typeof record.url === 'string' ? record.url : '',
+    url: persistCalendarUrl(typeof record.url === 'string' ? record.url : ''),
     seenUids: seen,
   }
 }
@@ -51,15 +51,18 @@ export function readCalendarFile(value: unknown): CalendarFile | null {
 export function withCalendarSource(
   active: CalendarSource,
   next: Partial<Pick<CalendarFile, 'file' | 'url'>>,
-  previous: CalendarFile | null,
+  previous: CalendarFile,
 ): CalendarFile {
-  const base = previous ?? emptyCalendarFile()
   return {
     active,
-    file: next.file ?? base.file,
-    url: next.url ?? base.url,
-    seenUids: base.seenUids,
+    file: next.file ?? previous.file,
+    url: next.url !== undefined ? persistCalendarUrl(next.url) : previous.url,
+    seenUids: previous.seenUids,
   }
+}
+
+export function sameCalendarSource(left: CalendarFile, right: CalendarFile): boolean {
+  return left.active === right.active && left.file === right.file && left.url === right.url
 }
 
 export function sourceReady(file: CalendarFile): boolean {
@@ -111,14 +114,6 @@ export function catalogWindow(today: string): { start: string; end: string } {
   return { start: `${year - 1}-01-01`, end: `${year + 2}-12-31` }
 }
 
-export function monthGridRange(yearMonth: string): { start: string; end: string } {
-  const start = `${yearMonth}-01`
-  const parsed = parseDate(start)
-  if (!parsed) return { start, end: start }
-  const last = `${yearMonth}-${pad(daysInMonth(parsed.y, parsed.m))}`
-  return { start: addDays(start, -6), end: addDays(last, 6) }
-}
-
 export function noticesDue(events: CalendarEvent[], today: string, seenUids: string[]): CalendarEvent[] {
   const seen = new Set(seenUids)
   const latest = addDays(today, NOTICE_DAYS)
@@ -167,6 +162,10 @@ export function normalizeCalendarUrl(input: string): string | null {
   } catch {
     return null
   }
+}
+
+function persistCalendarUrl(input: string): string {
+  return normalizeCalendarUrl(input) ?? input.trim()
 }
 
 export function generateIcs(events: CalendarEvent[]): string {

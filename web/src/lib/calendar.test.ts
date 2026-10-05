@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test'
 
 import type { MessageKey } from '@/i18n/locales/en'
 
-import { explainCalendarError } from './calendar'
+import { emptyCalendarFile, withCalendarSource } from './compliance-calendar'
+import { explainCalendarError, resolveCalendar } from './calendar'
 
 describe('calendar store shape', () => {
   test('explains file and HTTPS failures', () => {
@@ -11,5 +12,14 @@ describe('calendar store shape', () => {
     expect(explainCalendarError('file', t)).toBe('calendar.errorFile')
     expect(explainCalendarError('calendar-url', t)).toBe('calendar.invalidUrl')
     expect(explainCalendarError('calendar-http', t)).toBe('calendar.errorUrl')
+  })
+
+  test('the browser resolve path stays on the bundled catalog', async () => {
+    const resolved = await resolveCalendar(
+      withCalendarSource('url', { url: 'https://example.com/cal.ics' }, emptyCalendarFile()),
+      '2026-10-05',
+    )
+    expect(resolved.catalog.some((event) => event.kind === 'vat' && event.date === '2026-10-15')).toBe(true)
+    expect(resolved.ics).toContain('BEGIN:VCALENDAR')
   })
 })

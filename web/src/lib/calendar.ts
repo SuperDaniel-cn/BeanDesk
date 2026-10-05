@@ -7,7 +7,6 @@ import {
   calendarToday,
   catalogWindow,
   emptyCalendarFile,
-  eventsFromIcs,
   generateIcs,
   normalizeCalendarUrl,
   noticesDue,
@@ -15,7 +14,6 @@ import {
   presentCalendarSummary,
   readCalendarFile,
   rememberNotices,
-  upcomingEvents,
   type CalendarEvent,
   type CalendarFile,
 } from '@/lib/compliance-calendar'
@@ -49,14 +47,6 @@ export async function resolveCalendar(
   const ics = await loadActiveIcs(file)
   const { start, end } = catalogWindow(today)
   return { catalog: parseIcs(ics, start, end), ics }
-}
-
-export async function loadActiveEvents(
-  file: CalendarFile,
-  today = calendarToday(),
-): Promise<CalendarEvent[]> {
-  if (file.active === 'bundled') return upcomingEvents(bundledCatalogEvents(today), today)
-  return eventsFromIcs(await loadActiveIcs(file), today)
 }
 
 async function loadActiveIcs(file: CalendarFile): Promise<string> {
@@ -102,7 +92,8 @@ export async function notifyDueCalendars(options: {
 }): Promise<void> {
   const file = await loadCalendar()
   const today = options.today ?? calendarToday()
-  const due = noticesDue(await loadActiveEvents(file, today), today, file.seenUids)
+  const { catalog } = await resolveCalendar(file, today)
+  const due = noticesDue(catalog, today, file.seenUids)
   if (due.length === 0) return
   for (const event of due) {
     const title = options.t('settings.calendarNoticeTitle')
@@ -113,7 +104,8 @@ export async function notifyDueCalendars(options: {
     options.toast(title, { description: body })
     await sendBanner(title, body)
   }
-  await saveCalendar({ ...file, seenUids: rememberNotices(file.seenUids, due) })
+  const latest = await loadCalendar()
+  await saveCalendar({ ...latest, seenUids: rememberNotices(latest.seenUids, due) })
 }
 
 async function sendBanner(title: string, body: string): Promise<void> {

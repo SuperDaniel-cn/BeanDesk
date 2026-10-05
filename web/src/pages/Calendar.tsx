@@ -6,9 +6,14 @@ import { enUS, zhCN } from 'react-day-picker/locale'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Calendar as MonthCalendar, CalendarDayButton } from '@/components/ui/calendar'
-import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@/components/ui/input-group'
 import {
   Sheet,
   SheetContent,
@@ -36,8 +41,9 @@ import {
   calendarToday,
   emptyCalendarFile,
   eventsInRange,
-  monthGridRange,
+  noticeKey,
   presentCalendarSummary,
+  sameCalendarSource,
   sourceReady,
   upcomingEvents,
   withCalendarSource,
@@ -64,36 +70,44 @@ export function Calendar() {
   const fileRef = useRef(file)
 
   async function apply(next: CalendarFile) {
-    if (!sourceReady(next)) return
-    if (sameCalendar(fileRef.current, next) && ics && !error) return
+    if (!sourceReady(next)) {
+      if (next.active === 'url') setError(next.url.trim() ? t('calendar.invalidUrl') : '')
+      return
+    }
+    const applied = fileRef.current
+    if (sameCalendarSource(applied, next) && ics && !error) return
     const id = ++token.current
     setApplying(true)
     try {
       const resolved = await resolveCalendar(next)
       if (id !== token.current) return
+      await saveCalendar(next)
+      if (id !== token.current) return
       fileRef.current = next
       setFile(next)
-      setDraft(next)
+      setDraft((current) => (sameCalendarSource(current, applied) ? next : current))
       setIcs(resolved.ics)
       setCatalog(resolved.catalog)
       setError('')
-      await saveCalendar(next)
     } catch (caught) {
       if (id !== token.current) return
       setError(explainCalendarError(caught, t))
     } finally {
-      if (id === token.current) setApplying(false)
+      if (id === token.current) {
+        setApplying(false)
+        setBusy(false)
+      }
     }
   }
 
   useEffect(() => {
+    const id = ++token.current
     void loadCalendar()
       .then(async (next) => {
+        if (id !== token.current) return
         fileRef.current = next
         setFile(next)
         setDraft(next)
-        const id = ++token.current
-        setBusy(true)
         try {
           const resolved = await resolveCalendar(next)
           if (id !== token.current) return
@@ -107,6 +121,7 @@ export function Calendar() {
         }
       })
       .catch((caught: unknown) => {
+        if (id !== token.current) return
         setBusy(false)
         setError(explainCalendarError(caught, t))
       })
@@ -120,12 +135,12 @@ export function Calendar() {
 
   const selectedKey = selected ? calendarDateKey(selected) : ''
   const upcoming = useMemo(() => upcomingEvents(catalog, calendarToday()), [catalog])
-  const markedKeys = useMemo(() => {
-    const grid = monthGridRange(calendarDateKey(month).slice(0, 7))
-    return new Set(eventsInRange(catalog, grid.start, grid.end).map((event) => event.date))
-  }, [catalog, month])
+  const markedKeys = useMemo(() => new Set(catalog.map((event) => event.date)), [catalog])
   const rows = selectedKey ? eventsInRange(catalog, selectedKey, selectedKey) : upcoming
-  const sourceName = sourceCaption(file, t)
+  const sourceName =
+    file.active === 'bundled'
+      ? t('calendar.bundled')
+      : calendarSourceDetail(file) || (file.active === 'file' ? t('calendar.file') : t('calendar.url'))
 
   function openSubscribe(next: boolean) {
     setOpen(next)
@@ -177,19 +192,7 @@ export function Calendar() {
     URL.revokeObjectURL(href)
   }
 
-  function goThisMonth() {
-    const today = new Date()
-    setMonth(today)
-    setSelected(undefined)
-  }
-
   const draftSource = desktop ? draft.active : 'bundled'
-  const hint =
-    draftSource === 'file'
-      ? t('calendar.fileHint')
-      : draftSource === 'url'
-        ? t('calendar.urlHint')
-        : t('calendar.bundledHint')
 
   return (
     <section className="flex flex-col gap-6">
@@ -200,7 +203,14 @@ export function Calendar() {
           </span>
         </div>
         <div className="order-1 flex h-7 flex-wrap items-center justify-end gap-2 lg:order-none lg:col-start-2 lg:row-start-1">
-          <Button type="button" variant="outline" onClick={goThisMonth}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setMonth(new Date())
+              setSelected(undefined)
+            }}
+          >
             {t('calendar.thisMonth')}
           </Button>
           <Button type="button" variant="outline" onClick={() => openSubscribe(true)}>
@@ -210,13 +220,19 @@ export function Calendar() {
         <div className="order-4 flex min-h-0 min-w-0 flex-col lg:order-none lg:col-start-1 lg:row-start-2">
           <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border bg-card">
             {busy ? (
-              <div className="flex flex-1 items-center gap-2 p-3 text-xs text-muted-foreground">
+              <div className="flex flex-1 items-center p-3">
                 <Spinner />
               </div>
+            ) : error && !ics ? (
+              <Alert className="m-3">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             ) : rows.length === 0 ? (
               <Empty className="flex-1 border-0">
                 <EmptyHeader>
-                  <CalendarDays />
+                  <EmptyMedia variant="icon">
+                    <CalendarDays />
+                  </EmptyMedia>
                   <EmptyTitle>{selectedKey ? t('calendar.emptyDay') : t('calendar.emptyUpcoming')}</EmptyTitle>
                 </EmptyHeader>
               </Empty>
@@ -230,7 +246,7 @@ export function Calendar() {
                 </TableHeader>
                 <TableBody>
                   {rows.map((event) => (
-                    <TableRow key={`${event.uid}:${event.date}`}>
+                    <TableRow key={noticeKey(event)}>
                       <TableCell className="font-mono">{event.date}</TableCell>
                       <TableCell className="whitespace-normal">{presentCalendarSummary(event, t)}</TableCell>
                     </TableRow>
@@ -283,38 +299,46 @@ export function Calendar() {
                   {desktop ? <TabsTrigger value="url">{t('calendar.url')}</TabsTrigger> : null}
                 </TabsList>
               </Tabs>
-              <FieldDescription>{hint}</FieldDescription>
+              <FieldDescription>
+                {t(
+                  draftSource === 'file'
+                    ? 'calendar.fileHint'
+                    : draftSource === 'url'
+                      ? 'calendar.urlHint'
+                      : 'calendar.bundledHint',
+                )}
+              </FieldDescription>
             </Field>
 
             {draftSource === 'file' ? (
               <Field>
                 <FieldLabel htmlFor="calendar-file">{t('calendar.file')}</FieldLabel>
-                <div className="flex w-full flex-wrap gap-2">
-                  <Input
+                <InputGroup>
+                  <InputGroupInput
                     id="calendar-file"
                     value={draft.file}
                     readOnly
-                    className="min-w-0 flex-1 font-mono"
+                    className="font-mono"
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void browseIcs()}
-                    disabled={applying}
-                    className="shrink-0"
-                  >
-                    <FolderOpen data-icon="inline-start" />
-                    {t('calendar.browseIcs')}
-                  </Button>
-                </div>
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      variant="outline"
+                      disabled={applying}
+                      onClick={() => void browseIcs()}
+                    >
+                      <FolderOpen data-icon="inline-start" />
+                      {t('calendar.browseIcs')}
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
               </Field>
             ) : null}
 
             {draftSource === 'url' ? (
               <Field data-invalid={error ? true : undefined}>
                 <FieldLabel htmlFor="calendar-url">{t('calendar.url')}</FieldLabel>
-                <div className="flex w-full flex-wrap gap-2">
-                  <Input
+                <InputGroup>
+                  <InputGroupInput
                     id="calendar-url"
                     value={draft.url}
                     aria-invalid={error ? true : undefined}
@@ -329,18 +353,18 @@ export function Calendar() {
                     placeholder={t('calendar.urlPlaceholder')}
                     spellCheck={false}
                     inputMode="url"
-                    className="min-w-0 flex-1 font-mono"
+                    className="font-mono"
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void fillPublicFeed()}
-                    disabled={applying}
-                    className="shrink-0"
-                  >
-                    {t('calendar.usePublic')}
-                  </Button>
-                </div>
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      variant="outline"
+                      disabled={applying}
+                      onClick={() => void fillPublicFeed()}
+                    >
+                      {t('calendar.usePublic')}
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
               </Field>
             ) : null}
 
@@ -350,32 +374,18 @@ export function Calendar() {
               </Alert>
             ) : null}
           </FieldGroup>
-          <SheetFooter>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => void copyIcs()} disabled={applying || !ics}>
-                <Copy data-icon="inline-start" />
-                {copied ? t('settings.copied') : t('calendar.copy')}
-              </Button>
-              <Button type="button" variant="outline" onClick={downloadIcs} disabled={applying || !ics}>
-                <Download data-icon="inline-start" />
-                {t('calendar.download')}
-              </Button>
-            </div>
+          <SheetFooter className="flex-row flex-wrap">
+            <Button type="button" variant="outline" onClick={() => void copyIcs()} disabled={applying || !ics}>
+              <Copy data-icon="inline-start" />
+              {copied ? t('settings.copied') : t('calendar.copy')}
+            </Button>
+            <Button type="button" variant="outline" onClick={downloadIcs} disabled={applying || !ics}>
+              <Download data-icon="inline-start" />
+              {t('calendar.download')}
+            </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
     </section>
   )
-}
-
-function sourceCaption(
-  file: CalendarFile,
-  t: (key: 'calendar.bundled' | 'calendar.file' | 'calendar.url') => string,
-): string {
-  if (file.active === 'bundled') return t('calendar.bundled')
-  return calendarSourceDetail(file) || (file.active === 'file' ? t('calendar.file') : t('calendar.url'))
-}
-
-function sameCalendar(left: CalendarFile, right: CalendarFile): boolean {
-  return left.active === right.active && left.file === right.file && left.url === right.url
 }
