@@ -4,6 +4,7 @@ use serde_json::Value;
 use ureq::{Agent, AgentBuilder, Error as UreqError};
 
 const DEFAULT_SLUG: &str = "beancount";
+const UNREACHABLE: &str = "Settings origin is not answering";
 const TIMEOUT: Duration = Duration::from_secs(8);
 
 pub(crate) struct FavaHttp {
@@ -31,77 +32,87 @@ impl FavaHttp {
     }
 
     pub(crate) fn resolve_ledger(&self) -> Result<(String, Value), String> {
-        match self.get_data(&format!("/{DEFAULT_SLUG}/api/ledger_data"), &[]) {
-            Ok(data) => return Ok((DEFAULT_SLUG.to_string(), data)),
-            Err(error) if error == "Settings origin is not answering" => return Err(error),
-            Err(_) => {}
+        match self.get_json(&format!("/{DEFAULT_SLUG}/api/ledger_data"), &[]) {
+            Ok(json) => Ok((DEFAULT_SLUG.to_string(), fava_data(json)?)),
+            Err(error) if error == UNREACHABLE => Err(error),
+            Err(first) => {
+                let root = self.probe_root()?;
+                let discovered = root
+                    .location
+                    .as_deref()
+                    .and_then(slug_from_redirect)
+                    .or_else(|| slug_from_redirect(&root.url));
+                let Some(slug) = discovered else {
+                    return Err(first);
+                };
+                let data = self.get_data(&format!("/{slug}/api/ledger_data"), &[])?;
+                Ok((slug, data))
+            }
         }
-        let root = self.probe_root()?;
-        let discovered = slug_from_redirect(&root.location.unwrap_or_default())
-            .or_else(|| slug_from_redirect(&root.url));
-        let Some(slug) = discovered else {
-            return Err("Fava slug could not be determined.".into());
-        };
-        let data = self.get_data(&format!("/{slug}/api/ledger_data"), &[])?;
-        Ok((slug, data))
     }
 
     pub(crate) fn get_data(&self, path: &str, query: &[(&str, &str)]) -> Result<Value, String> {
+        fava_data(self.get_json(path, query)?)
+    }
+
+    fn get_json(&self, path: &str, query: &[(&str, &str)]) -> Result<Value, String> {
         let url = format!("{}{path}", self.origin);
         let mut request = self.api.get(&url);
         for (key, value) in query {
             request = request.query(key, value);
         }
-        let text = request
+        request
             .call()
             .map_err(explain_ureq)?
-            .into_string()
-            .map_err(|error| error.to_string())?;
-        let json: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-        if let Some(error) = json
-            .get("error")
-            .and_then(Value::as_str)
-            .filter(|error| !error.is_empty())
-        {
-            return Err(error.to_string());
-        }
-        Ok(json.get("data").cloned().unwrap_or(Value::Null))
+            .into_json()
+            .map_err(|error| error.to_string())
     }
 
     fn probe_root(&self) -> Result<HttpResponse, String> {
         let url = format!("{}/", self.origin);
         match self.probe.get(&url).call() {
-            Ok(response) => Ok(read_response(response, url)),
-            Err(UreqError::Status(_, response)) => Ok(read_response(response, url)),
+            Ok(response) => Ok(read_response(response)),
+            Err(UreqError::Status(_, response)) => Ok(read_response(response)),
             Err(error) => Err(explain_ureq(error)),
         }
     }
 }
 
-fn read_response(response: ureq::Response, fallback: String) -> HttpResponse {
+fn json_error(json: &Value) -> Option<&str> {
+    json.get("error")
+        .and_then(Value::as_str)
+        .filter(|error| !error.is_empty())
+}
+
+fn fava_data(json: Value) -> Result<Value, String> {
+    if let Some(error) = json_error(&json) {
+        return Err(error.to_string());
+    }
+    Ok(json.get("data").cloned().unwrap_or(Value::Null))
+}
+
+fn read_response(response: ureq::Response) -> HttpResponse {
     let location = response.header("location").map(str::to_string);
     let url = response.get_url().to_string();
     let _ = response.into_string();
-    HttpResponse {
-        location,
-        url: if url.is_empty() { fallback } else { url },
-    }
+    HttpResponse { location, url }
 }
 
 fn explain_ureq(error: UreqError) -> String {
     match error {
-        UreqError::Status(code, response) => response
-            .into_string()
-            .ok()
-            .and_then(|text| {
-                serde_json::from_str::<Value>(&text).ok().and_then(|json| {
-                    json.get("error")
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
+        UreqError::Status(code, response) => {
+            let fallback = format!("{code} {}", response.status_text());
+            response
+                .into_string()
+                .ok()
+                .and_then(|text| {
+                    serde_json::from_str::<Value>(&text)
+                        .ok()
+                        .and_then(|json| json_error(&json).map(str::to_string))
                 })
-            })
-            .unwrap_or_else(|| format!("{code}")),
-        UreqError::Transport(_) => "Settings origin is not answering".into(),
+                .unwrap_or(fallback)
+        }
+        UreqError::Transport(_) => UNREACHABLE.into(),
     }
 }
 
@@ -153,20 +164,19 @@ pub(crate) fn quote_commodity(code: &str) -> Result<&str, String> {
     }
 }
 
-pub(crate) fn operating_currency(options: &Value) -> String {
+pub(crate) fn operating_currency(options: Option<&Value>) -> &str {
     options
-        .pointer("/operating_currency/0")
+        .and_then(|options| options.pointer("/operating_currency/0"))
         .and_then(Value::as_str)
         .filter(|code| !code.is_empty())
         .unwrap_or("CNY")
-        .to_string()
 }
 
 pub(crate) fn slug_from_redirect(url: &str) -> Option<String> {
     let path = url.split_once("://").map_or(url, |(_, rest)| {
         rest.split_once('/').map_or("", |(_, path)| path)
     });
-    let path = path.split('?').next().unwrap_or(path);
+    let path = path.split_once('?').map_or(path, |(path, _)| path);
     let mut parts = path.split('/').filter(|part| !part.is_empty());
     let first = parts.next()?;
     let slug = if first == "api" && parts.next() == Some("fava") {
@@ -194,6 +204,10 @@ mod tests {
 
     #[test]
     fn slug_reads_the_first_path_segment() {
+        assert_eq!(
+            slug_from_redirect("http://127.0.0.1:5000/beancount/income_statement/"),
+            Some("beancount".into())
+        );
         assert_eq!(
             slug_from_redirect("http://127.0.0.1:5000/books/"),
             Some("books".into())

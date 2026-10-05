@@ -82,7 +82,7 @@ pub(crate) fn get_connection_card(
     store: Option<&serde_json::Value>,
 ) -> Result<Card<ConnectionBody>, String> {
     let resolved = match store {
-        Some(value) => resolve_connection(Some(value))?,
+        Some(_) => resolve_connection(store)?,
         None => ResolvedConnection::Owned(
             load_saved_connection().unwrap_or_else(|_| serde_json::json!({})),
         ),
@@ -93,7 +93,7 @@ pub(crate) fn get_connection_card(
         .get("active")
         .and_then(|item| item.as_str())
         .unwrap_or("none");
-    let origin = active_origin_raw(connection);
+    let origin = active_origin(connection).ok();
     let launch = connection
         .pointer("/local/launch")
         .and_then(|item| item.as_str())
@@ -119,7 +119,7 @@ pub(crate) fn get_connection_card(
     let app_ledger = directory
         .as_ref()
         .is_some_and(|path| app_created_ledger(path));
-    let origin_kind = match origin {
+    let origin_kind = match origin.as_deref() {
         Some(value) if accepts_local_origin(value) => "loopback",
         Some(_) => "remote",
         None => "none",
@@ -274,25 +274,16 @@ pub(crate) fn preview_output(text: &str) -> String {
         .join("\n")
 }
 
-pub(crate) fn active_origin_raw(connection: &serde_json::Value) -> Option<&str> {
-    let active = connection.get("active").and_then(|item| item.as_str())?;
-    let origin = match active {
-        "local" => connection.pointer("/local/origin")?.as_str(),
-        "remote" => connection.pointer("/remote/origin")?.as_str(),
-        _ => None,
-    }?;
-    let origin = origin.trim();
-    if origin.is_empty() {
-        None
-    } else {
-        Some(origin)
-    }
-}
-
 pub(crate) fn active_origin(connection: &serde_json::Value) -> Result<String, String> {
-    active_origin_raw(connection)
-        .map(|origin| origin.trim_end_matches('/').to_string())
-        .ok_or_else(|| "No Fava origin in Settings.".into())
+    let origin = match connection.get("active").and_then(|item| item.as_str()) {
+        Some("local") => connection.pointer("/local/origin").and_then(|item| item.as_str()),
+        Some("remote") => connection.pointer("/remote/origin").and_then(|item| item.as_str()),
+        _ => None,
+    }
+    .map(|origin| origin.trim().trim_end_matches('/'))
+    .filter(|origin| !origin.is_empty())
+    .ok_or_else(|| "No Fava origin in Settings.".to_string())?;
+    Ok(origin.to_string())
 }
 
 fn sentences<const N: usize>(parts: [&str; N]) -> String {
@@ -303,7 +294,7 @@ fn sentences<const N: usize>(parts: [&str; N]) -> String {
         .join(" ")
 }
 
-fn explain_store(code: impl AsRef<str>) -> String {
+pub(crate) fn explain_store(code: impl AsRef<str>) -> String {
     match code.as_ref() {
         "directory" => "No working directory in Settings.".into(),
         "missing" => "No connection saved in Settings.".into(),
@@ -412,6 +403,14 @@ mod tests {
         .unwrap();
         assert!(again.contains("already exists"));
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn get_connection_treats_a_trailing_slash_origin_as_loopback() {
+        let mut store = fixture_store("/private/tmp/named-repo-must-not-appear", "local");
+        store["connection"]["local"]["origin"] = serde_json::json!("http://127.0.0.1:5000/");
+        let card = get_connection_card(Some(&store)).unwrap();
+        assert_eq!(card.body.origin_kind, "loopback");
     }
 
     #[test]

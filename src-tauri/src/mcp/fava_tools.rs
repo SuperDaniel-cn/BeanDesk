@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use super::card::Card;
 use super::fava::{FavaHttp, operating_currency, query_time, quote_commodity};
-use super::tools::{PREVIEW_LINES, active_origin, preview_output, resolve_connection};
+use super::tools::{PREVIEW_LINES, active_origin, explain_store, preview_output, resolve_connection};
 
 const BODY_ROWS: usize = 50;
 const JOURNAL_BQL: &str = "SELECT id, date, flag, payee, narration, account, units(position) as units, tags, links ORDER BY date DESC LIMIT 51";
@@ -85,7 +85,7 @@ pub(crate) struct DocumentRow {
 }
 
 fn fava_from(store: Option<&Value>) -> Result<FavaHttp, String> {
-    let resolved = resolve_connection(store)?;
+    let resolved = resolve_connection(store).map_err(explain_store)?;
     Ok(FavaHttp::new(active_origin(resolved.value())?))
 }
 
@@ -110,21 +110,13 @@ pub(crate) fn get_fava_card(store: Option<&Value>) -> Result<Card<FavaStatusBody
     };
     match fava.resolve_ledger() {
         Ok((slug, data)) => {
-            let title = data
-                .pointer("/options/title")
-                .and_then(Value::as_str)
-                .unwrap_or("Ledger")
-                .to_string();
+            let title = ledger_title(&data).to_string();
             let account_count = data
                 .get("accounts")
                 .and_then(Value::as_array)
                 .map(Vec::len)
                 .unwrap_or(0);
-            let error_count = data
-                .get("errors")
-                .and_then(Value::as_array)
-                .map(Vec::len)
-                .unwrap_or(0);
+            let error_count = error_count(&data);
             Ok(Card::new(
                 format!(
                     "Fava is answering. Title is {title}. {account_count} accounts. {error_count} loader errors."
@@ -158,14 +150,10 @@ pub(crate) fn get_ledger_card(store: Option<&Value>) -> Result<Card<LedgerBody>,
                 .collect()
         })
         .unwrap_or_default();
-    let errors = error_messages(&data);
-    let title = data
-        .pointer("/options/title")
-        .and_then(Value::as_str)
-        .unwrap_or("Ledger")
-        .to_string();
-    let currency = operating_currency(data.get("options").unwrap_or(&Value::Null));
-    let error_count = errors.len();
+    let errors = error_previews(&data);
+    let title = ledger_title(&data).to_string();
+    let currency = operating_currency(data.get("options")).to_string();
+    let error_count = error_count(&data);
     Ok(Card::new(
         format!("{title} uses {currency}. {account_count} accounts. {error_count} loader errors."),
         LedgerBody {
@@ -174,7 +162,7 @@ pub(crate) fn get_ledger_card(store: Option<&Value>) -> Result<Card<LedgerBody>,
             account_count,
             error_count,
             accounts: account_names,
-            errors: errors.into_iter().take(PREVIEW_LINES).collect(),
+            errors,
             slug,
         },
     ))
@@ -279,12 +267,9 @@ fn report_card(
 ) -> Result<Card<ReportBody>, String> {
     let fava = fava_from(store)?;
     let (slug, ledger) = fava.resolve_ledger()?;
-    let currency = quote_commodity(&operating_currency(
-        ledger.get("options").unwrap_or(&Value::Null),
-    ))?
-    .to_string();
+    let currency = quote_commodity(operating_currency(ledger.get("options")))?;
     let time = query_time(time)?;
-    let mut params = vec![("conversion", currency.as_str())];
+    let mut params = vec![("conversion", currency)];
     if let Some(token) = time {
         params.push(("time", token));
     }
@@ -315,12 +300,13 @@ pub(crate) fn list_documents_card(store: Option<&Value>) -> Result<Card<Document
     let fava = fava_from(store)?;
     let (slug, _) = fava.resolve_ledger()?;
     let data = fava.get_data(&format!("/{slug}/api/documents"), &[])?;
-    let items = data.as_array();
-    let count = items.map(Vec::len).unwrap_or(0);
+    let items = data
+        .as_array()
+        .ok_or_else(|| "Fava documents catalogue was not a list.".to_string())?;
+    let count = items.len();
     let truncated = count > BODY_ROWS;
     let documents = items
-        .into_iter()
-        .flatten()
+        .iter()
         .take(BODY_ROWS)
         .map(|item| DocumentRow {
             date: item
@@ -351,7 +337,20 @@ pub(crate) fn list_documents_card(store: Option<&Value>) -> Result<Card<Document
     ))
 }
 
-fn error_messages(data: &Value) -> Vec<String> {
+fn ledger_title(data: &Value) -> &str {
+    data.pointer("/options/title")
+        .and_then(Value::as_str)
+        .unwrap_or("Ledger")
+}
+
+fn error_count(data: &Value) -> usize {
+    data.get("errors")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0)
+}
+
+fn error_previews(data: &Value) -> Vec<String> {
     data.get("errors")
         .and_then(Value::as_array)
         .into_iter()
@@ -359,8 +358,10 @@ fn error_messages(data: &Value) -> Vec<String> {
         .filter_map(|item| {
             item.get("message")
                 .and_then(Value::as_str)
+                .filter(|message| !message.is_empty())
                 .map(str::to_string)
         })
+        .take(PREVIEW_LINES)
         .collect()
 }
 
@@ -421,7 +422,11 @@ mod tests {
                     .to_string();
                 log.lock().unwrap().push(path.clone());
                 let (status, headers, body) = handler(&path);
-                let reason = if status == 302 { "Found" } else { "OK" };
+                let reason = match status {
+                    302 => "Found",
+                    404 => "Not Found",
+                    _ => "OK",
+                };
                 let mut extra = String::new();
                 for (key, value) in headers {
                     extra.push_str(&format!("{key}: {value}\r\n"));
@@ -504,7 +509,96 @@ mod tests {
         let card = get_ledger_card(Some(&store)).unwrap();
         assert_eq!(card.body.slug, "books");
         assert_eq!(card.body.account_count, 2);
+        assert_eq!(card.body.error_count, 1);
         assert!(!card.display_block.contains("/secret/main.bean"));
         assert!(!card.display_block.contains("named-repo-must-not-appear"));
+    }
+
+    #[test]
+    fn get_fava_explains_a_missing_store() {
+        let card = get_fava_card(Some(&serde_json::json!({}))).unwrap();
+        assert!(!card.body.answering);
+        assert!(card.display_block.contains("No connection saved"));
+    }
+
+    #[test]
+    fn default_slug_json_error_does_not_probe_root() {
+        let (origin, seen) = start_mock(|path| {
+            if path.ends_with("/api/ledger_data") {
+                (
+                    200,
+                    vec![("Content-Type".into(), "application/json".into())],
+                    r#"{"error":"file missing"}"#.into(),
+                )
+            } else {
+                (200, vec![], String::new())
+            }
+        });
+        let err = get_ledger_card(Some(&store_for(&origin))).err().unwrap();
+        assert!(err.contains("file missing"));
+        assert!(seen.lock().unwrap().iter().all(|path| path != "/"));
+    }
+
+    #[test]
+    fn failed_default_slug_keeps_http_status() {
+        let (origin, _) = start_mock(|_| (404, vec![], String::new()));
+        let card = get_fava_card(Some(&store_for(&origin))).unwrap();
+        assert!(!card.body.answering);
+        assert!(card.display_block.contains("404"));
+    }
+
+    #[test]
+    fn html_on_default_slug_is_not_a_live_fava() {
+        let (origin, _) = start_mock(|path| {
+            if path.ends_with("/api/ledger_data") {
+                (200, vec![], "<html>nope</html>".into())
+            } else {
+                (200, vec![], String::new())
+            }
+        });
+        let card = get_fava_card(Some(&store_for(&origin))).unwrap();
+        assert!(!card.body.answering);
+        assert_eq!(card.body.slug, "");
+    }
+
+    #[test]
+    fn ledger_counts_every_loader_error() {
+        let (origin, _) = start_mock(|path| {
+            if path.ends_with("/api/ledger_data") {
+                (
+                    200,
+                    vec![("Content-Type".into(), "application/json".into())],
+                    r#"{"data":{"options":{"title":"Ledger","operating_currency":["CNY"]},"accounts":[],"errors":[{},{"message":"late"}]}}"#.into(),
+                )
+            } else {
+                (404, vec![], String::new())
+            }
+        });
+        let card = get_ledger_card(Some(&store_for(&origin))).unwrap();
+        assert_eq!(card.body.error_count, 2);
+        assert_eq!(card.body.errors, ["late"]);
+    }
+
+    #[test]
+    fn documents_rejects_a_non_list() {
+        let (origin, _) = start_mock(|path| {
+            if path.ends_with("/api/ledger_data") {
+                (
+                    200,
+                    vec![("Content-Type".into(), "application/json".into())],
+                    r#"{"data":{"options":{"title":"Ledger","operating_currency":["CNY"]},"accounts":[],"errors":[]}}"#.into(),
+                )
+            } else if path.ends_with("/api/documents") {
+                (
+                    200,
+                    vec![("Content-Type".into(), "application/json".into())],
+                    r#"{"data":{}}"#.into(),
+                )
+            } else {
+                (404, vec![], String::new())
+            }
+        });
+        let err = list_documents_card(Some(&store_for(&origin))).err().unwrap();
+        assert!(err.contains("not a list"));
     }
 }
