@@ -29,6 +29,7 @@ BeanDesk 是壳，围着 **一个** Fava。账本文件在你选的文件夹里�
 
 - **桌面（推荐）**：`make desktop`。本机启动（目录 + 空命令或自定义命令），或连接已有地址。
 - **浏览器**：只连已经在跑的 Fava。`make dev`，打开 `http://127.0.0.1:5188`。
+- **手册**：桌面里的 **手册** 图标会打开第二个窗口，里面是 Fumadocs 手册。`make docs` 是写作预览，地址 `http://127.0.0.1:3200/docs`。
 
 ## 项目定位与演进路线
 
@@ -180,7 +181,7 @@ BeanDesk/
 ├── AGENTS.md               # 前端工程规范与开发契约
 ├── DEPLOY.md               # 本机绑定、Caddy 反代与隧道部署
 ├── calendars/              # 公开静态 ICS（不是我们运营的提醒服务）
-├── docs/
+├── docs/                   # 用户手册（Fumadocs）与界面截屏
 │   └── images/             # 界面截屏（中英文）
 ├── skills/                 # 智能体技能定义
 │   └── fava-beancount-guide/ # 引导用户自建账本与记账合规规范

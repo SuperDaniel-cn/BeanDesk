@@ -8,11 +8,11 @@
     "frontendDist": "../web/dist",
     "devUrl": "http://127.0.0.1:5188",
     "beforeDevCommand": {
-      "script": "bun run dev",
+      "script": "bun run ensure-docs && bun run dev",
       "cwd": "../web"
     },
     "beforeBuildCommand": {
-      "script": "bun run build",
+      "script": "bun run ensure-docs && bun run build",
       "cwd": "../web"
     }
   },

@@ -37,13 +37,14 @@ BeanDesk 前端与桌面端工程规范。
 - 进程看管原则：启动本机项目前先检测端口。已通则仅连接；未通则在独立进程组执行用户命令，等待就绪后再进入界面。退出时仅终止本次拉起的进程组。设置页展示的是现场快照（会话、端口探测、本窗口是否拥有进程）。Stop 只对 `owned`；PID 只存在本窗口内存里，不写入 store。
 - 运行环境：发布包装冻结的 `beandesk-engine` 目录（onedir：可执行文件加 `_internal`，不是单文件）。账本连接把 `launch` 写成 `engine`，走这条路径，高级页里已保存的命令留在记录里但不执行。高级连接把 `launch` 写成 `shell`，启动命令原样交给 shell，不解析、不改写，命令为空则不启动。没有冻品时报 `missing-engine`。不内置生 Python 解释器。
 - 第一本账：`init_ledger` 只在用户选定的工作目录写技能里的骨架，并写下一个 `.beandesk` 标记。已有 `main.bean` 则报 `ledger-exists`。不开放通用写盘。骨架带上忽略 `.backup_key`、`.env` 与 `backups/` 的 `.gitignore`。没有这个标记的目录是已有账本，备份页的操作全部停用，也不做 Git 监听。
-- 工作目录备份：设置 Backup 页。Git 自动保存只在工作目录里做快照（只纳入 `main.bean`、`config/`、`data/`），靠监听和防抖，没有额外的快照按钮。凭证不进 Git。加密备份走随包装的 restic 0.19.1：设口令后点备份；自动备份关闭时只在点备份时写；开启后写入已添加且就绪的目的地。目的地是确认后的条目，不是两个热槽位：本地目录和 S3 兼容桶（R2 / MinIO / AWS，字段对齐 PicGo S3）都可以加多条。添加或编辑都在对话框里确认后才写入 `backup.json`。旧的「一个本地 + 一个云端」槽位在加载时迁进 `dests[]`。每次都打 `main.bean`、`config/`、`data/`、`documents/`，只传新增或改动的数据块。改口令时给已经存在的仓库换钥匙。抽查失败会记在本机，下次即使内容没变也会再查。保留最近 48 小时的每一次快照，再按 30 天/12 周/24 个月变稀。内容没变时 `--skip-if-unchanged` 不另写一份。仓库不能嵌在账本目录里。备份、恢复、保存设置和测试存储这类可能等磁盘或网络的命令走 `spawn_blocking`，不占主线程；监听线程里不碰 `watch` 锁。口令经 `RESTIC_PASSWORD_FILE`，S3 凭证走环境变量，都不进进程参数。不办 BeanDesk 云、不代管桶、不自动 `git push`。备份配置在本机 `backup.json`，口令在工作目录 `.backup_key`，都不进 `connection.json`，也不进本仓库。日志不打密钥。开发机用 `make restic` 拉当前平台的二进制；发布时按目标 triple 拉同一版本并用发行 SHA256 校验。
+- 工作目录备份：设置 Backup 页。Git 自动保存只在工作目录里做快照（只纳入 `main.bean`、`config/`、`data/`），靠监听和防抖，没有额外的快照按钮。有 `.beandesk` 且开启 Git 自动保存时，启动监听并立刻打一份快照，之后仍按防抖。凭证不进 Git。加密备份走随包装的 restic 0.19.1：设口令后点备份；自动备份关闭时只在点备份时写；开启后写入已添加且就绪的目的地。目的地是确认后的条目，不是两个热槽位：本地目录和 S3 兼容桶（R2 / MinIO / AWS，字段对齐 PicGo S3）都可以加多条。添加或编辑都在对话框里确认后才写入 `backup.json`。旧的「一个本地 + 一个云端」槽位在加载时迁进 `dests[]`。每次都打 `main.bean`、`config/`、`data/`、`documents/`，只传新增或改动的数据块。改口令时给已经存在的仓库换钥匙。抽查失败会记在本机，下次即使内容没变也会再查。保留最近 48 小时的每一次快照，再按 30 天/12 周/24 个月变稀。内容没变时 `--skip-if-unchanged` 不另写一份。仓库不能嵌在账本目录里。备份、恢复、保存设置和测试存储这类可能等磁盘或网络的命令走 `spawn_blocking`，不占主线程；监听线程里不碰 `watch` 锁。口令经 `RESTIC_PASSWORD_FILE`，S3 凭证走环境变量，都不进进程参数。不办 BeanDesk 云、不代管桶、不自动 `git push`。备份配置在本机 `backup.json`，口令在工作目录 `.backup_key`，都不进 `connection.json`，也不进本仓库。日志不打密钥。开发机用 `make restic` 拉当前平台的二进制；发布时按目标 triple 拉同一版本并用发行 SHA256 校验。
 - 启动命令：仓库根没有 package.json。浏览器使用 `make dev`，页面在 http://127.0.0.1:5188。桌面使用 `make desktop`，即 `bunx @tauri-apps/cli dev`。不要改成 `npm run tauri dev`，也不要在仓库根新建 Node 工程。
-- 配置目录：CLI 会先进入 `src-tauri`。`beforeDevCommand` 和 `beforeBuildCommand` 用 `cwd: "../web"` 再执行 `bun run dev` / `bun run build`。不要把 `../web` 写进命令本身：从仓库根启动时前端目录是 `web/`，从 `src-tauri` 启动时前端目录会退回仓库根，命令里的 `../web` 会找不到目录。devUrl 与 Vite 的 host、port 保持一致。打包读取 `web/dist`。
+- 配置目录：CLI 会先进入 `src-tauri`。`beforeDevCommand` 和 `beforeBuildCommand` 用 `cwd: "../web"` 再执行 `bun run ensure-docs && bun run dev` / `bun run ensure-docs && bun run build`。不要把 `../web` 写进命令本身：从仓库根启动时前端目录是 `web/`，从 `src-tauri` 启动时前端目录会退回仓库根，命令里的 `../web` 会找不到目录。devUrl 与 Vite 的 host、port 保持一致。打包读取 `web/dist`。
 - 连接日志：设置页上的每一行同时经 log 插件写入本机日志目录。单个文件上限 10MB，超过后从文件开头丢掉最旧的行，最近的内容留在原文件，不按日期另存。页面上的清除只清空当前窗口里的显示。
 - 桌面更新：安装包只覆盖 macOS、Windows 和 Linux。推送与 `tauri.conf.json`、`web/package.json`、`src-tauri/Cargo.toml` 版本一致的 `v*` 标签才触发 `.github/workflows/release.yml`。先在一台小的 Ubuntu 上核对版本、签名密钥和前端构建，再开五个平台任务。产物写入草稿 Release，五个任务都成功后再手动发布；草稿不会成为 updater 的 latest。Linux 用 `ubuntu-22.04` 和公开仓库的 `ubuntu-22.04-arm`，不要换成模拟的 Arm 环境。更新签名的私钥只放在 GitHub Secret，公钥写在 `tauri.conf.json`。不提交私钥。这个版本不构建 Android 或 iOS。
 - 日历订阅：日历页 `/calendar`，不进报表通道，也不进设置。来源和复制 ICS 在日历页右侧抽屉，不在设置。同一时间只有一份来源：随包装的中国小规模按季目录、本机 `.ics`、或用户粘贴的 HTTPS ICS（`webcal://` 保存成 `https://`）。本机文件和 HTTPS 只在桌面可用；浏览器只看随包装目录。配置在本机 `calendar.json`，不进 `connection.json` / `backup.json`。打开时读一次当前来源；7 天内到期的事项每条 UID+日期只弹一次 Sonner 和系统横幅。关掉应用不再提醒。不办提醒云、不轮询、不写 CalDAV、不把账本当日历。公开仓库里的 `calendars/*.ics` 是静态文件，不是我们运营的服务。手机提醒用同一条 HTTPS。读本机文件只走 `read_user_text_file`，只读用户选中的绝对路径。未连 Fava 也能打开日历页。
-- 本机 MCP：同一桌面二进制，参数只认独立的 `mcp`（不是 `--mcp`，也不看 argv0）。stdio JSON-RPC。读本机 `connection.json`，与设置页同一份工作目录和 Fava origin。目录工具：`get_connection`、`init_ledger`（写入必须 `confirmWrite`）、`check_ledger`。只读 Fava 工具转发界面已在用的 GET：`get_fava`、`get_ledger`、`run_bql`、三张表、`get_journal`、`list_documents`。Fava 没起来只报错，不拉进程。记分录仍由技能写月文件，不转发 `add_entries` / `source`。不猜账本仓库名，不开放备份、日历或凭证字节。设置页只复制 `{ command: 当前可执行文件, args: ["mcp"] }`。不办云 MCP，不监听 HTTP。
+- 用户手册：桌面第二个窗口（label `handbook`），不进报表通道，也不进设置。主窗口手册图标打开或聚焦该窗口，主窗口不离开当前页。窗口加载随包装的 Fumadocs 静态导出（`/docs/index.html` 或 `/docs/zh-CN/index.html`），初始宽高与主窗口相同。未连 Fava 也能打开。不跑 DesktopProvider 启动或 AppUpdate 检查。不要把 Next 放进 `web/`。不办在线文档站。
+- 本机 MCP：同一桌面二进制，参数只认独立的 `mcp`（不是 `--mcp`，也不看 argv0）。stdio JSON-RPC。读本机 `connection.json`，与设置页同一份工作目录和 Fava origin。目录工具：`get_connection`、`init_ledger`（写入必须 `confirmWrite`）、`check_ledger`。只读 Fava 工具转发界面已在用的 GET：`get_fava`、`get_ledger`、`run_bql`、三张表、`get_journal`、`list_documents`。手册工具 `get_handbook` 读随包装的 `docs/content` MDX：不传 `page` 列出目录，传入 slug 或标题读一页；`locale` 为 `en` 或 `zh-CN`。不需要 Fava。记分录仍由技能写月文件，不转发 `add_entries` / `source`。不猜账本仓库名，不开放备份、日历或凭证字节。设置页只复制 `{ command: 当前可执行文件, args: ["mcp"] }`。不办云 MCP，不监听 HTTP。
 
 ## 5. 技术栈与包管理约束
 
@@ -60,3 +61,9 @@ BeanDesk 前端与桌面端工程规范。
 ## 7. 质量校验与交付标准
 
 代码提交前在仓库根执行并通过 `make test`。它会跑 oxlint、测试文件的类型检查、`bun test` 和 `cargo test`。`make build` 会类型检查页面代码和测试，再构建前端。推送到 `main` 的检查与此相同。
+
+## 8. 用户手册
+
+- 用户手册在 `docs/`（独立 Fumadocs 包）。桌面手册窗口加载 `docs/out` 同步到 `web/public/docs` 的静态导出；MCP `get_handbook` 仍读同一份 MDX。用 `make docs` 在 http://127.0.0.1:3200/docs 预览。`make docs-sync` 或桌面 `ensure-docs` 负责导出。不办在线文档站。
+- 仓库根不要新建 package.json。
+- 不要把 Next 放进 `web/`。

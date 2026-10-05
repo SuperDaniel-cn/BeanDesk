@@ -159,29 +159,42 @@ fn sync_watch(app: &AppHandle, directory: &Path, settings: &BackupSettings) {
         watch.stop();
         return;
     }
-    let handle = app.clone();
+    let first = app.clone();
+    let quiet = app.clone();
     watch.start(
         directory.to_path_buf(),
         settings.clone(),
-        Arc::new(move |directory, settings| run_watch_tick(&handle, &directory, &settings)),
+        Arc::new(move |directory, settings| {
+            if let Err(error) = apply_git(&first, &directory, &settings) {
+                let host = first.state::<BackupHost>();
+                set_status(&host, |status| status.last_error = Some(error));
+            }
+        }),
+        Arc::new(move |directory, settings| run_watch_tick(&quiet, &directory, &settings)),
     );
 }
 
-/// Runs on the watcher thread. It must not lock `host.watch`: `sync_watch` holds that lock while it joins this thread.
+/// Git only. First start and debounce ticks share this; it never writes restic dests.
+/// Does not lock `host.watch`: `sync_watch` holds that lock while it joins this thread.
+fn apply_git(app: &AppHandle, directory: &Path, settings: &BackupSettings) -> Result<(), String> {
+    if !settings.watch {
+        return Ok(());
+    }
+    let hash = git::snapshot(directory)?;
+    let host = app.state::<BackupHost>();
+    set_status(&host, |status| {
+        if let Some(hash) = hash {
+            status.last_git_at = Some(stamp());
+            status.last_git_hash = Some(hash);
+        }
+    });
+    Ok(())
+}
+
+/// Runs on the watcher thread after debounce. It must not lock `host.watch`.
 fn run_watch_tick(app: &AppHandle, directory: &Path, settings: &BackupSettings) {
     let host = app.state::<BackupHost>();
-    let mut failed = None;
-    if settings.watch {
-        match git::snapshot(directory) {
-            Ok(hash) => set_status(&host, |status| {
-                if let Some(hash) = hash {
-                    status.last_git_at = Some(stamp());
-                    status.last_git_hash = Some(hash);
-                }
-            }),
-            Err(error) => failed = Some(error),
-        }
-    }
+    let mut failed = apply_git(app, directory, settings).err();
     if settings.archives_on_change() && has_key(directory) {
         match write_dests(app, directory, settings) {
             Ok(()) => {}

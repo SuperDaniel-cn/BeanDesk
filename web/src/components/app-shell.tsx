@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
 import { isTauri } from '@tauri-apps/api/core'
 import { NavLink, useLocation } from 'react-router'
-import { CalendarDays, Menu, Settings } from 'lucide-react'
+import { BookOpenText, CalendarDays, Menu, Settings } from 'lucide-react'
 
 import { REPORT_PAGES } from '@/app-pages'
 import { BrandMark } from '@/components/brand-mark'
@@ -17,12 +17,51 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import { useI18n } from '@/i18n'
+import { openHandbookWindow } from '@/lib/handbook-window'
 import { cn } from '@/lib/utils'
 
 function useDocumentTitle(title: string) {
   useEffect(() => {
     document.title = title
   }, [title])
+}
+
+function HandbookControl({
+  appearance,
+  onOpened,
+}: {
+  appearance: 'icon' | 'sheet'
+  onOpened?: () => void
+}) {
+  const { t, locale } = useI18n()
+  const label = t('handbook.title')
+  if (!isTauri()) return null
+  const windowTitle = `${label} - ${t('brand.short')}`
+
+  const open = () => {
+    onOpened?.()
+    void openHandbookWindow(windowTitle, locale).catch(() => undefined)
+  }
+
+  if (appearance === 'icon') {
+    return (
+      <Button variant="ghost" size="icon-sm" aria-label={label} onClick={open}>
+        <BookOpenText />
+      </Button>
+    )
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      aria-label={label}
+      className="h-auto justify-start gap-2.5 px-3 py-2 text-muted-foreground"
+      onClick={open}
+    >
+      <BookOpenText data-icon="inline-start" />
+      <span>{label}</span>
+    </Button>
+  )
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -32,11 +71,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const pageKey =
     REPORT_PAGES.find((page) => page.path === pathname)?.key
-    ?? (pathname === '/calendar' ? 'calendar.title' : pathname === '/settings' ? 'settings.title' : REPORT_PAGES[0].key)
+    ?? (pathname === '/calendar'
+      ? 'calendar.title'
+      : pathname === '/settings'
+        ? 'settings.title'
+        : REPORT_PAGES[0].key)
   const brand = t('brand.short')
   const settingsDesktop = pathname === '/settings' && isTauri()
-  const hidePeriod = pathname === '/settings' || pathname === '/calendar'
-  const hideLedgerErrors = settingsDesktop || pathname === '/calendar'
+  const awayFromReports = pathname === '/calendar'
+  const hidePeriod = pathname === '/settings' || awayFromReports
+  const hideLedgerErrors = settingsDesktop || awayFromReports
   useDocumentTitle(`${t(pageKey)} - ${brand}`)
   useLayoutEffect(() => {
     window.scrollTo(0, 0)
@@ -102,6 +146,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <CalendarDays className="size-4 shrink-0" />
                     <span>{t('calendar.title')}</span>
                   </NavLink>
+                  <HandbookControl appearance="sheet" onOpened={() => setMobileOpen(false)} />
                 </nav>
               </SheetContent>
             </Sheet>
@@ -145,6 +190,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <CalendarDays />
             </NavLink>
+            <HandbookControl appearance="icon" />
             <NavLink
               to="/settings"
               aria-label={t('settings.title')}

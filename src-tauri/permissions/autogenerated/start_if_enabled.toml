@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-if-enabled"
+description = "Enables the start_if_enabled command without any pre-configured scope."
+commands.allow = ["start_if_enabled"]
+
+[[permission]]
+identifier = "deny-start-if-enabled"
+description = "Denies the start_if_enabled command without any pre-configured scope."
+commands.deny = ["start_if_enabled"]

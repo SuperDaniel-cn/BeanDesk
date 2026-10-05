@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "ensure-docs": "bun ../docs/sync.mjs",
     "build": "tsc -b && tsc -p tsconfig.test.json --noEmit && vite build",
     "lint": "oxlint",
     "preview": "vite preview"

@@ -1,4 +1,4 @@
-.PHONY: install dev desktop build test engine restic clean help
+.PHONY: install dev desktop build test engine restic clean help docs docs-install docs-build docs-sync
 
 PORT ?= 5188
 FAVA_URL ?= http://127.0.0.1:5000
@@ -13,6 +13,8 @@ help:
 	@echo "  make engine   - Freeze the bundled Fava engine directory for this machine"
 	@echo "  make restic   - Fetch the pinned restic binary for this machine"
 	@echo "  make clean    - Remove node_modules and dist artifacts"
+	@echo "  make docs     - Preview the Fumadocs handbook at http://127.0.0.1:3200/docs"
+	@echo "  make docs-sync - Export the handbook into web/public/docs"
 
 install:
 	cd web && bun install
@@ -39,6 +41,18 @@ engine:
 
 restic:
 	@bash engine/fetch-restic.sh
+
+docs-install:
+	cd docs && bun install
+
+docs:
+	cd docs && bun run dev
+
+docs-build:
+	cd docs && bun run build
+
+docs-sync:
+	bun docs/sync.mjs
 
 clean:
 	rm -rf web/node_modules web/dist .engine-venv engine/build engine/dist src-tauri/binaries/engine src-tauri/binaries/restic

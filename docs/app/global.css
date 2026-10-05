@@ -1,0 +1,49 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+html {
+  scrollbar-gutter: stable;
+}
+
+/* Keep the page tree open in the desktop handbook window (same size as main). */
+#nd-docs-layout {
+  --fd-sidebar-width: 268px;
+}
+
+@media (min-width: 48rem) {
+  #nd-docs-layout.desktop-docs-layout {
+    grid-template:
+      "sidebar sidebar header toc toc"
+      "sidebar sidebar toc-popover toc toc"
+      "sidebar sidebar main toc toc" 1fr /
+      0 var(--fd-sidebar-col)
+      minmax(0, calc(var(--fd-layout-width, 97rem) - var(--fd-sidebar-width) - var(--fd-toc-width)))
+      var(--fd-toc-width) minmax(0, 1fr) !important;
+  }
+}
+
+/* Handbook window is 1200×800 (xl is 1280px). Force the side TOC; hide the popover. */
+@media (min-width: 75rem) {
+  #nd-docs-layout.desktop-docs-layout {
+    --fd-toc-width: 268px;
+    --fd-toc-popover-height: 0px;
+  }
+
+  #nd-docs-layout.desktop-docs-layout #nd-toc {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  #nd-docs-layout.desktop-docs-layout [data-toc-popover] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}

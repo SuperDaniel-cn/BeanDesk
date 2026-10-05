@@ -5,6 +5,7 @@ fn main() {
             "stop_saved_fava",
             "fava_host",
             "init_ledger",
+            "start_if_enabled",
             "read_user_text_file",
             "mcp_host_config",
             "system_locales",

@@ -92,6 +92,7 @@ export async function openConnection(
       if (!current()) return false
       onStep?.('attach')
       onStep?.('ready')
+      await invoke('start_if_enabled')
       return true
     }
     if (state.kind === 'occupied') {
@@ -102,7 +103,9 @@ export async function openConnection(
     }
     if (connection.kind !== 'local') {
       await favaClient.ensureSlug()
-      return current()
+      if (!current()) return false
+      await invoke('start_if_enabled')
+      return true
     }
     if (!current()) return false
     onStep?.('start')

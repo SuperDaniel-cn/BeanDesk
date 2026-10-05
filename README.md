@@ -29,6 +29,7 @@ See the [Fava and Beancount Guide](skills/fava-beancount-guide/SKILL.md).
 
 - **Desktop (recommended)**: `make desktop`. Start here (folder + empty or custom command) or connect to an address already running Fava.
 - **Browser**: only attaches to an existing Fava. `make dev`, then `http://127.0.0.1:5188`.
+- **Handbook**: the desktop **Handbook** icon opens a second window with the Fumadocs handbook. `make docs` is the authoring preview at `http://127.0.0.1:3200/docs`.
 
 ## Project Positioning and Roadmap
 
@@ -182,7 +183,7 @@ BeanDesk/
 ├── AGENTS.md               # Frontend engineering standards and agent contract
 ├── DEPLOY.md               # Loopback bind, Caddy proxy, and tunnel setup
 ├── calendars/              # Public static ICS feeds (not a hosted reminder service)
-├── docs/
+├── docs/                   # User handbook (Fumadocs) and product screenshots
 │   └── images/             # Product screenshots (EN & ZH)
 ├── skills/                 # AI agent skill definitions
 │   └── fava-beancount-guide/ # Guide for user-managed ledgers and compliance

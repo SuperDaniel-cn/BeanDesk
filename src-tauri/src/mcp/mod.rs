@@ -1,6 +1,7 @@
 mod card;
 mod fava;
 mod fava_tools;
+mod handbook;
 mod store;
 mod tools;
 
@@ -16,6 +17,7 @@ use fava_tools::{
     get_balance_sheet_card, get_fava_card, get_income_statement_card, get_journal_card,
     get_ledger_card, get_trial_balance_card, list_documents_card, run_bql_card,
 };
+use handbook::{HandbookBody, HandbookInput, get_handbook_card};
 use tools::{
     CheckBody, ConnectionBody, EmptyInput, InitLedgerInput, WriteBody, check_ledger_card,
     get_connection_card, init_ledger_card,
@@ -178,6 +180,17 @@ impl LedgerTools {
     ) -> Result<Json<Card<DocumentsBody>>, String> {
         Ok(Json(list_documents_card(None)?))
     }
+
+    #[tool(
+        description = include_str!("prompts/get_handbook.txt"),
+        annotations(read_only_hint = true)
+    )]
+    fn get_handbook(
+        &self,
+        Parameters(input): Parameters<HandbookInput>,
+    ) -> Result<Json<Card<HandbookBody>>, String> {
+        Ok(Json(get_handbook_card(input)?))
+    }
 }
 
 pub fn run_mcp() -> Result<(), String> {
@@ -267,6 +280,7 @@ mod tests {
             include_str!("prompts/get_income_statement.txt"),
             include_str!("prompts/get_journal.txt"),
             include_str!("prompts/list_documents.txt"),
+            include_str!("prompts/get_handbook.txt"),
         ];
         for text in std::iter::once(SERVER_INSTRUCTIONS).chain(descriptions) {
             for banned in BANNED {

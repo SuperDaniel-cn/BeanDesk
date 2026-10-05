@@ -5,6 +5,9 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-unminimize",
+    "core:window:allow-set-focus",
     "dialog:default",
     "store:default",
     "log:default",
@@ -14,6 +17,7 @@
     "allow-stop-saved-fava",
     "allow-fava-host",
     "allow-init-ledger",
+    "allow-start-if-enabled",
     "allow-read-user-text-file",
     "allow-mcp-host-config",
     "allow-system-locales",

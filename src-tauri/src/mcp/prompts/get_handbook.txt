@@ -1,0 +1,1 @@
+List the bundled handbook, or read one page. Omit page for the catalog. page is a slug or title. locale is en or zh-CN. Does not need Fava.

@@ -68,6 +68,7 @@ pub fn run() {
             stop_saved_fava,
             fava_host,
             init_ledger,
+            start_if_enabled,
             read_user_text_file,
             mcp::mcp_host_config,
             system_locales,
@@ -167,6 +168,7 @@ fn start_saved_fava(app: AppHandle, host: State<'_, FavaHost>) -> Result<(), Str
     } else {
         saved.command
     };
+    backup::start_if_enabled(&app);
     lock(&host).start(Path::new(&saved.directory), &command)
 }
 
@@ -182,8 +184,15 @@ fn fava_host(host: State<'_, FavaHost>) -> HostSnapshot {
 }
 
 #[tauri::command]
-fn init_ledger(directory: String) -> Result<(), String> {
-    init_ledger_tree(Path::new(&directory))
+fn init_ledger(app: AppHandle, directory: String) -> Result<(), String> {
+    init_ledger_tree(Path::new(&directory))?;
+    backup::start_if_enabled(&app);
+    Ok(())
+}
+
+#[tauri::command]
+fn start_if_enabled(app: AppHandle) {
+    backup::start_if_enabled(&app);
 }
 
 /// Read a user-chosen absolute file. Used for a local ICS calendar.

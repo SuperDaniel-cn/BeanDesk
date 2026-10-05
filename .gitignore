@@ -1,6 +1,12 @@
 # Node / bun
 web/node_modules/
 web/dist/
+docs/node_modules/
+docs/.next/
+docs/out/
+docs/.source/
+docs/public/
+web/public/docs/
 *.tsbuildinfo
 
 # Tauri / Cargo. Local Fava connection lives in the app data dir, not here.

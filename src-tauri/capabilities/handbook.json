@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "handbook",
+  "description": "Handbook window. Bundled Fumadocs export only; no Fava, backup, HTTP, updater, or notification.",
+  "windows": ["handbook"],
+  "permissions": ["core:default"]
+}
