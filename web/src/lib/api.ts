@@ -115,7 +115,7 @@ export async function fetchCashFlow(time?: string, signal?: AbortSignal) {
   const { ledger, title, currency } = await ledgerContext(signal)
   const code = quoteCommodity(currency)
   const result = await favaClient.query(
-    `SELECT id, date, flag, account, convert(position, "${code}")`,
+    `SELECT id, flag, account, convert(position, "${code}")`,
     time,
     signal,
   )
@@ -133,12 +133,11 @@ export async function fetchCashFlow(time?: string, signal?: AbortSignal) {
 }
 
 function postingFromRow(row: unknown[], currency: string): CashPosting | null {
-  const [id, date, flag, account, amount] = row
+  const [id, flag, account, amount] = row
   if (typeof account !== 'string' || !account) return null
   const read = readInventory(amount, currency)
   return {
     id: String(id ?? ''),
-    date: typeof date === 'string' ? date.slice(0, 10) : '',
     account,
     amount: read.amount,
     currency: read.amount === 0 && read.unconverted[0] ? read.unconverted[0] : currency,

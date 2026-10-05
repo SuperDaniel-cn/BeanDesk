@@ -6,8 +6,10 @@ import { describe, expect, test } from 'bun:test'
 import type { MessageKey } from '@/i18n/locales/en'
 
 import {
+  PUBLIC_FEED_URL,
   bundledCatalogEvents,
   calendarSourceDetail,
+  calendarSubscribeUrl,
   emptyCalendarFile,
   eventsFromIcs,
   eventsInRange,
@@ -167,6 +169,10 @@ describe('one active source and notice keys', () => {
     expect(calendarSourceDetail(file)).toBe('custom.ics')
     expect(calendarSourceDetail(url)).toBe('calendar.google.com')
     expect(calendarSourceDetail(emptyCalendarFile())).toBe('')
+    expect(calendarSubscribeUrl(emptyCalendarFile())).toBe(PUBLIC_FEED_URL)
+    expect(calendarSubscribeUrl(url)).toBe('https://calendar.google.com/calendar/ical/demo/basic.ics')
+    expect(calendarSubscribeUrl(file)).toBe('')
+    expect(calendarSubscribeUrl(withCalendarSource('url', { url: 'not-a-url' }, emptyCalendarFile()))).toBe('')
   })
 
   test('the same occurrence does not notify twice; a later RRULE day can', () => {

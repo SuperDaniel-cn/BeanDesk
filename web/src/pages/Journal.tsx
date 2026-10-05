@@ -5,6 +5,7 @@ import {
   FileTextIcon,
   SearchIcon,
   RefreshCwIcon,
+  TriangleAlertIcon,
   XIcon,
 } from 'lucide-react'
 
@@ -51,6 +52,7 @@ import {
   type PostingItem,
   type TransactionEntry,
 } from '@/lib/api'
+import { explainFavaError } from '@/lib/fava-error'
 import { favaClient } from '@/lib/fava-client'
 import {
   JOURNAL_ROOT_FIELDS,
@@ -96,7 +98,7 @@ export function Journal() {
     value: journalRootValue(rootNames(ledger.data?.options), field),
   }))
   const activeRoot = rootFilters.some((filter) => filter.value === selectedRoot) ? selectedRoot : ''
-  const { data: journal, isLoading, refetch, isFetching } = useQuery({
+  const { data: journal, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['transactions', timeFilter],
     queryFn: () => fetchTransactions(timeFilter),
   })
@@ -241,7 +243,18 @@ export function Journal() {
         <p className="text-[0.8rem] text-muted-foreground">{t('journal.truncated')}</p>
       ) : null}
       <div className="overflow-hidden rounded-lg border bg-card">
-          {isLoading ? (
+          {isError ? (
+            <Alert variant="destructive" className="m-3">
+              <TriangleAlertIcon />
+              <AlertTitle>{t('journal.errorTitle')}</AlertTitle>
+              <AlertDescription>{explainFavaError(error, t)}</AlertDescription>
+              <AlertAction>
+                <Button variant="outline" onClick={() => void refetch()}>
+                  {t('common.retry')}
+                </Button>
+              </AlertAction>
+            </Alert>
+          ) : isLoading ? (
             <div className="flex flex-col gap-2 p-3">
               {Array.from({ length: 8 }).map((_, i) => (
                 <Skeleton key={i} className="h-12 w-full" />

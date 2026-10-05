@@ -332,6 +332,7 @@ fn refresh_live_status(
     status.has_key = has_key(directory);
     status.restic_ready = restic_ready(Some(app));
     status.app_ledger = crate::ledger_init::app_created_ledger(directory);
+    status.has_ledger_file = directory.join("main.bean").is_file();
     status.watching = watching && status.app_ledger;
     settings::clear_resolved_directory_error(&mut status.last_error, directory);
     fill_snapshot_status(app, status, directory, settings);

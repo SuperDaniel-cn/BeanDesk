@@ -104,10 +104,11 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
   const settingsRef = useRef(settings)
   const writeLock = useRef(Promise.resolve())
   const ready = Boolean(workDirectory)
-  const foreign = statusLoaded && ready && !status.appLedger
-  const locked = !ready || busy || foreign
+  const waitingInit = statusLoaded && ready && !status.hasLedgerFile
+  const foreign = statusLoaded && ready && status.hasLedgerFile && !status.appLedger
+  const locked = !ready || busy || foreign || waitingInit
   const hasKey = ready && status.hasKey
-  const canArchive = ready && !busy && !foreign && canWriteArchive(settings, status)
+  const canArchive = !locked && canWriteArchive(settings, status)
   const folderError = backupBannerError(status.lastError, status.appLedger)
   const draftNested =
     draft.kind === 'local' && archiveNestsLedger(workDirectory, draft.directory)
@@ -680,6 +681,11 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
           <Spinner />
         </DialogContent>
       </Dialog>
+      {waitingInit ? (
+        <Alert>
+          <AlertDescription>{t('settings.backupNeedsInit')}</AlertDescription>
+        </Alert>
+      ) : null}
       {foreign ? (
         <Alert>
           <AlertDescription>{t('settings.backupForeign')}</AlertDescription>
@@ -788,7 +794,7 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={!hasKey || busy || foreign}
+                  disabled={!hasKey || locked}
                   className="shrink-0"
                   onClick={() => void restore()}
                 >

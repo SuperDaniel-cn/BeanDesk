@@ -71,6 +71,12 @@ export function sourceReady(file: CalendarFile): boolean {
   return normalizeCalendarUrl(file.url) !== null
 }
 
+export function calendarSubscribeUrl(file: CalendarFile): string {
+  if (file.active === 'bundled') return PUBLIC_FEED_URL
+  if (file.active === 'url') return normalizeCalendarUrl(file.url) ?? ''
+  return ''
+}
+
 export function calendarSourceDetail(file: CalendarFile): string {
   if (file.active === 'file') return file.file.trim().split(/[/\\]/).pop() ?? ''
   if (file.active === 'url') {

@@ -6,11 +6,18 @@ use time::OffsetDateTime;
 
 const SAMPLE_ACCOUNTS: &str = "\
 2020-01-01 open Assets:Bank:Checking CNY
+  cash: TRUE
 2020-01-01 open Liabilities:Owner:Advance CNY
+  cashflow-in: \"borrowings\"
+  cashflow-out: \"debt-principal\"
 2020-01-01 open Equity:Capital CNY
+  cashflow: \"capital\"
 2020-01-01 open Income:Services:Delivery CNY
+  cashflow: \"sales\"
 2020-01-01 open Income:Services:Advice CNY
+  cashflow: \"sales\"
 2020-01-01 open Expenses:Operations:Hosting CNY
+  cashflow: \"operating-other-out\"
 ";
 
 pub fn init_ledger_tree(directory: &Path) -> Result<(), String> {
@@ -120,6 +127,9 @@ mod tests {
         assert!(main.contains("option \"documents\" \"documents\""));
         let ignore = fs::read_to_string(root.join(".gitignore")).unwrap();
         assert!(ignore.contains(".backup_key"));
+        let accounts = fs::read_to_string(root.join("config/accounts.bean")).unwrap();
+        assert!(accounts.contains("cash: TRUE"));
+        assert!(accounts.contains("cashflow: \"sales\""));
         assert!(app_created_ledger(&root));
         assert_eq!(
             init_ledger_tree(&root).err().as_deref(),

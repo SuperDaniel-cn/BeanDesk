@@ -91,7 +91,9 @@ export const zhCN = {
     summary: '摘要',
     emptyUpcoming: '未来 12 个月没有事项',
     emptyDay: '这一天没有事项',
-    copy: '复制 ICS',
+    copyUrl: '复制订阅地址',
+    copy: '复制 ICS 以便导入',
+    drawerHint: '同一时间只有一份来源。提醒只在桌面应用打开时。浏览器只看随包装目录。',
     download: '下载 .ics',
     thisMonth: '回到本月',
     errorFile: '无法读取所选的日历文件',
@@ -168,6 +170,10 @@ export const zhCN = {
     investingNet: '投资活动产生的现金流量净额',
     financingNet: '筹资活动产生的现金流量净额',
     unassigned: '未归类',
+    unassignedHint: '不是法定行次。现金动了，对方科目还没有现金流量行。',
+    unwiredTitle: '还没有标记货币资金',
+    unwiredBody:
+      '这张表需要在 open 上写 cash: TRUE。第一本账已经带了。你自己新开现金科目时再补上。',
     netIncrease: '现金净增加额',
     errorTitle: '无法加载现金流量表',
     lines: {
@@ -342,6 +348,7 @@ export const zhCN = {
     mcpFailed: '读不到当前桌面程序的路径',
     mcpPrompt:
       '把 BeanDesk 加成本机 stdio MCP 服务。\ncommand: {command}\nargs: {args}\n\n它和设置页共用同一份工作目录，不会去猜账本仓库名。',
+    backupNeedsInit: '先初始化这个文件夹。BeanDesk 写下账本之后，备份才会打开。',
     backupForeign: '备份只用于在 BeanDesk 里初始化的账本。当前目录是已有账本，备份不会改动它。',
     simpleDirectory: '账本目录',
     hostStatus: '服务状态',
@@ -418,6 +425,7 @@ export const zhCN = {
     tagsLabel: '标签',
     allTags: '全部标签',
     emptyTitle: '没有符合条件的分录',
+    errorTitle: '无法加载日记账',
     truncated: '结果被截断了。请缩小期间后再看剩余分录',
     viewDocument: '查看凭证',
     date: '日期',

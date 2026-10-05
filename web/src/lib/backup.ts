@@ -80,6 +80,7 @@ export type BackupStatus = {
   hasKey: boolean
   resticReady: boolean
   appLedger: boolean
+  hasLedgerFile: boolean
   dests: DestPulse[]
 }
 
@@ -187,6 +188,7 @@ export function emptyBackupStatus(): BackupStatus {
     hasKey: false,
     resticReady: false,
     appLedger: false,
+    hasLedgerFile: false,
     dests: [],
   }
 }

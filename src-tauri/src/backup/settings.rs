@@ -203,6 +203,7 @@ pub struct BackupStatus {
     pub has_key: bool,
     pub restic_ready: bool,
     pub app_ledger: bool,
+    pub has_ledger_file: bool,
     pub dests: Vec<DestPulse>,
 }
 

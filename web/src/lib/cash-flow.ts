@@ -1,7 +1,5 @@
 import type { MessageKey } from '@/i18n/locales/en'
 
-import type { StatementPeriod } from './ledger-model'
-
 /**
  * Direct-method cash flow statement for a small enterprise.
  *
@@ -55,7 +53,6 @@ export type CashFlowLineId = (typeof CASH_FLOW_LINES)[number]['id']
 
 export interface CashPosting {
   id: string
-  date: string
   account: string
   /** Beancount sign: a debit is positive. */
   amount: number
@@ -84,8 +81,6 @@ export interface UnassignedCashFlow {
 export interface CashFlowStatement {
   title: string
   operating_currency: string
-  /** First and last day a cash account actually moved. */
-  period: StatementPeriod | null
   /** Signed cash effect per catalogue line. Positive is an inflow. */
   lines: Record<CashFlowLineId, number>
   unassigned: UnassignedCashFlow[]
@@ -95,6 +90,8 @@ export interface CashFlowStatement {
   net: number
   /** Sum of cash postings kept in the operating currency. */
   cashChange: number
+  /** At least one open account is marked `cash`. */
+  hasCashAccounts: boolean
   unconverted_currencies: string[]
 }
 
@@ -117,7 +114,12 @@ export function classifyCashFlow(input: {
   postings: CashPosting[]
   accounts: AccountCashMeta[]
 }): CashFlowStatement {
-  const accounts = new Map(input.accounts.map((account) => [account.account, account]))
+  let hasCashAccounts = false
+  const accounts = new Map<string, AccountCashMeta>()
+  for (const account of input.accounts) {
+    accounts.set(account.account, account)
+    if (account.cash) hasCashAccounts = true
+  }
   const lines = emptyLines()
   const unassigned = new Map<string, number>()
   const unconverted = new Set<string>()
@@ -129,7 +131,6 @@ export function classifyCashFlow(input: {
     groups.set(posting.id, group)
   }
 
-  const dates: string[] = []
   let cashChange = 0
 
   for (const postings of groups.values()) {
@@ -144,19 +145,18 @@ export function classifyCashFlow(input: {
       if (posting.currency) unconverted.add(posting.currency)
     }
 
-    const cash: CashPosting[] = []
+    let sawCash = false
     const other: { posting: CashPosting; meta: AccountCashMeta | undefined }[] = []
     for (const posting of kept) {
       const meta = accounts.get(posting.account)
-      if (meta?.cash) cash.push(posting)
-      else other.push({ posting, meta })
+      if (meta?.cash) {
+        sawCash = true
+        cashChange += posting.amount
+      } else {
+        other.push({ posting, meta })
+      }
     }
-    if (cash.length === 0) continue
-
-    for (const posting of cash) {
-      cashChange += posting.amount
-      if (posting.date) dates.push(posting.date)
-    }
+    if (!sawCash) continue
 
     for (const entry of other) {
       addEffect(lines, unassigned, entry.meta, entry.posting.account, -entry.posting.amount)
@@ -176,13 +176,13 @@ export function classifyCashFlow(input: {
   return {
     title: input.title ?? '',
     operating_currency: input.currency,
-    period: periodFrom(dates),
     lines,
     unassigned: unassignedRows,
     sections,
     unassignedTotal,
     net: sections.operating + sections.investing + sections.financing + unassignedTotal,
     cashChange,
+    hasCashAccounts,
     unconverted_currencies: [...unconverted].sort(),
   }
 }
@@ -278,17 +278,6 @@ function emptyLines(): Record<CashFlowLineId, number> {
 
 function emptySections(): Record<CashFlowSection, number> {
   return { operating: 0, investing: 0, financing: 0 }
-}
-
-function periodFrom(dates: string[]): StatementPeriod | null {
-  if (dates.length === 0) return null
-  let from = dates[0]
-  let to = dates[0]
-  for (const date of dates) {
-    if (date < from) from = date
-    if (date > to) to = date
-  }
-  return { from, to }
 }
 
 function isTrue(value: unknown): boolean {

@@ -21,8 +21,8 @@ const accounts: AccountCashMeta[] = [
   { account: 'Equity:Capital', cash: false, cashflow: 'capital', cashflowIn: null, cashflowOut: null },
 ]
 
-function posting(id: string, date: string, account: string, amount: number, currency = 'CNY'): CashPosting {
-  return { id, date, account, amount, currency }
+function posting(id: string, account: string, amount: number, currency = 'CNY'): CashPosting {
+  return { id, account, amount, currency }
 }
 
 function statement(postings: CashPosting[], extra: AccountCashMeta[] = []) {
@@ -32,23 +32,40 @@ function statement(postings: CashPosting[], extra: AccountCashMeta[] = []) {
 describe('classifyCashFlow', () => {
   test('a receipt and its contra account are one inflow', () => {
     const result = statement([
-      posting('sale', '2026-01-31', 'Assets:Bank', 29715.47),
-      posting('sale', '2026-01-31', 'Income:Service', -29715.47),
+      posting('sale', 'Assets:Bank', 29715.47),
+      posting('sale', 'Income:Service', -29715.47),
     ])
 
     expect(result.lines.sales).toBeCloseTo(29715.47)
     expect(result.sections.operating).toBeCloseTo(29715.47)
     expect(result.net).toBeCloseTo(result.cashChange)
-    expect(result.period).toEqual({ from: '2026-01-31', to: '2026-01-31' })
+    expect(result.hasCashAccounts).toBe(true)
+  })
+
+  test('no cash-marked account is unwired, not a zero statement', () => {
+    const result = classifyCashFlow({
+      currency: 'CNY',
+      postings: [
+        posting('sale', 'Assets:Bank', 100),
+        posting('sale', 'Income:Service', -100),
+      ],
+      accounts: [
+        { account: 'Assets:Bank', cash: false, cashflow: null, cashflowIn: null, cashflowOut: null },
+        { account: 'Income:Service', cash: false, cashflow: 'sales', cashflowIn: null, cashflowOut: null },
+      ],
+    })
+    expect(result.hasCashAccounts).toBe(false)
+    expect(result.net).toBe(0)
+    expect(result.unassigned).toEqual([])
   })
 
   test('several contra accounts in one entry add back to the bank', () => {
     const result = statement([
-      posting('mix', '2026-02-01', 'Assets:Bank', 99950),
-      posting('mix', '2026-02-01', 'Income:Service', -60000),
-      posting('mix', '2026-02-01', 'Liabilities:Loan', -30000),
-      posting('mix', '2026-02-01', 'Expenses:Fee', 50),
-      posting('mix', '2026-02-01', 'Equity:Opening', -10000),
+      posting('mix', 'Assets:Bank', 99950),
+      posting('mix', 'Income:Service', -60000),
+      posting('mix', 'Liabilities:Loan', -30000),
+      posting('mix', 'Expenses:Fee', 50),
+      posting('mix', 'Equity:Opening', -10000),
     ])
 
     expect(result.lines.sales).toBe(60000)
@@ -61,36 +78,34 @@ describe('classifyCashFlow', () => {
 
   test('moving cash between cash accounts drops out of the statement', () => {
     const result = statement([
-      posting('move', '2026-03-01', 'Assets:Bank', -500),
-      posting('move', '2026-03-01', 'Assets:Alipay', 500),
+      posting('move', 'Assets:Bank', -500),
+      posting('move', 'Assets:Alipay', 500),
     ])
 
     expect(result.net).toBe(0)
     expect(result.cashChange).toBe(0)
     expect(result.unassigned).toEqual([])
-    expect(result.period).toEqual({ from: '2026-03-01', to: '2026-03-01' })
   })
 
   test('an accrual with no cash is skipped', () => {
     const result = statement([
-      posting('accrual', '2026-01-31', 'Expenses:Payroll', 8000),
-      posting('accrual', '2026-01-31', 'Liabilities:Payroll', -8000),
-      posting('pay', '2026-02-05', 'Liabilities:Payroll', 8000),
-      posting('pay', '2026-02-05', 'Assets:Bank', -8000),
+      posting('accrual', 'Expenses:Payroll', 8000),
+      posting('accrual', 'Liabilities:Payroll', -8000),
+      posting('pay', 'Liabilities:Payroll', 8000),
+      posting('pay', 'Assets:Bank', -8000),
     ])
 
     expect(presentedLineAmount('wages', result.lines.wages)).toBe(8000)
     expect(result.cashChange).toBe(-8000)
     expect(result.net).toBe(result.cashChange)
-    expect(result.period).toEqual({ from: '2026-02-05', to: '2026-02-05' })
   })
 
   test('cashflow-in and cashflow-out send the same account to different lines', () => {
     const result = statement([
-      posting('collect', '2026-04-01', 'Assets:Bank', 113),
-      posting('collect', '2026-04-01', 'Liabilities:VAT', -113),
-      posting('remit', '2026-04-15', 'Liabilities:VAT', 113),
-      posting('remit', '2026-04-15', 'Assets:Bank', -113),
+      posting('collect', 'Assets:Bank', 113),
+      posting('collect', 'Liabilities:VAT', -113),
+      posting('remit', 'Liabilities:VAT', 113),
+      posting('remit', 'Assets:Bank', -113),
     ])
 
     expect(result.lines.sales).toBe(113)
@@ -102,8 +117,8 @@ describe('classifyCashFlow', () => {
   test('an unknown line id stays with the account instead of joining another line', () => {
     const result = statement(
       [
-        posting('odd', '2026-05-01', 'Assets:Bank', -20),
-        posting('odd', '2026-05-01', 'Expenses:Mystery', 20),
+        posting('odd', 'Assets:Bank', -20),
+        posting('odd', 'Expenses:Mystery', 20),
       ],
       [{ account: 'Expenses:Mystery', cash: false, cashflow: 'not-a-line', cashflowIn: null, cashflowOut: null }],
     )
@@ -115,44 +130,42 @@ describe('classifyCashFlow', () => {
 
   test('a period-opening summarization is not a cash flow', () => {
     const opening = (account: string, amount: number): CashPosting => ({
-      ...posting('open', '2026-01-31', account, amount),
+      ...posting('open', account, amount),
       flag: 'S',
     })
     const result = statement([
       opening('Assets:Bank', 100),
       opening('Equity:Opening-Balances', -100),
-      posting('pay', '2026-02-02', 'Expenses:Fee', 40),
-      posting('pay', '2026-02-02', 'Assets:Bank', -40),
+      posting('pay', 'Expenses:Fee', 40),
+      posting('pay', 'Assets:Bank', -40),
     ])
 
     expect(presentedLineAmount('operating-other-out', result.lines['operating-other-out'])).toBe(40)
     expect(result.unassigned).toEqual([])
     expect(result.cashChange).toBe(-40)
     expect(result.net).toBe(result.cashChange)
-    expect(result.period).toEqual({ from: '2026-02-02', to: '2026-02-02' })
   })
 
   test('a foreign-currency posting is left out and named', () => {
     const result = statement([
-      posting('fx', '2026-06-01', 'Assets:Bank', 10, 'USD'),
-      posting('fx', '2026-06-01', 'Income:Service', -70),
+      posting('fx', 'Assets:Bank', 10, 'USD'),
+      posting('fx', 'Income:Service', -70),
     ])
 
     expect(result.unconverted_currencies).toEqual(['USD'])
     expect(result.lines.sales).toBe(0)
-    expect(result.period).toBeNull()
   })
 })
 
 describe('compareCashFlow', () => {
   test('keeps both amounts on the same catalogue line', () => {
     const current = statement([
-      posting('now', '2026-01-31', 'Assets:Bank', 100),
-      posting('now', '2026-01-31', 'Income:Service', -100),
+      posting('now', 'Assets:Bank', 100),
+      posting('now', 'Income:Service', -100),
     ])
     const prior = statement([
-      posting('then', '2025-01-31', 'Assets:Bank', 40),
-      posting('then', '2025-01-31', 'Income:Service', -40),
+      posting('then', 'Assets:Bank', 40),
+      posting('then', 'Income:Service', -40),
     ])
     const compared = compareCashFlow(current, prior)
     expect(compared.lines.sales.current).toBeCloseTo(100)
@@ -161,13 +174,13 @@ describe('compareCashFlow', () => {
 
   test('a prior-only unassigned account contributes zero this period', () => {
     const current = statement([
-      posting('now', '2026-01-31', 'Assets:Bank', 10),
-      posting('now', '2026-01-31', 'Income:Service', -10),
+      posting('now', 'Assets:Bank', 10),
+      posting('now', 'Income:Service', -10),
     ])
     const prior = statement(
       [
-        posting('then', '2025-01-31', 'Assets:Bank', 5),
-        posting('then', '2025-01-31', 'Expenses:Mystery', -5),
+        posting('then', 'Assets:Bank', 5),
+        posting('then', 'Expenses:Mystery', -5),
       ],
       [{ account: 'Expenses:Mystery', cash: false, cashflow: null, cashflowIn: null, cashflowOut: null }],
     )

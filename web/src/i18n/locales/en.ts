@@ -88,7 +88,10 @@ export const en = {
     summary: 'Summary',
     emptyUpcoming: 'No events in the next 12 months',
     emptyDay: 'No events on this day',
-    copy: 'Copy ICS',
+    copyUrl: 'Copy subscribe URL',
+    copy: 'Copy ICS for import',
+    drawerHint:
+      'One source at a time. Notices only while the desktop app is open. The browser shows the bundled source only.',
     download: 'Download .ics',
     thisMonth: 'This month',
     errorFile: 'Could not read the selected calendar file',
@@ -165,6 +168,11 @@ export const en = {
     investingNet: 'Net cash from investing activities',
     financingNet: 'Net cash from financing activities',
     unassigned: 'Unassigned',
+    unassignedHint:
+      'Not a statutory line. Cash moved against an account that has no cash-flow line yet.',
+    unwiredTitle: 'Cash accounts are not marked',
+    unwiredBody:
+      'This statement needs cash: TRUE on open cash accounts. A first book already has that mark. Add it when you open a new cash account.',
     netIncrease: 'Net increase in cash',
     errorTitle: 'Cannot load the cash flow statement',
     lines: {
@@ -341,6 +349,8 @@ export const en = {
     mcpFailed: 'Could not read the desktop executable path',
     mcpPrompt:
       'Add BeanDesk as a local stdio MCP server.\ncommand: {command}\nargs: {args}\n\nIt uses the Settings work folder. It does not search for a named ledger repository.',
+    backupNeedsInit:
+      'Initialize this folder first. Backup unlocks after BeanDesk creates the ledger.',
     backupForeign: 'Backup is only for a ledger created in BeanDesk. This folder already had a ledger, so backup stays off.',
     simpleDirectory: 'Working Directory',
     hostStatus: 'Service Status',
@@ -417,6 +427,7 @@ export const en = {
     tagsLabel: 'Tags',
     allTags: 'All tags',
     emptyTitle: 'No transactions match',
+    errorTitle: 'Cannot load the journal',
     truncated: 'These results were cut off. Narrow the period to see the rest',
     viewDocument: 'View the source document',
     date: 'Date',

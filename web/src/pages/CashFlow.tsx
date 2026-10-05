@@ -11,7 +11,13 @@ import {
   StatementTable,
   amountTone,
 } from '@/components/period-compare'
-import { ReportBar, ReportDay, ReportWhen } from '@/components/report-bar'
+import { ReportBar, ReportWhen } from '@/components/report-bar'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from '@/components/ui/empty'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -185,6 +191,7 @@ function Statement({
       {unassignedRows.length > 0 ? (
         <section className="flex min-w-0 flex-col gap-2">
           <h2 className="text-[0.8rem] font-medium">{t('cashFlow.unassigned')}</h2>
+          <p className="text-[0.8rem] text-muted-foreground">{t('cashFlow.unassignedHint')}</p>
           <ComparePanel>
             <AmountTable
               comparing={comparing}
@@ -214,7 +221,7 @@ function Statement({
 }
 
 export function CashFlow() {
-  const { t, formatDate, formatCurrency, formatSignedCurrency } = useI18n()
+  const { t, formatCurrency, formatSignedCurrency } = useI18n()
   const { timeFilter } = useTimeFilter()
   const queryClient = useQueryClient()
   const priorKey = priorPeriod(timeFilter)
@@ -271,15 +278,7 @@ export function CashFlow() {
     <div className="flex flex-col gap-6">
       <ReportBar
         status={
-          <ReportWhen currency={data.operating_currency}>
-            {data.period ? (
-              <>
-                <ReportDay iso={data.period.from}>{formatDate(data.period.from)}</ReportDay>
-                {` ${t('common.rangeJoiner')} `}
-                <ReportDay iso={data.period.to}>{formatDate(data.period.to)}</ReportDay>
-              </>
-            ) : null}
-          </ReportWhen>
+          <ReportWhen currency={data.operating_currency}>{currentLabel}</ReportWhen>
         }
         actions={
           <>
@@ -345,12 +344,21 @@ export function CashFlow() {
         </Alert>
       ) : null}
 
-      <Statement
-        data={data}
-        comparison={comparison}
-        currentLabel={currentLabel}
-        priorLabel={priorLabel}
-      />
+      {data.hasCashAccounts ? (
+        <Statement
+          data={data}
+          comparison={comparison}
+          currentLabel={currentLabel}
+          priorLabel={priorLabel}
+        />
+      ) : (
+        <Empty className="border bg-card">
+          <EmptyHeader>
+            <EmptyTitle>{t('cashFlow.unwiredTitle')}</EmptyTitle>
+            <EmptyDescription>{t('cashFlow.unwiredBody')}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      )}
     </div>
   )
 }

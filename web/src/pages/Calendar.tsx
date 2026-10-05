@@ -37,6 +37,7 @@ import { explainCalendarError, loadCalendar, resolveCalendar, saveCalendar } fro
 import {
   PUBLIC_FEED_URL,
   calendarDateKey,
+  calendarSubscribeUrl,
   calendarSourceDetail,
   calendarToday,
   emptyCalendarFile,
@@ -63,7 +64,7 @@ export function Calendar() {
   const [busy, setBusy] = useState(true)
   const [applying, setApplying] = useState(false)
   const [open, setOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'ics' | 'url' | ''>('')
   const [month, setMonth] = useState(() => new Date())
   const [selected, setSelected] = useState<Date | undefined>()
   const token = useRef(0)
@@ -175,10 +176,19 @@ export function Calendar() {
     await apply(next)
   }
 
+  const draftSource = desktop ? draft.active : 'bundled'
+  const subscribeUrl = calendarSubscribeUrl(draft)
+
   async function copyIcs() {
     if (!ics) return
     await navigator.clipboard.writeText(ics)
-    setCopied(true)
+    setCopied('ics')
+  }
+
+  async function copySubscribeUrl() {
+    if (!subscribeUrl) return
+    await navigator.clipboard.writeText(subscribeUrl)
+    setCopied('url')
   }
 
   function downloadIcs() {
@@ -191,8 +201,6 @@ export function Calendar() {
     link.click()
     URL.revokeObjectURL(href)
   }
-
-  const draftSource = desktop ? draft.active : 'bundled'
 
   return (
     <section className="flex flex-col gap-6">
@@ -282,7 +290,11 @@ export function Calendar() {
         <SheetContent className="sm:max-w-md">
           <SheetHeader>
             <SheetTitle>{t('calendar.subscribe')}</SheetTitle>
-            <SheetDescription>{t('calendar.using', { source: sourceName })}</SheetDescription>
+            <SheetDescription>
+              {t('calendar.using', { source: sourceName })}
+              {' '}
+              {t('calendar.drawerHint')}
+            </SheetDescription>
           </SheetHeader>
           <FieldGroup className="overflow-y-auto px-4">
             <Field>
@@ -375,9 +387,20 @@ export function Calendar() {
             ) : null}
           </FieldGroup>
           <SheetFooter className="flex-row flex-wrap">
+            {subscribeUrl ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void copySubscribeUrl()}
+                disabled={applying}
+              >
+                <Copy data-icon="inline-start" />
+                {copied === 'url' ? t('settings.copied') : t('calendar.copyUrl')}
+              </Button>
+            ) : null}
             <Button type="button" variant="outline" onClick={() => void copyIcs()} disabled={applying || !ics}>
               <Copy data-icon="inline-start" />
-              {copied ? t('settings.copied') : t('calendar.copy')}
+              {copied === 'ics' ? t('settings.copied') : t('calendar.copy')}
             </Button>
             <Button type="button" variant="outline" onClick={downloadIcs} disabled={applying || !ics}>
               <Download data-icon="inline-start" />
