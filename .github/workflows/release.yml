@@ -67,7 +67,7 @@ jobs:
             rust_targets: aarch64-apple-darwin
             python_architecture: arm64
             engine_arch: arm64
-          - platform: macos-latest
+          - platform: macos-15-intel
             args: --target x86_64-apple-darwin
             rust_targets: x86_64-apple-darwin
             python_architecture: x64
@@ -119,13 +119,6 @@ jobs:
         with:
           python-version: "3.12"
           architecture: ${{ matrix.python_architecture }}
-
-      - name: keep Rosetta for the Intel engine
-        if: matrix.engine_arch == 'x86_64'
-        run: |
-          if ! arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
-            softwareupdate --install-rosetta --agree-to-license
-          fi
 
       - name: freeze the bundled ledger engine
         env:
