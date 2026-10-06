@@ -115,6 +115,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - uses: actions/setup-python@v5
+        id: python
         with:
           python-version: "3.12"
           architecture: ${{ matrix.python_architecture }}
@@ -122,6 +123,7 @@ jobs:
       - name: freeze the bundled ledger engine
         env:
           ENGINE_ARCH: ${{ matrix.engine_arch }}
+          PYTHON: ${{ steps.python.outputs.python-path }}
         run: bash engine/build.sh
 
       - name: fetch the pinned restic binary
