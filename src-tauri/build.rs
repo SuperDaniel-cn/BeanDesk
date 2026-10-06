@@ -1,4 +1,12 @@
 fn main() {
+    // Frozen engine is gitignored. cargo test still walks bundle.resources.
+    let engine = std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
+        .join("binaries")
+        .join("engine");
+    if !engine.exists() {
+        std::fs::create_dir_all(&engine).expect("placeholder engine dir");
+    }
+
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "start_saved_fava",

@@ -55,5 +55,8 @@ jobs:
       - name: fetch the pinned restic binary
         run: bash engine/fetch-restic.sh
 
+      - name: placeholder engine tree
+        run: mkdir -p src-tauri/binaries/engine
+
       - name: test
         run: cargo test --manifest-path src-tauri/Cargo.toml
