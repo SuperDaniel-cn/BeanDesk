@@ -97,7 +97,7 @@ export function Documents() {
       </div>
 
       {rows.length === 0 ? (
-        <Empty className="border border-dashed">
+        <Empty>
           <EmptyHeader>
             <EmptyTitle>{t('documents.empty')}</EmptyTitle>
           </EmptyHeader>

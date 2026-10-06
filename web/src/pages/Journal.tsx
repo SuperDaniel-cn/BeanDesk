@@ -242,6 +242,13 @@ export function Journal() {
       {journal?.truncated ? (
         <p className="text-[0.8rem] text-muted-foreground">{t('journal.truncated')}</p>
       ) : null}
+      {!isError && !isLoading && filtered.length === 0 ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>{t('journal.emptyTitle')}</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
+      ) : (
       <div className="overflow-hidden rounded-lg border bg-card">
           {isError ? (
             <Alert variant="destructive" className="m-3">
@@ -260,12 +267,6 @@ export function Journal() {
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
-          ) : filtered.length === 0 ? (
-            <Empty>
-              <EmptyHeader>
-                <EmptyTitle>{t('journal.emptyTitle')}</EmptyTitle>
-              </EmptyHeader>
-            </Empty>
           ) : (
             <>
               <div className="flex flex-col gap-2.5 p-3 sm:hidden">
@@ -353,6 +354,7 @@ export function Journal() {
           </>
         )}
       </div>
+      )}
       </Tabs>
 
       {/* Centered Modal / Dialog for Selected Transaction & Documents */}

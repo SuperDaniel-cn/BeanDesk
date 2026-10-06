@@ -91,7 +91,7 @@ Includes query templates, keyboard execution shortcuts, sortable table output, a
 ![BQL Query Console](./docs/images/en/query.png)
 
 ### Calendar subscription
-BeanDesk is a subscriber, not a reminder host. The Calendar page (`/calendar`) shows a month grid and the upcoming list. Source and ICS copy live in the Subscribe calendar drawer. It picks one source:
+BeanDesk is a subscriber, not a reminder host. The Calendar page (`/calendar`) shows a month grid and the upcoming list. Source and ICS copy live in the Subscribe calendar dialog. It picks one source:
 
 - **Bundled**: China small-scale taxpayer, quarterly statutory due dates (VAT and surcharges, CIT prepayment, CIT annual settlement). Public dates only — no accounts, amounts, or company names.
 - **Local `.ics`**: your own dates. That file does not leave this computer.

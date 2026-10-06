@@ -196,11 +196,19 @@ function LineRow({
   )
 }
 
-function Statement({ data }: { data: Awaited<ReturnType<typeof fetchTrialBalance>> }) {
+function Statement({
+  data,
+  searchTerm,
+  expanded,
+  setExpanded,
+}: {
+  data: Awaited<ReturnType<typeof fetchTrialBalance>>
+  searchTerm: string
+  expanded: Set<string>
+  setExpanded: (next: Set<string> | ((current: Set<string>) => Set<string>)) => void
+}) {
   const { t, formatCurrency, formatSignedCurrency } = useI18n()
   const currency = data.operating_currency
-  const [searchTerm, setSearchTerm] = useState('')
-  const [expanded, setExpanded] = useState<Set<string>>(() => defaultExpanded(data.sections))
   const term = searchTerm.trim().toLowerCase()
 
   const columns = useMemo(() => {
@@ -234,29 +242,6 @@ function Statement({ data }: { data: Awaited<ReturnType<typeof fetchTrialBalance
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <InputGroup className="w-full max-w-xs">
-          <InputGroupAddon>
-            <Search />
-          </InputGroupAddon>
-          <InputGroupInput
-            placeholder={t('trialBalance.searchPlaceholder')}
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-          />
-        </InputGroup>
-        <div className="flex items-center gap-1.5">
-          <Button variant="ghost" onClick={() => setExpanded(defaultExpanded(data.sections))}>
-            <ChevronsUpDown data-icon="inline-start" />
-            <span className="hidden sm:inline">{t('trialBalance.expandAll')}</span>
-          </Button>
-          <Button variant="ghost" onClick={() => setExpanded(new Set())}>
-            <ChevronsDownUp data-icon="inline-start" />
-            <span className="hidden sm:inline">{t('trialBalance.collapseAll')}</span>
-          </Button>
-        </div>
-      </div>
-
       {!data.unconverted_currencies.length ? null : (
         <Alert variant="warning">
           <TriangleAlertIcon />
@@ -271,7 +256,7 @@ function Statement({ data }: { data: Awaited<ReturnType<typeof fetchTrialBalance
       )}
 
       {columns.debit.length === 0 && columns.credit.length === 0 ? (
-        <Empty className="border border-dashed">
+        <Empty>
           <EmptyHeader>
             <EmptyTitle>{t('trialBalance.empty')}</EmptyTitle>
           </EmptyHeader>
@@ -354,6 +339,8 @@ function Statement({ data }: { data: Awaited<ReturnType<typeof fetchTrialBalance
 export function TrialBalance() {
   const { t, formatDate, formatCurrency } = useI18n()
   const { timeFilter } = useTimeFilter()
+  const [searchTerm, setSearchTerm] = useState('')
+  const [expanded, setExpanded] = useState<Set<string> | null>(null)
 
   const query = useQuery({
     queryKey: ['trial-balance', timeFilter],
@@ -361,6 +348,7 @@ export function TrialBalance() {
     placeholderData: (previous) => previous,
   })
   const shownTime = useShownTime(timeFilter, query.isPlaceholderData)
+  const open = expanded ?? (query.data ? defaultExpanded(query.data.sections) : new Set())
 
   if (query.isError) {
     return (
@@ -406,6 +394,27 @@ export function TrialBalance() {
         }
         actions={
           <>
+            <InputGroup className="w-64">
+              <InputGroupAddon>
+                <Search />
+              </InputGroupAddon>
+              <InputGroupInput
+                placeholder={t('trialBalance.searchPlaceholder')}
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+            </InputGroup>
+            <Button
+              variant="ghost"
+              onClick={() => setExpanded(defaultExpanded(data.sections))}
+            >
+              <ChevronsUpDown data-icon="inline-start" />
+              <span className="hidden sm:inline">{t('trialBalance.expandAll')}</span>
+            </Button>
+            <Button variant="ghost" onClick={() => setExpanded(new Set())}>
+              <ChevronsDownUp data-icon="inline-start" />
+              <span className="hidden sm:inline">{t('trialBalance.collapseAll')}</span>
+            </Button>
             <Button
               variant="outline"
               disabled={!canExport}
@@ -435,7 +444,14 @@ export function TrialBalance() {
           </>
         }
       />
-      <Statement data={data} />
+      <Statement
+        data={data}
+        searchTerm={searchTerm}
+        expanded={open}
+        setExpanded={(next) =>
+          setExpanded((current) => (typeof next === 'function' ? next(current ?? open) : next))
+        }
+      />
     </div>
   )
 }

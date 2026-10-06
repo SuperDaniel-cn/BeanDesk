@@ -175,8 +175,6 @@ export const en = {
     unassignedHint:
       'Cash movement detected, but counter-account lacks cash flow mapping (e.g. cashflow: "sales").',
     unwiredTitle: 'No cash accounts configured',
-    unwiredBody:
-      'The cash flow statement requires monetary fund accounts. Add cash: TRUE to your cash or bank accounts to enable.',
     netIncrease: 'Net increase in cash and cash equivalents',
     errorTitle: 'Unable to load cash flow statement',
     lines: {

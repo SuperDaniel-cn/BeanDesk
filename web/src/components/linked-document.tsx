@@ -63,7 +63,7 @@ export function LinkedDocument({ filename }: { filename: string | null }) {
       </div>
 
       {!filename ? (
-        <Empty className="border">
+        <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <FileTextIcon />

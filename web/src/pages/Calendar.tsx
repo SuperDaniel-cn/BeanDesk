@@ -8,20 +8,15 @@ import { Button } from '@/components/ui/button'
 import { Calendar as MonthCalendar, CalendarDayButton } from '@/components/ui/calendar'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@/components/ui/input-group'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Spinner } from '@/components/ui/spinner'
 import {
   Table,
@@ -226,6 +221,16 @@ export function Calendar() {
           </Button>
         </div>
         <div className="order-4 flex min-h-0 min-w-0 flex-col lg:order-none lg:col-start-1 lg:row-start-2">
+          {rows.length === 0 && !busy && !(error && !ics) ? (
+            <Empty className="flex-1">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <CalendarDays />
+                </EmptyMedia>
+                <EmptyTitle>{selectedKey ? t('calendar.emptyDay') : t('calendar.emptyUpcoming')}</EmptyTitle>
+              </EmptyHeader>
+            </Empty>
+          ) : (
           <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border bg-card">
             {busy ? (
               <div className="flex flex-1 items-center p-3">
@@ -235,15 +240,6 @@ export function Calendar() {
               <Alert className="m-3">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
-            ) : rows.length === 0 ? (
-              <Empty className="flex-1 border-0">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <CalendarDays />
-                  </EmptyMedia>
-                  <EmptyTitle>{selectedKey ? t('calendar.emptyDay') : t('calendar.emptyUpcoming')}</EmptyTitle>
-                </EmptyHeader>
-              </Empty>
             ) : (
               <Table>
                 <TableHeader>
@@ -263,6 +259,7 @@ export function Calendar() {
               </Table>
             )}
           </div>
+          )}
         </div>
         <MonthCalendar
           mode="single"
@@ -272,6 +269,9 @@ export function Calendar() {
           selected={selected}
           onSelect={setSelected}
           captionLayout="dropdown"
+          formatters={{
+            formatMonthDropdown: (date) => String(date.getMonth() + 1),
+          }}
           className="order-2 rounded-lg border [--cell-size:2.75rem] md:[--cell-size:3rem] lg:order-none lg:col-start-2 lg:row-start-2"
           components={{
             DayButton: (props) => (
@@ -286,17 +286,18 @@ export function Calendar() {
         />
       </div>
 
-      <Sheet open={open} onOpenChange={openSubscribe}>
-        <SheetContent className="sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>{t('calendar.subscribe')}</SheetTitle>
-            <SheetDescription>
+      <Dialog open={open} onOpenChange={openSubscribe}>
+        <DialogContent className="flex h-[29rem] flex-col overflow-hidden sm:max-w-lg">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>{t('calendar.subscribe')}</DialogTitle>
+            <DialogDescription>
               {t('calendar.using', { source: sourceName })}
               {' '}
               {t('calendar.drawerHint')}
-            </SheetDescription>
-          </SheetHeader>
-          <FieldGroup className="overflow-y-auto px-4">
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+          <FieldGroup>
             <Field>
               <FieldLabel>{t('calendar.source')}</FieldLabel>
               <Tabs
@@ -325,32 +326,32 @@ export function Calendar() {
             {draftSource === 'file' ? (
               <Field>
                 <FieldLabel htmlFor="calendar-file">{t('calendar.file')}</FieldLabel>
-                <InputGroup>
-                  <InputGroupInput
+                <div className="flex items-center gap-2">
+                  <Input
                     id="calendar-file"
                     value={draft.file}
                     readOnly
                     className="font-mono"
                   />
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton
-                      variant="outline"
-                      disabled={applying}
-                      onClick={() => void browseIcs()}
-                    >
-                      <FolderOpen data-icon="inline-start" />
-                      {t('calendar.browseIcs')}
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                </InputGroup>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    disabled={applying}
+                    onClick={() => void browseIcs()}
+                  >
+                    <FolderOpen data-icon="inline-start" />
+                    {t('calendar.browseIcs')}
+                  </Button>
+                </div>
               </Field>
             ) : null}
 
             {draftSource === 'url' ? (
               <Field data-invalid={error ? true : undefined}>
                 <FieldLabel htmlFor="calendar-url">{t('calendar.url')}</FieldLabel>
-                <InputGroup>
-                  <InputGroupInput
+                <div className="flex items-center gap-2">
+                  <Input
                     id="calendar-url"
                     value={draft.url}
                     aria-invalid={error ? true : undefined}
@@ -367,26 +368,29 @@ export function Calendar() {
                     inputMode="url"
                     className="font-mono"
                   />
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton
-                      variant="outline"
-                      disabled={applying}
-                      onClick={() => void fillPublicFeed()}
-                    >
-                      {t('calendar.usePublic')}
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                </InputGroup>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    disabled={applying}
+                    onClick={() => void fillPublicFeed()}
+                  >
+                    {t('calendar.usePublic')}
+                  </Button>
+                </div>
               </Field>
             ) : null}
 
-            {error ? (
-              <Alert>
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : null}
+            <div className="min-h-16">
+              {error ? (
+                <Alert>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              ) : null}
+            </div>
           </FieldGroup>
-          <SheetFooter className="flex-row flex-wrap">
+          </div>
+          <DialogFooter className="shrink-0 flex-row [&>button]:flex-1">
             {subscribeUrl ? (
               <Button
                 type="button"
@@ -406,9 +410,9 @@ export function Calendar() {
               <Download data-icon="inline-start" />
               {t('calendar.download')}
             </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

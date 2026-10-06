@@ -12,12 +12,7 @@ import {
   amountTone,
 } from '@/components/period-compare'
 import { ReportBar, ReportWhen } from '@/components/report-bar'
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from '@/components/ui/empty'
+import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -352,10 +347,9 @@ export function CashFlow() {
           priorLabel={priorLabel}
         />
       ) : (
-        <Empty className="border bg-card">
+        <Empty>
           <EmptyHeader>
             <EmptyTitle>{t('cashFlow.unwiredTitle')}</EmptyTitle>
-            <EmptyDescription>{t('cashFlow.unwiredBody')}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       )}

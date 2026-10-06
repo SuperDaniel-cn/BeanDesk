@@ -385,7 +385,7 @@ export function BalanceSheet() {
       )}
 
       {!hasBalances ? (
-        <Empty className="border border-dashed">
+        <Empty>
           <EmptyHeader>
             <EmptyTitle>{t('balanceSheet.empty')}</EmptyTitle>
           </EmptyHeader>

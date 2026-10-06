@@ -475,7 +475,7 @@ export function IncomeStatement() {
           expenses={expenses}
         />
       ) : (
-        <Empty className="border border-dashed">
+        <Empty>
           <EmptyHeader>
             <EmptyTitle>{t('income.empty')}</EmptyTitle>
           </EmptyHeader>

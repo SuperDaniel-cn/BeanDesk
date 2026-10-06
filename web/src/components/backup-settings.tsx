@@ -842,7 +842,7 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
               <FieldDescription>{t('settings.backupDestsHint')}</FieldDescription>
             </Field>
             {settings.dests.length === 0 ? (
-              <Empty className="border">
+              <Empty>
                 <EmptyHeader>
                   <EmptyTitle>{t('settings.backupDestsEmpty')}</EmptyTitle>
                   <EmptyDescription>{t('settings.backupAddDestHint')}</EmptyDescription>

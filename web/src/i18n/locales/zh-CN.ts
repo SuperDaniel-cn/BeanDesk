@@ -174,7 +174,6 @@ export const zhCN = {
     unassigned: '未归类项目',
     unassignedHint: '检测到资金变动，但对应收支科目未指定现金流行次属性（如 cashflow: "sales"）。',
     unwiredTitle: '未设置资金账户',
-    unwiredBody: '现金流量表需统计货币资金收支。请在银行或现金等科目添加 cash: TRUE 资金标识。',
     netIncrease: '现金及现金等价物净增加额',
     errorTitle: '无法加载现金流量表',
     lines: {

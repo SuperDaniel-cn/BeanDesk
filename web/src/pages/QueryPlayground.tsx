@@ -225,15 +225,15 @@ export function QueryPlayground() {
               </Button>
             ) : null}
           </div>
+          {data.rows.length === 0 ? (
+            <Empty>
+              <EmptyHeader>
+                <EmptyTitle>{t('query.emptyTitle')}</EmptyTitle>
+                <EmptyDescription>{t('query.emptyDescription')}</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
           <div className="overflow-hidden rounded-lg border bg-card">
-            {data.rows.length === 0 ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyTitle>{t('query.emptyTitle')}</EmptyTitle>
-                  <EmptyDescription>{t('query.emptyDescription')}</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -288,8 +288,8 @@ export function QueryPlayground() {
                   ))}
                 </TableBody>
               </Table>
-            )}
           </div>
+          )}
           <p className="text-right text-[0.8rem] text-muted-foreground">
             {t('query.resultsSummary', { columns: data.types.length, rows: data.rows.length })}
           </p>
