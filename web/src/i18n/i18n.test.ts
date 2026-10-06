@@ -41,9 +41,9 @@ describe('resolveMessage', () => {
   })
 
   test('does not descend into plural forms', () => {
-    const plural = resolveMessage(en as Catalog, 'journal.listTitle')
+    const plural = resolveMessage(en as Catalog, 'ledger.errorsTitle')
     expect(typeof plural).toBe('object')
-    expect(resolveMessage(en as Catalog, 'journal.listTitle.other')).toBeUndefined()
+    expect(resolveMessage(en as Catalog, 'ledger.errorsTitle.other')).toBeUndefined()
   })
 })
 
@@ -83,8 +83,8 @@ describe('plural selection', () => {
 describe('translate', () => {
   test('renders a pluralised key through the active locale', () => {
     expect(
-      translate(en as Catalog, 'en', 'journal.listTitle', { count: 1 }),
-    ).toBe('1 transaction')
+      translate(en as Catalog, 'en', 'ledger.errorsTitle', { count: 1 }),
+    ).toBe('1 ledger error')
   })
 
   test('returns the key for a missing message instead of throwing', () => {

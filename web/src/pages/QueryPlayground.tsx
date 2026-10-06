@@ -150,33 +150,34 @@ export function QueryPlayground() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {data && data.rows.length > 0 ? (
-          <Button variant="outline" onClick={() => exportCsv(data, sortedRows)}>
-            <DownloadIcon data-icon="inline-start" />
-            {t('common.exportCsv')}
-          </Button>
-        ) : null}
-        <Button onClick={() => run()} disabled={result.isFetching}>
-          <PlayIcon data-icon="inline-start" />
-          {result.isFetching ? t('query.running') : t('query.run')}
-        </Button>
-      </div>
-
-      <div className="flex flex-wrap gap-1.5">
-        {PRESET_QUERIES.map((preset) => (
-          <Hint key={preset.titleKey} label={t(preset.descriptionKey)}>
-            <Button
-              variant={draft === preset.sql ? 'secondary' : 'outline'}
-              onClick={() => {
-                setDraft(preset.sql)
-                run(preset.sql)
-              }}
-            >
-              {t(preset.titleKey)}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex flex-wrap gap-1.5">
+          {PRESET_QUERIES.map((preset) => (
+            <Hint key={preset.titleKey} label={t(preset.descriptionKey)}>
+              <Button
+                variant={draft === preset.sql ? 'secondary' : 'outline'}
+                onClick={() => {
+                  setDraft(preset.sql)
+                  run(preset.sql)
+                }}
+              >
+                {t(preset.titleKey)}
+              </Button>
+            </Hint>
+          ))}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {data && data.rows.length > 0 ? (
+            <Button variant="outline" onClick={() => exportCsv(data, sortedRows)}>
+              <DownloadIcon data-icon="inline-start" />
+              {t('common.exportCsv')}
             </Button>
-          </Hint>
-        ))}
+          ) : null}
+          <Button onClick={() => run()} disabled={result.isFetching}>
+            <PlayIcon data-icon="inline-start" />
+            {result.isFetching ? t('query.running') : t('query.run')}
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">

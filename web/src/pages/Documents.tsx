@@ -82,8 +82,8 @@ export function Documents() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <InputGroup className="w-full max-w-sm">
+      <div className="flex justify-end">
+        <InputGroup className="w-64">
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>

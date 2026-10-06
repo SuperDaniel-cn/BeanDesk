@@ -181,22 +181,18 @@ export function Journal() {
       <Tabs
         value={activeRoot || 'all'}
         onValueChange={(value) => setSelectedRoot(value === 'all' ? '' : value)}
-        className="gap-4"
+        className="gap-6"
       >
-        <TabsList variant="line" aria-label={t('journal.rootLabel')} className="max-sm:w-full">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <TabsList variant="line" aria-label={t('journal.rootLabel')}>
           {rootFilters.map(({ key, value }) => (
             <TabsTrigger key={key} value={value || 'all'}>
               {t(key)}
             </TabsTrigger>
           ))}
         </TabsList>
-
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-[0.8rem] text-muted-foreground">
-          {t('journal.listTitle', { count: filtered.length })}
-        </p>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            <InputGroup className="w-full sm:w-64">
+        <div className="flex items-center gap-2">
+            <InputGroup className="w-64">
               <InputGroupAddon>
                 <SearchIcon />
               </InputGroupAddon>
@@ -218,7 +214,7 @@ export function Journal() {
                 value={selectedTag ?? 'all'}
                 onValueChange={(value) => setSelectedTag(value === 'all' ? null : value)}
               >
-                <SelectTrigger aria-label={t('journal.tagsLabel')} className="w-full sm:w-44">
+                <SelectTrigger aria-label={t('journal.tagsLabel')} className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

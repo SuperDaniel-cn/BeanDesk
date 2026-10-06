@@ -451,9 +451,6 @@ export const zhCN = {
       expenses: '费用',
       equity: '权益',
     },
-    listTitle: {
-      other: '{count} 笔交易',
-    },
   },
 
   update: {

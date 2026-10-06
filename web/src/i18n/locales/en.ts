@@ -460,10 +460,6 @@ export const en = {
       expenses: 'Expenses',
       equity: 'Equity',
     },
-    listTitle: {
-      one: '{count} transaction',
-      other: '{count} transactions',
-    },
   },
 
   update: {
