@@ -38,3 +38,4 @@ tokio = { version = "1", features = ["io-std", "rt", "time"] }
 schemars = { version = "=1.2.1", features = ["derive"] }
 dirs = "6"
 ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+tauri-plugin-single-instance = "2.5.2"

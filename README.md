@@ -46,7 +46,7 @@ Roadmap:
 To stay a shell around Fava:
 
 - No cloud ledger and no user accounts. The work directory is the user's files. Backup does not use a BeanDesk bucket: local Git, optional restic snapshots, optional upload the user signs with their own S3 keys.
-- No app-level vault switcher. Several books are several Fava root files and slugs on **one** service.
+- No app-level vault switcher. Several books are several Fava root files and slugs on **one** service. The desktop window runs as a single instance.
 - No built-in accounting engine and no raw Python runtime. Reports ask Fava. A custom start command is not rewritten.
 - No web ledger editor. Edit `.bean` files in a desktop editor or via the skill.
 - No personal securities or portfolio tracking. Operating books only.
