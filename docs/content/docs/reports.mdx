@@ -3,31 +3,25 @@ title: Reports
 description: Trial Balance, financial statements, journal entries, and BQL queries.
 ---
 
-Financial statements are computed directly from the connected ledger. The Accounting Period filter applies across all statements, the journal, documents, and BQL queries.
+Financial statements are computed by BeanDesk in real time directly from the active ledger. The Accounting Period filter in the header acts as a global slice, coordinating all reports, journal postings, and query scopes. On the trial balance, balance sheet, and income statement, an account row opens the journal for that account.
 
 ## Trial Balance
 
-Displays debit and credit balances in parallel columns with a collapsible account hierarchy. Filter by account name, and click any row to inspect postings in the journal.
-
-![Trial balance](/images/en/trial-balance.png)
+Presents closing balances in a two-column debit and credit format with a collapsible account hierarchy, validating total debit and credit balance equality with real-time account name filtering.
 
 ## Balance Sheet
 
-Presents assets, liabilities, and equity, verifying that assets equal liabilities plus equity. Unclosed period earnings are grouped into the equity section.
-
-![Balance sheet](/images/en/balance-sheet.png)
+Aggregates assets, liabilities, and equity, verifying that assets equal liabilities plus equity. Unclosed period earnings are automatically summarized into current period results within equity.
 
 ## Income Statement
 
-Aggregates operating revenue, costs, and expenses to calculate net profit, with comparative analysis against prior periods.
-
-![Income statement](/images/en/income-statement.png)
+Categorizes operating revenues, costs, and expenses to calculate period net profit, including comparative analysis against the preceding accounting period.
 
 ## Cash Flow Statement
 
-Computed via the direct method across operating, investing, and financing activities. Non-cash accrual entries are excluded.
+Computed via the direct method in pure functions, separating net cash flows across operating, investing, and financing activities. Non-cash accrual entries are excluded automatically.
 
-Mark cash attributes on account opening directives:
+Cash flow mappings rely on metadata on Beancount account opening directives (`open`):
 
 ```beancount
 2020-01-01 open Assets:Bank:Checking CNY
@@ -36,22 +30,23 @@ Mark cash attributes on account opening directives:
   cashflow: "sales"
 ```
 
-- `cash: TRUE`: Designates the account as cash or bank balances.
-- `cashflow: "<line>"`: Maps the counter-account to a statutory cash flow line.
-- `cashflow-in` / `cashflow-out`: Separates inflows and outflows for the same account.
+- `cash: TRUE`: Designates the account as a cash or bank asset. If no account is marked, the page says “No cash accounts configured” instead of three zero totals.
+- `cashflow: "<line>"`: Maps the counter-account to a statutory cash flow line. Postings without a line mapping are grouped into Unclassified Items.
+- `cashflow-in` / `cashflow-out`: Separates line mappings for inflows and outflows on the same account.
 
-If no cash accounts are configured, the page displays setup guidance. Cash activity without line mapping is grouped under Unclassified Items.
-
-![Cash flow statement](/images/en/cash-flow.png)
+Standard ledgers initialized by BeanDesk include preconfigured cash metadata for sample bank, revenue, expense, equity, and owner-advance accounts.
 
 ## Journal & Document Drilldown
 
-Filter transactions by counterparty, narration, element, and tags. Clicking an entry opens a modal displaying postings and linked documents.
+The journal offers multi-dimensional filtering across counterparty, narration, accounting element, and tags. The document column opens a dialog with the postings and linked files. A failed load shows an error and a retry, not an empty book.
 
-![Journal](/images/en/journal.png)
+- Document Linking: A file under `documents/` is automatically linked when its date and account path match a posting, or when the file name contains the transaction's unique link token.
+- Document Repository: The Documents page centrally indexes all receipts and invoices archived within the active accounting period.
 
 ## BQL Query Console
 
-Interactive console for native Beancount Query Language (BQL). Includes presets, keyboard shortcuts, sortable columns, and CSV export.
+Provides an interactive console for native Beancount Query Language (BQL) statements executed directly by the Fava engine:
 
-![BQL query](/images/en/query.png)
+- Includes built-in presets for monthly income and expenses, large transactions, and cash account balances.
+- Supports execution shortcuts: Cmd + Enter on macOS and Ctrl + Enter on Windows / Linux.
+- Supports column sorting and CSV export. The statement is sent unchanged. A result longer than 50,000 rows keeps the first 50,000 and says how many came back.

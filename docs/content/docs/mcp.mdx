@@ -3,17 +3,16 @@ title: Local MCP
 description: Read-only ledger queries and handbook integration via Model Context Protocol.
 ---
 
-BeanDesk can operate as a standard stdio MCP server. In Settings → General, click Copy Config to integrate with Cursor, Claude Desktop, or other MCP hosts.
+BeanDesk operates as a standard stdio MCP server. In Settings → General, click Copy Config to integrate command configurations into Cursor, Claude Desktop, or other MCP hosts.
 
 ## Operating Principles
 
-- Shared Configuration: Automatically resolves the working directory and active Fava address configured in Settings.
-- Read-Only: Forwards read-only requests. If the service is offline, ledger tools return an error without spawning processes.
-- Ledger Entries: Recording and updating transactions is performed directly by the agent on monthly text files; MCP does not forward entry write endpoints.
+- Shared Configuration: Automatically resolves the ledger working directory and active Fava address configured in Settings, eliminating the need to hardcode paths in AI prompts.
+- Read-Only Forwarding: Ledger tools forward read-only requests. If the underlying service is offline, tools return a descriptive status error rather than spawning processes in the background.
+- Ledger Entries: Creating and editing transactions is handled directly by your AI assistant editing monthly `.bean` files under your workspace; MCP does not expose entry write endpoints.
 
 ## Tool Capabilities
 
-- Ledger Capabilities: Provides working directory resolution, read-only financial reports, native BQL queries, document listing, and syntax checking; can initialize a ledger skeleton upon explicit confirmation, but does not provide entry write endpoints or process management.
-- Handbook Integration: Agents can invoke `get_handbook` to read this documentation offline without requiring a running Fava engine.
-- Data Boundary: Does not expose backup credentials, document file contents, or private calendar subscription URLs.
-
+- Ledger Services: Provides working directory identification, read-only financial statements, native BQL queries, document listing, and syntax checking. Supports initializing a new ledger skeleton upon explicit write confirmation, but exposes no transaction write endpoints or background process supervision.
+- Offline Handbook: AI assistants can invoke `get_handbook` to read any section of this documentation offline without requiring a running Fava engine.
+- Security Boundaries: Protects sensitive local state; does not expose backup passphrases, raw document bytes, or private calendar subscription URLs.

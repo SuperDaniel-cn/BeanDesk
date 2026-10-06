@@ -5,26 +5,27 @@ description: Initialize a new ledger in an empty directory and configure backups
 
 ## 1. Select an Empty Directory
 
-In Settings → Ledger Connection, choose an empty folder. If the folder already contains files, initialization aborts to protect existing data.
+In Settings → Ledger Connection, choose an empty directory. To prevent overwriting existing files, initialization aborts if the selected directory is not empty.
 
 ## 2. Initialize Ledger
 
-Click Initialize Ledger. BeanDesk creates standard Beancount ledger files (`main.bean`, `config/`, `data/`, `documents/`) and a `.beandesk` marker.
+Click Initialize Ledger. BeanDesk generates the standard Beancount directory structure (`main.bean`, `config/`, `data/`, and `documents/`) alongside a `.beandesk` marker.
 
-Edit your `.bean` files in any text editor. BeanDesk provides read-only financial reporting.
+Subsequent bookkeeping is performed by editing monthly `.bean` files under `data/` in your preferred text editor. BeanDesk provides read-only financial reporting.
 
 ## 3. Connect Service
 
-Click Connect. The connection mode starts on Bundled Engine. External Command and Direct Address are on the same page. Switching while connected disconnects the current session first.
+In Ledger Connection, click Connect. The default mode uses the bundled engine. You can also switch to an external command or connect directly to an existing service origin. If a session is currently active, switching modes disconnects the active session first.
 
 ## 4. Configure Backups
 
-In Settings → Backup:
+In Settings → Backup, configure dual local backup protections:
 
-- Git Auto-Snapshot: Commits ledger file changes locally; never pushed remotely. Keys and temporary files are excluded.
-- Encrypted Backup: Client-side encrypted incremental backups via restic to local folders or S3-compatible buckets.
-  - Backup Now: Manual on-demand snapshot.
-  - Automatic backup: Syncs changes automatically to ready destinations.
-  - Retention policy: Retains past 48 hours of snapshots, daily snapshots for 30 days, weekly for 12 weeks, monthly for 24 months. Skips unchanged ledgers.
+- Git Auto-Snapshot: Watches core ledger files (`main.bean`, `config/`, and `data/`). Takes an initial snapshot when watching begins, then creates local commits with debounce upon file modifications. Commits remain strictly local; credentials and receipt files are excluded from Git and never pushed.
+- restic Encrypted Backup: Client-side encrypted incremental backups to local folders or S3-compatible buckets, covering the entire ledger and `documents/` receipts.
+  - Passphrase: Setting an encryption key requires confirmation; lost keys cannot be recovered.
+  - Backup Now: Manually triggers an on-demand incremental backup.
+  - Automatic Backup: When enabled, file changes automatically sync to all ready destinations.
+  - Retention Policy: Keeps all snapshots from the past 48 hours, then thins older snapshots to daily for 30 days, weekly for 12 weeks, and monthly for 24 months. Unchanged ledgers are skipped.
 
 Next: [Settings](/desktop) and [Reports](/reports).

@@ -3,21 +3,22 @@ title: Existing Beancount
 description: Connect an existing local Beancount ledger directory.
 ---
 
-## Connect Ledger
+## Connect Existing Ledger
 
-In Settings → Ledger Connection, select your ledger folder and click Connect. External commands and direct addresses use the connection mode on the same page.
+In Settings → Ledger Connection, select your existing ledger directory and click Connect. To supervise a custom command or connect directly to an existing remote origin, switch the connection mode on the same page.
 
 ## Backup Protection
 
-For ledgers not initialized by BeanDesk (lacking a `.beandesk` marker), backup and restore features are disabled to protect existing backup workflows. Initializing over an existing `main.bean` is prohibited.
+To protect existing external backup workflows and file hierarchies, ledgers not initialized by BeanDesk (lacking a `.beandesk` marker in the working directory) disable the backup and restore panel. Additionally, initializing over an existing `main.bean` is prohibited.
 
 ## Available Features
 
-Once connected, all reporting features are available:
-- Financial statements (Trial Balance, Balance Sheet, Income Statement, Cash Flow Statement)
-- Journal entries and linked document drilldown
-- Native BQL query console
-- Tax calendar deadlines
-- Local MCP service
+Once connected, all features are fully available:
+
+- Financial statements: Trial Balance, Balance Sheet, Income Statement, and Cash Flow Statement.
+- Journal drilldown: Transaction inspection and linked source document previews.
+- BQL query console: Native Beancount Query Language execution.
+- Tax calendar: Statutory deadlines and cross-device calendar feeds.
+- Local MCP server: Read-only ledger queries for AI coding assistants.
 
 Next: [Settings](/desktop) and [Reports](/reports).

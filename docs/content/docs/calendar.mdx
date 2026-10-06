@@ -3,18 +3,17 @@ title: Calendar
 description: Statutory tax filing deadlines and calendar subscriptions.
 ---
 
-Open Calendar in the top bar and manage data sources in the Subscribe to Calendar dialog. Available even without an active ledger connection.
+Open Calendar in the top bar to inspect tax filing deadlines. Manage data sources and subscription feeds in the Subscribe to Calendar dialog. Available even without an active ledger connection.
 
 ## Calendar Sources
 
-Select one active calendar source:
+One calendar source may be active at a time:
 
-- Bundled Tax Calendar: Preconfigured quarterly filing deadlines for small-scale taxpayers in China. Public deadlines only; dates are not shifted for holidays.
-- Local File: Import a local `.ics` file, processed strictly on this machine (Desktop only).
-- HTTPS Subscription: Subscribe to standard calendar feeds (supports `https://` and `webcal://`; Desktop only).
+- Bundled Tax Calendar: Preconfigured quarterly statutory filing deadlines for small-scale taxpayers in China (VAT, CIT prepayments, etc.). Reflects statutory deadlines without automated holiday adjustments.
+- Local File: Import a local `.ics` calendar file, parsed strictly on this machine (Desktop only).
+- HTTPS Subscription: Subscribe to standard remote iCalendar feeds (supports `https://` and `webcal://`; Desktop only).
 
-## Subscriptions and Reminders
+## Sync and Due Date Notifications
 
-- Sync: Click Copy subscription URL to import into iOS, macOS, or any iCalendar client, or Download .ics file for a one-time import.
-- Notifications: The web browser displays the bundled tax calendar only; while the desktop application is running, events due within 7 days trigger an in-app notice and an OS desktop notification banner.
-
+- Cross-Device Sync: Click Copy subscription URL to copy the HTTPS feed link for iOS, macOS, or any iCalendar-compatible client. Alternatively, use Copy ICS content or Download .ics file for a one-time offline import.
+- Due Date Notices: The web browser displays the bundled tax calendar only. While the desktop application is running, events due within 7 days trigger an in-app notice and an operating system desktop notification banner.

@@ -3,32 +3,34 @@ title: Settings
 description: Ledger connection, service supervision, backups, and app preferences.
 ---
 
-![Desktop settings](/images/en/settings.png)
+## Ledger Connection Modes
 
-## Ledger Connection
+Settings provides three mutually exclusive connection modes, sharing a unified activity log:
 
-Choose a connection mode under Service Status. The three modes are exclusive and share one log. Switching while connected or still starting asks first. Confirming disconnects the current session and leaves you on the new panel. It does not connect the new mode for you.
+- Bundled Engine: Specify your ledger working directory to launch via the bundled standalone engine, requiring no Python environment or manual commands. Empty folders can be initialized here directly.
+- External Command: Specify a directory, start command, and local origin. Probes the port first, attaching directly if a local Fava service is already running; otherwise spawns the command in an isolated process group.
+- Direct Address: Provide an existing Fava service URL (local or remote) without managing background processes.
 
-- Bundled Engine: Choose a ledger directory and, in an empty folder, initialize it. Connect starts the bundled engine. A saved start command stays on file and is not run.
-- External Command: Same directory, plus a start command and a local address. The command is passed to the shell unchanged. The port is probed first; if Fava is already there, BeanDesk attaches.
-- Direct Address: A service URL only. No process is started.
-
-Stop ends a process this window started. Disconnecting a direct address leaves the other service running.
+If a session is active, switching modes requires confirmation and disconnects the active session first. Clicking Stop terminates only the process group launched by the current window, leaving external services intact.
 
 ## Settings Tabs
 
-- General: Language, theme, and local MCP configuration.
-- Ledger Connection: Bundled engine, external command, or direct address.
-- Backup: Git Auto-Snapshot and restic encrypted backups (available for BeanDesk-initialized ledgers; see [First book](/setup/first-book)).
+- General: Language preference, appearance theme (light, dark, or system), and local MCP configuration.
+- Ledger Connection: Working directory picker, connection mode switcher, and supervision controls.
+- Backup: Local Git snapshots and restic encrypted backups (available for BeanDesk-initialized ledgers; see [First book](/setup/first-book)).
 
 ## Connection Logs
 
-Connection events are recorded to local log files (10 MB cap with rolling eviction). Clear resets only the on-screen log view.
+Connection events are recorded to local log files (10 MB cap with rolling eviction). Clear resets only the on-screen log view without affecting disk logs.
+
+## Handbook Window
+
+Clicking the book icon in the header opens this manual in a dedicated, distraction-free secondary window. The window remains warm in memory; closing it merely hides it for instant re-invocation.
+
+## System Tray and Background Presence
+
+Closing the main or handbook window hides the application to the system tray while keeping background processes and watch listeners active. Click the tray icon or choose Show to focus the main window. Choosing Quit from the tray exits the application completely and terminates any Fava process group started by this window. Launching the desktop app again brings the running instance to the foreground.
 
 ## Software Updates
 
-The desktop application includes automated update checks for macOS, Windows, and Linux.
-
-## Tray
-
-Closing the main window hides BeanDesk to the tray. Click the tray icon or Show to bring the window back. Quit from the tray ends the app and stops a Fava process this window started.
+The desktop application includes automated update checks across macOS, Windows, and Linux.
