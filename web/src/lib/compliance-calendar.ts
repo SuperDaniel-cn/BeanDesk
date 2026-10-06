@@ -1,17 +1,10 @@
-import type { Vars } from '@/i18n/catalog'
-import type { MessageKey } from '@/i18n/locales/en'
-
-export type CalendarKind = 'vat' | 'cit-prepay' | 'cit-annual'
-
 export type CalendarEvent = {
   uid: string
   date: string
   summary: string
-  kind?: CalendarKind
-  period?: string
 }
 
-export type CalendarSource = 'bundled' | 'file' | 'url'
+export type CalendarSource = 'file' | 'url'
 
 export type CalendarFile = {
   active: CalendarSource
@@ -20,23 +13,17 @@ export type CalendarFile = {
   seenUids: string[]
 }
 
-export const PUBLIC_ICS_START = '2026-01-01'
-export const PUBLIC_ICS_END = '2030-12-31'
-export const PUBLIC_FEED_URL =
-  'https://raw.githubusercontent.com/SuperDaniel-cn/BeanDesk/main/calendars/cn-small-quarterly.ics'
 export const UPCOMING_MONTHS = 12
 export const NOTICE_DAYS = 7
 
 export function emptyCalendarFile(): CalendarFile {
-  return { active: 'bundled', file: '', url: '', seenUids: [] }
+  return { active: 'file', file: '', url: '', seenUids: [] }
 }
 
 export function readCalendarFile(value: unknown): CalendarFile | null {
   if (!value || typeof value !== 'object') return null
   const record = value as Record<string, unknown>
-  if (record.active !== 'bundled' && record.active !== 'file' && record.active !== 'url') {
-    return null
-  }
+  if (record.active !== 'file' && record.active !== 'url') return null
   const seen = Array.isArray(record.seenUids)
     ? record.seenUids.filter((item): item is string => typeof item === 'string')
     : []
@@ -66,38 +53,23 @@ export function sameCalendarSource(left: CalendarFile, right: CalendarFile): boo
 }
 
 export function sourceReady(file: CalendarFile): boolean {
-  if (file.active === 'bundled') return true
   if (file.active === 'file') return file.file.trim().length > 0
   return normalizeCalendarUrl(file.url) !== null
 }
 
 export function calendarSubscribeUrl(file: CalendarFile): string {
-  if (file.active === 'bundled') return PUBLIC_FEED_URL
   if (file.active === 'url') return normalizeCalendarUrl(file.url) ?? ''
   return ''
 }
 
 export function calendarSourceDetail(file: CalendarFile): string {
   if (file.active === 'file') return file.file.trim().split(/[/\\]/).pop() ?? ''
-  if (file.active === 'url') {
-    const href = normalizeCalendarUrl(file.url)
-    return href ? new URL(href).host : ''
-  }
-  return ''
+  const href = normalizeCalendarUrl(file.url)
+  return href ? new URL(href).host : ''
 }
 
 export function noticeKey(event: CalendarEvent): string {
   return `${event.uid}:${event.date}`
-}
-
-export function publicCatalogEvents(): CalendarEvent[] {
-  return catalogDueInRange(PUBLIC_ICS_START, PUBLIC_ICS_END)
-}
-
-export function bundledCatalogEvents(today: string, yearCount = 3): CalendarEvent[] {
-  const year = Number(today.slice(0, 4))
-  if (!Number.isFinite(year)) return []
-  return catalogDueInRange(`${year}-01-01`, `${year + yearCount - 1}-12-31`)
 }
 
 export function eventsInRange(events: CalendarEvent[], start: string, end: string): CalendarEvent[] {
@@ -144,20 +116,6 @@ export function calendarToday(now = new Date()): string {
   return calendarDateKey(now)
 }
 
-export function presentCalendarSummary(
-  event: CalendarEvent,
-  t: (key: MessageKey, vars?: Vars) => string,
-): string {
-  if (event.kind === 'vat' && event.period) return t('settings.calendarEventVat', { period: event.period })
-  if (event.kind === 'cit-prepay' && event.period) {
-    return t('settings.calendarEventCitPrepay', { period: event.period })
-  }
-  if (event.kind === 'cit-annual' && event.period) {
-    return t('settings.calendarEventCitAnnual', { year: event.period })
-  }
-  return event.summary
-}
-
 export function normalizeCalendarUrl(input: string): string | null {
   let next = input.trim()
   if (/^webcals?:\/\//i.test(next)) next = next.replace(/^webcals?:/i, 'https:')
@@ -172,30 +130,6 @@ export function normalizeCalendarUrl(input: string): string | null {
 
 function persistCalendarUrl(input: string): string {
   return normalizeCalendarUrl(input) ?? input.trim()
-}
-
-export function generateIcs(events: CalendarEvent[]): string {
-  const lines = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//BeanDesk//compliance-calendar//EN',
-    'CALSCALE:GREGORIAN',
-  ]
-  const sorted = [...events].sort(
-    (left, right) => left.date.localeCompare(right.date) || left.uid.localeCompare(right.uid),
-  )
-  for (const event of sorted) {
-    lines.push(
-      'BEGIN:VEVENT',
-      `UID:${event.uid}`,
-      'DTSTAMP:20260101T000000Z',
-      `DTSTART;VALUE=DATE:${compactDate(event.date)}`,
-      `SUMMARY:${escapeIcs(event.summary)}`,
-      'END:VEVENT',
-    )
-  }
-  lines.push('END:VCALENDAR', '')
-  return lines.join('\r\n')
 }
 
 export function parseIcs(text: string, windowStart: string, windowEnd: string): CalendarEvent[] {
@@ -218,57 +152,6 @@ export function parseIcs(text: string, windowStart: string, windowEnd: string): 
   return events.sort(
     (left, right) => left.date.localeCompare(right.date) || left.uid.localeCompare(right.uid),
   )
-}
-
-function catalogDueInRange(start: string, end: string): CalendarEvent[] {
-  const firstYear = Number(start.slice(0, 4)) - 1
-  const lastYear = Number(end.slice(0, 4))
-  const events: CalendarEvent[] = []
-  for (let year = firstYear; year <= lastYear; year += 1) {
-    for (const quarter of [1, 2, 3, 4] as const) {
-      const date = quarterDue(year, quarter)
-      const period = `${year} Q${quarter}`
-      events.push(
-        catalogEvent('vat', date, period, `beandesk-cn-small-vat-${year}Q${quarter}@beandesk`, `VAT and surcharges · ${period}`),
-        catalogEvent(
-          'cit-prepay',
-          date,
-          period,
-          `beandesk-cn-small-cit-prepay-${year}Q${quarter}@beandesk`,
-          `CIT prepayment · ${period}`,
-        ),
-      )
-    }
-    events.push(
-      catalogEvent(
-        'cit-annual',
-        `${year}-05-31`,
-        String(year),
-        `beandesk-cn-small-cit-annual-${year}@beandesk`,
-        `CIT annual settlement · ${year}`,
-      ),
-    )
-  }
-  return events
-    .filter((event) => event.date >= start && event.date <= end)
-    .sort((left, right) => left.date.localeCompare(right.date) || left.uid.localeCompare(right.uid))
-}
-
-function catalogEvent(
-  kind: CalendarKind,
-  date: string,
-  period: string,
-  uid: string,
-  summary: string,
-): CalendarEvent {
-  return { uid, date, summary, kind, period }
-}
-
-function quarterDue(year: number, quarter: 1 | 2 | 3 | 4): string {
-  if (quarter === 1) return `${year}-04-15`
-  if (quarter === 2) return `${year}-07-15`
-  if (quarter === 3) return `${year}-10-15`
-  return `${year + 1}-01-15`
 }
 
 function expandEvent(
@@ -406,10 +289,6 @@ function parseDate(value: string): { y: number; m: number; d: number } | null {
   return { y, m, d }
 }
 
-function compactDate(value: string): string {
-  return value.replace(/-/g, '')
-}
-
 function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate()
 }
@@ -438,10 +317,6 @@ function addMonths(date: string, months: number): string {
 
 function pad(value: number): string {
   return String(value).padStart(2, '0')
-}
-
-function escapeIcs(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
 }
 
 function unescapeIcs(value: string): string {

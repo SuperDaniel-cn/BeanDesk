@@ -21,7 +21,7 @@ BeanDesk 是壳，围着 **一个** Fava。账本文件在你选的文件夹里�
 - **桌面、第一本账**：设置里选工作目录。启动命令留空则用安装包里的引擎；目录是空的可以先写下 `main.bean` 骨架。
 - **自带服务**：自己安装并启动 Fava（`pip install fava`、项目 `.venv` 或 `make run`），填地址或把启动命令写进设置。
 - **交给本地助手**：
-  > 复制指令：*「在我指定的文件夹里建一份最小 Beancount 账本，并在 127.0.0.1:5000 启动 Fava。不要假设仓库名字。」*
+  > 复制指令：*“在我指定的文件夹里建一份最小 Beancount 账本，并在 127.0.0.1:5000 启动 Fava。不要假设仓库名字。”*
 
 记账指引见 [Fava 与 Beancount 记账指南](skills/fava-beancount-guide/SKILL.md)。
 
@@ -51,7 +51,7 @@ BeanDesk 是壳，围着 **一个** Fava。账本文件在你选的文件夹里�
 - 不做网页账本编辑器。改 `.bean` 用桌面编辑器或技能。
 - 不追踪个人证券或投资组合。只看经营账。
 - 不引入图表。报表用表格。
-- 不做提醒服务器。桌面端同一时间只订阅一份日历（随包装法定日、本机 `.ics`、或已发布的 HTTPS ICS）。关掉应用就不再提醒。
+- 不做提醒服务器，也不附带日历内容。桌面端同一时间只载入一份日历：本机 `.ics`，或一条 HTTPS 订阅。关掉应用就不再提醒。
 
 ## 功能特性
 
@@ -91,15 +91,12 @@ BeanDesk 是壳，围着 **一个** Fava。账本文件在你选的文件夹里�
 ![BQL 查询控制台](./docs/images/zh/query.png)
 
 ### 日历订阅
-BeanDesk 是订阅方，不是提醒主机。日历页（`/calendar`）是月份台历加即将到期列表。来源和复制 ICS 在「订阅日历」弹窗里。只选一份来源：
+BeanDesk 是订阅方，不是提醒主机，也不附带日历内容。日历页（`/calendar`）是月份台历加即将到期列表。来源和复制 ICS 在“订阅日历”弹窗里。只选一份来源：
 
-- **随包装目录**：中国小规模纳税人、按季的法定公开日（增值税及附加、企业所得税预缴、年度汇算清缴）。不含科目、金额或公司名。
-- **本机 `.ics`**：个性化日期放这里。这份文件出不了这台电脑。
-- **HTTPS ICS**：已发布的订阅地址。谷歌日历的「秘密地址（iCal 格式）」或公开日历 `basic.ics`，以及 Outlook / Microsoft 365「发布日历」给出的链接可以接通。登录页、CalDAV、OAuth 接不通。`webcal://` 会保存成 `https://`。桌面用 HTTP 插件，打开时拉一次。
+- **本机 `.ics`**：这台电脑上的文件，不会离开本机。
+- **HTTPS ICS**：用户粘贴的地址。谷歌日历的“秘密地址（iCal 格式）”或公开日历 `basic.ics`，以及 Outlook / Microsoft 365“发布日历”给出的链接可以接通。登录页、CalDAV、OAuth 接不通。`webcal://` 会保存成 `https://`。桌面用 HTTP 插件，打开时拉一次。
 
-同一份公共订阅也以静态文件放在仓库里：[calendars/cn-small-quarterly.ics](calendars/cn-small-quarterly.ics)（例如 `https://raw.githubusercontent.com/SuperDaniel-cn/BeanDesk/main/calendars/cn-small-quarterly.ics`）。手机提醒必须用这条 HTTPS；本机文件加不进手机。
-
-桌面进程活着时，距到期 7 天内（含当天）的事项按 UID 和发生日各提醒一次（Sonner + 系统横幅）。关掉应用不再提醒。
+“复制订阅链接”复制的是这条 HTTPS 地址，给手机用。本机文件加不进手机。桌面进程活着时，距到期 7 天内（含当天）的事项按 UID 和发生日各提醒一次（Sonner + 系统横幅）。关掉应用不再提醒。浏览器里的日历是空的。
 
 ### 本机 MCP
 同一份桌面程序加上独立参数 `mcp`（不是 `--mcp`）就走 stdio MCP。设置 → 常规可以复制 `{ command, args: ["mcp"] }`。进程读的是设置页同一份 `connection.json`。工具可以确认工作目录、写下第一本账骨架（必须 `confirmWrite`）、跑 bean-check，以及**只读**当前 Fava（BQL、报表、日记账、凭证目录）。记分录仍写工作目录里的月文件。不会去猜账本仓库名，也不会启动 Fava，更不动备份和日历。
@@ -180,7 +177,6 @@ Fava 原生接口支持执行任意 BQL 查询与读取单据凭证，切勿将�
 BeanDesk/
 ├── AGENTS.md               # 前端工程规范与开发契约
 ├── DEPLOY.md               # 本机绑定、Caddy 反代与隧道部署
-├── calendars/              # 公开静态 ICS（不是我们运营的提醒服务）
 ├── docs/                   # 用户手册（Fumadocs）与界面截屏
 │   └── images/             # 界面截屏（中英文）
 ├── skills/                 # 智能体技能定义

@@ -51,7 +51,7 @@ To stay a shell around Fava:
 - No web ledger editor. Edit `.bean` files in a desktop editor or via the skill.
 - No personal securities or portfolio tracking. Operating books only.
 - No charts. Tables only.
-- No reminder server. The desktop app can subscribe to **one** calendar at a time (bundled statutory dates, a local `.ics`, or a published HTTPS ICS). Notices fire only while the process is open.
+- No reminder server and no bundled calendar. The desktop app loads **one** calendar at a time: a local `.ics`, or an HTTPS subscription. Notices fire only while the process is open.
 
 ## Features
 
@@ -91,15 +91,12 @@ Includes query templates, keyboard execution shortcuts, sortable table output, a
 ![BQL Query Console](./docs/images/en/query.png)
 
 ### Calendar subscription
-BeanDesk is a subscriber, not a reminder host. The Calendar page (`/calendar`) shows a month grid and the upcoming list. Source and ICS copy live in the Subscribe calendar dialog. It picks one source:
+BeanDesk is a subscriber, not a reminder host, and it does not ship calendar content. The Calendar page (`/calendar`) shows a month grid and the upcoming list. Source and ICS copy live in the Subscribe calendar dialog. It picks one source:
 
-- **Bundled**: China small-scale taxpayer, quarterly statutory due dates (VAT and surcharges, CIT prepayment, CIT annual settlement). Public dates only — no accounts, amounts, or company names.
-- **Local `.ics`**: your own dates. That file does not leave this computer.
-- **HTTPS ICS**: a published feed. Google Calendar’s secret iCal address or a public `basic.ics`, and Outlook / Microsoft 365 “Publish calendar” links, work. Sign-in pages, CalDAV, and OAuth do not. `webcal://` is stored as `https://`. The desktop HTTP plugin fetches once at launch.
+- **Local `.ics`**: a file on this computer. It does not leave the machine.
+- **HTTPS ICS**: an address the user pastes. Google Calendar’s secret iCal address or a public `basic.ics`, and Outlook / Microsoft 365 “Publish calendar” links, work. Sign-in pages, CalDAV, and OAuth do not. `webcal://` is stored as `https://`. The desktop HTTP plugin fetches once when the page opens.
 
-The same public feed is a static file in this repo: [calendars/cn-small-quarterly.ics](calendars/cn-small-quarterly.ics) (for example `https://raw.githubusercontent.com/SuperDaniel-cn/BeanDesk/main/calendars/cn-small-quarterly.ics`). A phone reminder must use that HTTPS address; a local file cannot.
-
-While the desktop app is open, an event due within 7 days shows one toast and one system banner per UID and occurrence date. Closing the app stops notices.
+Copy subscription URL copies that HTTPS address for a phone. A local file cannot. While the desktop app is open, an event due within 7 days shows one toast and one system banner per UID and occurrence date. Closing the app stops notices. The browser calendar stays empty.
 
 ### Local MCP
 The same desktop binary speaks MCP on stdio when launched with a bare `mcp` argument (not `--mcp`). Settings → General copies `{ command, args: ["mcp"] }` for a host. The process reads the same `connection.json` as Settings. Tools confirm the work folder, create the first ledger skeleton (`confirmWrite` required), run bean-check, and **read** the live Fava (BQL, statements, journal, documents). Writing entries stays in the work folder. It does not search for a named ledger repository, start Fava, or touch backup or calendar.
@@ -182,7 +179,6 @@ The bind order, Caddy reverse proxy, and SPA fallback are documented in [DEPLOY.
 BeanDesk/
 ├── AGENTS.md               # Frontend engineering standards and agent contract
 ├── DEPLOY.md               # Loopback bind, Caddy proxy, and tunnel setup
-├── calendars/              # Public static ICS feeds (not a hosted reminder service)
 ├── docs/                   # User handbook (Fumadocs) and product screenshots
 │   └── images/             # Product screenshots (EN & ZH)
 ├── skills/                 # AI agent skill definitions

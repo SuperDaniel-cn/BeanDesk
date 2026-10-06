@@ -1,24 +1,13 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-
 import { describe, expect, test } from 'bun:test'
 
-import type { MessageKey } from '@/i18n/locales/en'
-
 import {
-  PUBLIC_FEED_URL,
-  bundledCatalogEvents,
   calendarSourceDetail,
   calendarSubscribeUrl,
   emptyCalendarFile,
   eventsFromIcs,
-  eventsInRange,
-  generateIcs,
   noticeKey,
   noticesDue,
   normalizeCalendarUrl,
-  presentCalendarSummary,
-  publicCatalogEvents,
   readCalendarFile,
   rememberNotices,
   sameCalendarSource,
@@ -26,8 +15,6 @@ import {
   upcomingEvents,
   withCalendarSource,
 } from './compliance-calendar'
-
-const PUBLIC_ICS = join(import.meta.dir, '../../../calendars/cn-small-quarterly.ics')
 
 const GOOGLE_STYLE = [
   'BEGIN:VCALENDAR',
@@ -62,56 +49,18 @@ const OUTLOOK_STYLE = [
   'END:VCALENDAR',
 ].join('\n')
 
-describe('bundled China small-scale quarterly catalog', () => {
-  test('lists statutory quarter and annual days without a network', () => {
-    const events = bundledCatalogEvents('2026-10-05')
-    expect(events.some((event) => event.date === '2026-10-15' && event.kind === 'vat')).toBe(true)
-    expect(events.some((event) => event.date === '2026-10-15' && event.kind === 'cit-prepay')).toBe(true)
-    expect(events.some((event) => event.date === '2026-05-31' && event.kind === 'cit-annual')).toBe(true)
-    expect(events.some((event) => event.date === '2027-01-15' && event.kind === 'vat')).toBe(true)
-    expect(events.every((event) => event.date >= '2026-01-01' && event.date <= '2028-12-31')).toBe(true)
-  })
-
-  test('upcoming rows stay inside twelve months and mix catalog with parsed ICS', () => {
-    const today = '2026-10-05'
-    const catalog = upcomingEvents(bundledCatalogEvents(today), today)
-    expect(catalog.map((event) => event.date)).toContain('2026-10-15')
-    expect(catalog.map((event) => event.date)).toContain('2027-05-31')
-    expect(catalog.every((event) => event.date >= today && event.date <= '2027-10-05')).toBe(true)
-
-    const parsed = eventsFromIcs(GOOGLE_STYLE, today)
-    expect(parsed).toEqual([
+describe('ICS parse', () => {
+  test('keeps a yearly Google event inside the upcoming year', () => {
+    expect(eventsFromIcs(GOOGLE_STYLE, '2026-10-05')).toEqual([
       {
         uid: 'annual-filing@example.com',
         date: '2027-03-15',
         summary: 'Annual filing reminder',
       },
     ])
-    const merged = upcomingEvents([...catalog, ...parsed], today)
-    expect(merged.some((event) => event.uid === 'annual-filing@example.com')).toBe(true)
-    expect(merged.some((event) => event.kind === 'vat' && event.date === '2026-10-15')).toBe(true)
-  })
-
-  test('a month grid still keeps due dates that are already past', () => {
-    const today = '2026-10-05'
-    const catalog = bundledCatalogEvents(today)
-    expect(upcomingEvents(catalog, today).some((event) => event.date === '2026-05-31')).toBe(false)
-    const may = eventsInRange(catalog, '2026-05-01', '2026-05-31')
-    expect(may.some((event) => event.date === '2026-05-31' && event.kind === 'cit-annual')).toBe(true)
-    expect(catalog.some((event) => event.date === '2026-10-15')).toBe(true)
-  })
-})
-
-describe('ICS generate and parse', () => {
-  test('locks the public 2026-2030 feed bytes', () => {
-    const generated = generateIcs(publicCatalogEvents())
-    expect(generated).toBe(readFileSync(PUBLIC_ICS, 'utf8'))
-    expect(generated).toContain('DTSTART;VALUE=DATE:20260415')
-    expect(generated).toContain('UID:beandesk-cn-small-vat-2026Q1@beandesk')
-    expect(generated).toContain('SUMMARY:VAT and surcharges · 2026 Q1')
-    expect(publicCatalogEvents().at(0)?.date).toBe('2026-01-15')
-    expect(publicCatalogEvents().every((event) => event.date <= '2030-12-31')).toBe(true)
-    expect(publicCatalogEvents().some((event) => event.date === '2031-01-15')).toBe(false)
+    expect(upcomingEvents(eventsFromIcs(GOOGLE_STYLE, '2026-10-05'), '2026-10-05')).toEqual(
+      eventsFromIcs(GOOGLE_STYLE, '2026-10-05'),
+    )
   })
 
   test('expands TZID, YEARLY/MONTHLY/WEEKLY rules, and drops dateless events', () => {
@@ -157,7 +106,8 @@ describe('one active source and notice keys', () => {
     expect(readCalendarFile({ active: 'url', url: 'webcal://example.com/cal.ics' })?.url).toBe(
       'https://example.com/cal.ics',
     )
-    expect(sourceReady(emptyCalendarFile())).toBe(true)
+    expect(sourceReady(emptyCalendarFile())).toBe(false)
+    expect(readCalendarFile({ active: 'bundled', url: 'https://example.com/old.ics' })).toBeNull()
     expect(sourceReady(withCalendarSource('file', {}, emptyCalendarFile()))).toBe(false)
     expect(sourceReady(file)).toBe(true)
     expect(sourceReady(withCalendarSource('url', {}, emptyCalendarFile()))).toBe(false)
@@ -169,7 +119,7 @@ describe('one active source and notice keys', () => {
     expect(calendarSourceDetail(file)).toBe('custom.ics')
     expect(calendarSourceDetail(url)).toBe('calendar.google.com')
     expect(calendarSourceDetail(emptyCalendarFile())).toBe('')
-    expect(calendarSubscribeUrl(emptyCalendarFile())).toBe(PUBLIC_FEED_URL)
+    expect(calendarSubscribeUrl(emptyCalendarFile())).toBe('')
     expect(calendarSubscribeUrl(url)).toBe('https://calendar.google.com/calendar/ical/demo/basic.ics')
     expect(calendarSubscribeUrl(file)).toBe('')
     expect(calendarSubscribeUrl(withCalendarSource('url', { url: 'not-a-url' }, emptyCalendarFile()))).toBe('')
@@ -187,21 +137,8 @@ describe('one active source and notice keys', () => {
     expect(noticesDue([nextYear], '2027-03-12', seen)).toEqual([nextYear])
   })
 
-  test('rewrites webcal and presents catalog copy through i18n', () => {
+  test('rewrites webcal and rejects plain http', () => {
     expect(normalizeCalendarUrl('webcal://example.com/cal.ics')).toBe('https://example.com/cal.ics')
     expect(normalizeCalendarUrl('http://example.com/cal.ics')).toBeNull()
-    const t = (key: MessageKey) => key
-    expect(
-      presentCalendarSummary(
-        {
-          uid: 'beandesk-cn-small-vat-2026Q3@beandesk',
-          date: '2026-10-15',
-          summary: 'VAT and surcharges · 2026 Q3',
-          kind: 'vat',
-          period: '2026 Q3',
-        },
-        t,
-      ),
-    ).toBe('settings.calendarEventVat')
   })
 })

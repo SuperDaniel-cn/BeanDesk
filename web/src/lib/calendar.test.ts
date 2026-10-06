@@ -14,12 +14,12 @@ describe('calendar store shape', () => {
     expect(explainCalendarError('calendar-http', t)).toBe('calendar.errorUrl')
   })
 
-  test('the browser resolve path stays on the bundled catalog', async () => {
+  test('the browser resolve path does not load a calendar', async () => {
     const resolved = await resolveCalendar(
       withCalendarSource('url', { url: 'https://example.com/cal.ics' }, emptyCalendarFile()),
       '2026-10-05',
     )
-    expect(resolved.catalog.some((event) => event.kind === 'vat' && event.date === '2026-10-15')).toBe(true)
-    expect(resolved.ics).toContain('BEGIN:VCALENDAR')
+    expect(resolved.catalog).toEqual([])
+    expect(resolved.ics).toBe('')
   })
 })

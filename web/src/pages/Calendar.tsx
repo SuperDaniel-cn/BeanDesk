@@ -30,7 +30,6 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useI18n } from '@/i18n'
 import { explainCalendarError, loadCalendar, resolveCalendar, saveCalendar } from '@/lib/calendar'
 import {
-  PUBLIC_FEED_URL,
   calendarDateKey,
   calendarSubscribeUrl,
   calendarSourceDetail,
@@ -38,7 +37,6 @@ import {
   emptyCalendarFile,
   eventsInRange,
   noticeKey,
-  presentCalendarSummary,
   sameCalendarSource,
   sourceReady,
   upcomingEvents,
@@ -125,7 +123,7 @@ export function Calendar() {
 
   useEffect(() => {
     if (!copied) return
-    const id = window.setTimeout(() => setCopied(false), 2000)
+    const id = window.setTimeout(() => setCopied(''), 2000)
     return () => window.clearTimeout(id)
   }, [copied])
 
@@ -134,9 +132,7 @@ export function Calendar() {
   const markedKeys = useMemo(() => new Set(catalog.map((event) => event.date)), [catalog])
   const rows = selectedKey ? eventsInRange(catalog, selectedKey, selectedKey) : upcoming
   const sourceName =
-    file.active === 'bundled'
-      ? t('calendar.bundled')
-      : calendarSourceDetail(file) || (file.active === 'file' ? t('calendar.file') : t('calendar.url'))
+    calendarSourceDetail(file) || (file.active === 'file' ? t('calendar.file') : t('calendar.url'))
 
   function openSubscribe(next: boolean) {
     setOpen(next)
@@ -165,13 +161,6 @@ export function Calendar() {
     await apply(next)
   }
 
-  async function fillPublicFeed() {
-    const next = withCalendarSource('url', { url: PUBLIC_FEED_URL }, fileRef.current)
-    setDraft(next)
-    await apply(next)
-  }
-
-  const draftSource = desktop ? draft.active : 'bundled'
   const subscribeUrl = calendarSubscribeUrl(draft)
 
   async function copyIcs() {
@@ -252,7 +241,7 @@ export function Calendar() {
                   {rows.map((event) => (
                     <TableRow key={noticeKey(event)}>
                       <TableCell className="font-mono">{event.date}</TableCell>
-                      <TableCell className="whitespace-normal">{presentCalendarSummary(event, t)}</TableCell>
+                      <TableCell className="whitespace-normal">{event.summary}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -300,30 +289,25 @@ export function Calendar() {
           <FieldGroup>
             <Field>
               <FieldLabel>{t('calendar.source')}</FieldLabel>
-              <Tabs
-                value={draftSource}
-                onValueChange={(value) => {
-                  selectSource(value as CalendarSource)
-                }}
-              >
-                <TabsList>
-                  <TabsTrigger value="bundled">{t('calendar.bundled')}</TabsTrigger>
-                  {desktop ? <TabsTrigger value="file">{t('calendar.file')}</TabsTrigger> : null}
-                  {desktop ? <TabsTrigger value="url">{t('calendar.url')}</TabsTrigger> : null}
-                </TabsList>
-              </Tabs>
+              {desktop ? (
+                <Tabs
+                  value={draft.active}
+                  onValueChange={(value) => {
+                    selectSource(value as CalendarSource)
+                  }}
+                >
+                  <TabsList>
+                    <TabsTrigger value="file">{t('calendar.file')}</TabsTrigger>
+                    <TabsTrigger value="url">{t('calendar.url')}</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              ) : null}
               <FieldDescription>
-                {t(
-                  draftSource === 'file'
-                    ? 'calendar.fileHint'
-                    : draftSource === 'url'
-                      ? 'calendar.urlHint'
-                      : 'calendar.bundledHint',
-                )}
+                {t(desktop ? (draft.active === 'file' ? 'calendar.fileHint' : 'calendar.urlHint') : 'calendar.desktopOnly')}
               </FieldDescription>
             </Field>
 
-            {draftSource === 'file' ? (
+            {desktop && draft.active === 'file' ? (
               <Field>
                 <FieldLabel htmlFor="calendar-file">{t('calendar.file')}</FieldLabel>
                 <div className="flex items-center gap-2">
@@ -347,37 +331,26 @@ export function Calendar() {
               </Field>
             ) : null}
 
-            {draftSource === 'url' ? (
+            {desktop && draft.active === 'url' ? (
               <Field data-invalid={error ? true : undefined}>
                 <FieldLabel htmlFor="calendar-url">{t('calendar.url')}</FieldLabel>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="calendar-url"
-                    value={draft.url}
-                    aria-invalid={error ? true : undefined}
-                    onChange={(event) => {
-                      setDraft({ ...draft, active: 'url', url: event.target.value })
-                    }}
-                    onBlur={(event) => {
-                      const next = withCalendarSource('url', { url: event.currentTarget.value }, fileRef.current)
-                      setDraft(next)
-                      void apply(next)
-                    }}
-                    placeholder={t('calendar.urlPlaceholder')}
-                    spellCheck={false}
-                    inputMode="url"
-                    className="font-mono"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="shrink-0"
-                    disabled={applying}
-                    onClick={() => void fillPublicFeed()}
-                  >
-                    {t('calendar.usePublic')}
-                  </Button>
-                </div>
+                <Input
+                  id="calendar-url"
+                  value={draft.url}
+                  aria-invalid={error ? true : undefined}
+                  onChange={(event) => {
+                    setDraft({ ...draft, active: 'url', url: event.target.value })
+                  }}
+                  onBlur={(event) => {
+                    const next = withCalendarSource('url', { url: event.currentTarget.value }, fileRef.current)
+                    setDraft(next)
+                    void apply(next)
+                  }}
+                  placeholder={t('calendar.urlPlaceholder')}
+                  spellCheck={false}
+                  inputMode="url"
+                  className="font-mono"
+                />
               </Field>
             ) : null}
 

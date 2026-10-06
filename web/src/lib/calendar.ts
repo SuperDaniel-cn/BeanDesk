@@ -3,17 +3,15 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import type { Vars } from '@/i18n/catalog'
 import type { MessageKey } from '@/i18n/locales/en'
 import {
-  bundledCatalogEvents,
   calendarToday,
   catalogWindow,
   emptyCalendarFile,
-  generateIcs,
   normalizeCalendarUrl,
   noticesDue,
   parseIcs,
-  presentCalendarSummary,
   readCalendarFile,
   rememberNotices,
+  sourceReady,
   type CalendarEvent,
   type CalendarFile,
 } from '@/lib/compliance-calendar'
@@ -40,10 +38,7 @@ export async function resolveCalendar(
   file: CalendarFile,
   today = calendarToday(),
 ): Promise<{ catalog: CalendarEvent[]; ics: string }> {
-  if (file.active === 'bundled' || !isTauri()) {
-    const catalog = bundledCatalogEvents(today)
-    return { catalog, ics: generateIcs(catalog) }
-  }
+  if (!isTauri() || !sourceReady(file)) return { catalog: [], ics: '' }
   const ics = await loadActiveIcs(file)
   const { start, end } = catalogWindow(today)
   return { catalog: parseIcs(ics, start, end), ics }
@@ -98,7 +93,7 @@ export async function notifyDueCalendars(options: {
   for (const event of due) {
     const title = options.t('settings.calendarNoticeTitle')
     const body = options.t('settings.calendarNoticeBody', {
-      summary: presentCalendarSummary(event, options.t),
+      summary: event.summary,
       date: event.date,
     })
     options.toast(title, { description: body })
