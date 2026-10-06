@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { FileTextIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useLocation } from 'react-router'
 
 import { LinkedDocument } from '@/components/linked-document'
@@ -40,10 +40,13 @@ export function Documents() {
   const [search, setSearch] = useState('')
   const { pathname } = useLocation()
   const [selected, setSelected] = useState<LedgerDocument | null>(null)
+  const [open, setOpen] = useState(false)
+  if (pathname !== '/documents' && open) setOpen(false)
 
-  useEffect(() => {
-    if (pathname !== '/documents') setSelected(null)
-  }, [pathname])
+  function showDocument(doc: LedgerDocument) {
+    setSelected(doc)
+    setOpen(true)
+  }
 
   const query = useQuery({
     queryKey: ['documents'],
@@ -115,7 +118,7 @@ export function Documents() {
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        onClick={() => setSelected(doc)}
+                        onClick={() => showDocument(doc)}
                         aria-label={t('documents.preview')}
                       >
                         <FileTextIcon />
@@ -145,7 +148,7 @@ export function Documents() {
                   <TableRow
                     key={doc.filename}
                     className="cursor-pointer"
-                    onClick={() => setSelected(doc)}
+                    onClick={() => showDocument(doc)}
                   >
                     <TableCell className="font-mono">{formatDate(doc.date)}</TableCell>
                     <TableCell>{displayAccountName(doc.account)}</TableCell>
@@ -159,7 +162,7 @@ export function Documents() {
                           size="icon-sm"
                           onClick={(event) => {
                             event.stopPropagation()
-                            setSelected(doc)
+                            showDocument(doc)
                           }}
                           aria-label={t('documents.preview')}
                         >
@@ -175,8 +178,8 @@ export function Documents() {
         </>
       )}
 
-      <Dialog open={selected != null} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="w-full max-w-[calc(100%-1.5rem)] max-h-[90vh] min-w-0 overflow-y-auto rounded-2xl p-4 sm:max-w-3xl sm:p-6">
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[calc(100%-1.5rem)] min-w-0 overflow-hidden rounded-2xl sm:max-w-3xl sm:p-6">
           {selected ? (
             <>
               <DialogHeader className="min-w-0 pr-8">

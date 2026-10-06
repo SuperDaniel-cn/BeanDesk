@@ -218,6 +218,7 @@ export const en = {
     errorFallback: 'Query execution failed. Please check syntax.',
     resultsTitle: 'Query Results',
     resultsSummary: '{columns} columns · {rows} rows',
+    truncated: 'The query returned {total} rows. Showing the first {count}. The statement was not changed.',
     resetSort: 'Reset sort',
     emptyTitle: 'No Matching Records',
     emptyDescription: 'No data returned for this query',

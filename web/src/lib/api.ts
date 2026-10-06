@@ -3,6 +3,7 @@
  * Zero custom backend: runs purely over the local Fava core.
  */
 
+import { capQueryRows } from './bql-bound'
 import { classifyCashFlow, readAccountCashMeta, type CashPosting } from './cash-flow'
 import { favaClient, type FavaAccountDetail, type LedgerDocument } from './fava-client'
 import {
@@ -161,7 +162,8 @@ export async function fetchDocuments(signal?: AbortSignal): Promise<LedgerDocume
 }
 
 export async function runBQLQuery(bql: string, time?: string, signal?: AbortSignal) {
-  return favaClient.query(bql, time, signal)
+  const result = await favaClient.query(bql, time, signal)
+  return capQueryRows(result)
 }
 
 export { favaClient }

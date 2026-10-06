@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, DownloadIcon, PlayIcon, RotateCcwIcon, TriangleAlertIcon } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type UIEvent } from 'react'
 
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -12,14 +12,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import type { MessageKey } from '@/i18n/locales/en'
@@ -83,6 +76,39 @@ LIMIT 50`,
   sql: string
 }>
 
+const QUERY_ROW_HEIGHT = 32
+const QUERY_OVERSCAN = 12
+
+function useVisibleRows(count: number) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [height, setHeight] = useState(0)
+
+  useEffect(() => {
+    const node = ref.current
+    if (!node) return
+    node.scrollTop = 0
+    setScrollTop(0)
+    const measure = () => setHeight(node.clientHeight)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [count])
+
+  const start = Math.max(0, Math.floor(scrollTop / QUERY_ROW_HEIGHT) - QUERY_OVERSCAN)
+  const end = Math.min(count, start + Math.ceil(height / QUERY_ROW_HEIGHT) + QUERY_OVERSCAN * 2)
+
+  return {
+    ref,
+    start,
+    end,
+    padTop: start * QUERY_ROW_HEIGHT,
+    padBottom: (count - end) * QUERY_ROW_HEIGHT,
+    onScroll: (event: UIEvent<HTMLDivElement>) => setScrollTop(event.currentTarget.scrollTop),
+  }
+}
+
 function numericColumn(dtype: string): boolean {
   return /int|float|decimal|amount|inventory/i.test(dtype)
 }
@@ -142,6 +168,7 @@ export function QueryPlayground() {
 
   const data = result.data
   const numeric = data?.types.map((column) => numericColumn(column.dtype)) ?? []
+  const windowRows = useVisibleRows(data?.rows.length ?? 0)
   const sortedRows = useMemo(() => {
     if (!data) return []
     if (sortCol == null) return data.rows
@@ -234,66 +261,84 @@ export function QueryPlayground() {
               </EmptyHeader>
             </Empty>
           ) : (
-          <div className="overflow-hidden rounded-lg border bg-card">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {data.types.map((column, index) => {
-                      const active = sortCol === index
-                      return (
-                        <TableHead
-                          key={index}
-                          aria-sort={active ? (sortAsc ? 'ascending' : 'descending') : 'none'}
-                          className={cn(numeric[index] && 'text-right')}
+          <div
+            ref={windowRows.ref}
+            onScroll={windowRows.onScroll}
+            className="max-h-[32rem] overflow-auto rounded-lg border bg-card"
+          >
+            <table className="w-full caption-bottom text-[0.8rem]">
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow>
+                  {data.types.map((column, index) => {
+                    const active = sortCol === index
+                    return (
+                      <TableHead
+                        key={index}
+                        aria-sort={active ? (sortAsc ? 'ascending' : 'descending') : 'none'}
+                        className={cn(numeric[index] && 'text-right')}
+                      >
+                        <button
+                          type="button"
+                          className={cn(
+                            'inline-flex items-center gap-1',
+                            numeric[index] && 'w-full justify-end',
+                          )}
+                          onClick={() => {
+                            if (active) setSortAsc((current) => !current)
+                            else {
+                              setSortCol(index)
+                              setSortAsc(true)
+                            }
+                          }}
                         >
-                          <button
-                            type="button"
-                            className={cn(
-                              'inline-flex items-center gap-1',
-                              numeric[index] && 'w-full justify-end',
-                            )}
-                            onClick={() => {
-                              if (active) setSortAsc((current) => !current)
-                              else {
-                                setSortCol(index)
-                                setSortAsc(true)
-                              }
-                            }}
-                          >
-                            {column.name}
-                            {active ? (
-                              sortAsc ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />
-                            ) : null}
-                          </button>
-                        </TableHead>
-                      )
-                    })}
+                          {column.name}
+                          {active ? (
+                            sortAsc ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />
+                          ) : null}
+                        </button>
+                      </TableHead>
+                    )
+                  })}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {windowRows.padTop > 0 ? (
+                  <tr aria-hidden style={{ height: windowRows.padTop }}>
+                    <td colSpan={data.types.length} />
+                  </tr>
+                ) : null}
+                {sortedRows.slice(windowRows.start, windowRows.end).map((row, offset) => (
+                  <TableRow key={windowRows.start + offset} className="h-8">
+                    {row.map((cell, cellIndex) => (
+                      <TableCell
+                        key={cellIndex}
+                        className={cn(
+                          'max-w-xs truncate',
+                          numeric[cellIndex] && 'text-right tabular-nums',
+                        )}
+                      >
+                        {presentQueryCell(cell, locale)}
+                      </TableCell>
+                    ))}
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedRows.map((row, rowIndex) => (
-                    <TableRow key={rowIndex}>
-                      {row.map((cell, cellIndex) => (
-                          <TableCell
-                            key={cellIndex}
-                            className={cn(
-                              numeric[cellIndex]
-                                ? 'text-right tabular-nums'
-                                : 'max-w-xs whitespace-normal',
-                            )}
-                          >
-                            {presentQueryCell(cell, locale)}
-                          </TableCell>
-                        ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                ))}
+                {windowRows.padBottom > 0 ? (
+                  <tr aria-hidden style={{ height: windowRows.padBottom }}>
+                    <td colSpan={data.types.length} />
+                  </tr>
+                ) : null}
+              </TableBody>
+            </table>
           </div>
           )}
           <p className="text-right text-[0.8rem] text-muted-foreground">
-            {t('query.resultsSummary', { columns: data.types.length, rows: data.rows.length })}
+            {t('query.resultsSummary', { columns: data.types.length, rows: data.total })}
           </p>
+          {data.truncated ? (
+            <p className="text-[0.8rem] text-muted-foreground">
+              {t('query.truncated', { total: data.total, count: data.rows.length })}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>

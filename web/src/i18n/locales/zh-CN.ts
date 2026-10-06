@@ -217,6 +217,7 @@ export const zhCN = {
     errorFallback: '查询语句语法有误或执行失败',
     resultsTitle: '查询结果',
     resultsSummary: '{columns} 列 · {rows} 行',
+    truncated: '查询返回 {total} 行，页面只展示前 {count} 行。语句没有改动。',
     resetSort: '重置排序',
     emptyTitle: '无匹配记录',
     emptyDescription: '未检索到符合条件的数据',
