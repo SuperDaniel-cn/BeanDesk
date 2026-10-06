@@ -7,8 +7,10 @@ import {
   ChevronUp,
   Copy,
   Cpu,
+  ExternalLink,
   FilePlus2,
   FolderOpen,
+  Info,
   Link2,
   Plug,
   Settings as SettingsIcon,
@@ -17,6 +19,7 @@ import {
 
 import { useAppUpdate } from '@/components/app-update'
 import { BackupSettingsPanel } from '@/components/backup-settings'
+import { BrandMark } from '@/components/brand-mark'
 import { formatConnectionLog, formatConnectionLogLine, useDesktop } from '@/components/desktop-gate'
 import { LedgerErrors } from '@/components/ledger-errors'
 import { LocaleToggle } from '@/components/locale-toggle'
@@ -66,6 +69,7 @@ import {
 } from '@/lib/connection'
 import {
   connectionAction,
+  hostProbeCopyKey,
   hostUptime,
   switchNeedsConfirm,
   switchWarning,
@@ -81,7 +85,7 @@ import {
 } from '@/lib/desktop'
 import { loadMcpHostConfig, mcpHostConfigText } from '@/lib/mcp-host'
 
-type SettingsTab = 'general' | 'simple' | 'backup'
+type SettingsTab = 'general' | 'simple' | 'backup' | 'about'
 
 function linkModeMessage(mode: LinkMode) {
   if (mode === 'shell') return 'settings.modeShell'
@@ -106,8 +110,6 @@ function GeneralSettings({ tauri }: { tauri: boolean }) {
       {tauri ? (
         <>
           <Separator />
-          <UpdateCheck />
-          <Separator />
           <McpHostSettings />
         </>
       ) : null}
@@ -125,12 +127,15 @@ export function Settings() {
     { value: 'general' as const, icon: SettingsIcon, label: t('settings.tabGeneral') },
     { value: 'simple' as const, icon: Plug, label: t('settings.tabSimple') },
     { value: 'backup' as const, icon: Archive, label: t('settings.tabBackup') },
+    { value: 'about' as const, icon: Info, label: t('settings.tabAbout') },
   ]
 
   if (!tauri) {
     return (
       <section className="flex max-w-xl flex-col gap-4">
         <GeneralSettings tauri={false} />
+        <Separator />
+        <AboutSettings tauri={false} />
         <Separator />
         <Alert>
           <AlertDescription>{t('settings.backupBrowser')}</AlertDescription>
@@ -173,9 +178,71 @@ export function Settings() {
           {tab === 'backup' ? (
             <BackupSettingsPanel workDirectory={desktop.file?.local?.directory ?? ''} />
           ) : null}
+          {tab === 'about' ? <AboutSettings tauri /> : null}
         </div>
       </div>
     </SidebarProvider>
+  )
+}
+
+const AUTHOR_BLOG_URL = 'https://superdaniel.cn/'
+
+function AboutSettings({ tauri }: { tauri: boolean }) {
+  const { t } = useI18n()
+  const [version, setVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!tauri) return
+    void import('@tauri-apps/api/app')
+      .then(({ getVersion }) => getVersion())
+      .then(setVersion)
+      .catch(() => undefined)
+  }, [tauri])
+
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <BrandMark className="size-8" />
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="font-heading text-sm font-semibold">{t('brand.window')}</span>
+              {version ? <span className="text-xs text-muted-foreground">{`v${version}`}</span> : null}
+            </div>
+            <p className="text-xs text-muted-foreground">{t('brand.tagline')}</p>
+            <p className="text-xs text-muted-foreground">{t('settings.aboutBlurb')}</p>
+          </div>
+        </div>
+        {tauri ? <UpdateCheck /> : null}
+      </div>
+      <Separator />
+      <div className="flex flex-col items-start gap-1.5">
+        <span className={formTitleClass}>{t('settings.aboutAuthor')}</span>
+        <div className="flex items-center gap-2 text-[0.8rem]">
+          <span className="text-muted-foreground">{t('settings.aboutAuthorBlog')}</span>
+          <a
+            href={AUTHOR_BLOG_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => {
+              if (tauri) {
+                e.preventDefault()
+                void invoke('open_url', { url: AUTHOR_BLOG_URL })
+              }
+            }}
+            className="inline-flex items-center gap-1 text-primary underline underline-offset-4 hover:text-primary/80"
+          >
+            <span>{AUTHOR_BLOG_URL}</span>
+            <ExternalLink className="size-3" />
+          </a>
+        </div>
+      </div>
+      <Separator />
+      <div className="flex flex-col items-start gap-1.5">
+        <span className={formTitleClass}>{t('settings.aboutLicense')}</span>
+        <p className="text-[0.8rem]">{t('settings.aboutLicenseName')}</p>
+      </div>
+    </section>
   )
 }
 
@@ -230,30 +297,17 @@ function McpHostSettings() {
 function UpdateCheck() {
   const { t } = useI18n()
   const { phase, check } = useAppUpdate()
-  const [version, setVersion] = useState('0.1.0')
   const busy = phase === 'checking' || phase === 'installing'
 
-  useEffect(() => {
-    if (isTauri()) {
-      void import('@tauri-apps/api/app')
-        .then(({ getVersion }) => getVersion())
-        .then(setVersion)
-        .catch(() => undefined)
-    }
-  }, [])
-
   return (
-    <div className="flex flex-col items-start gap-1.5">
-      <span className={formTitleClass}>{t('update.label')}</span>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[0.8rem]">{`v${version}`}</span>
-        <Button variant="outline" disabled={busy} onClick={() => void check(true)}>
-          {phase === 'checking' ? t('update.checking') : t('update.check')}
-        </Button>
-      </div>
-      {phase === 'none' ? <p className="text-xs text-muted-foreground">{t('update.none')}</p> : null}
-      {phase === 'failed' ? (
-        <p className="text-xs text-muted-foreground">{t('update.failed')}</p>
+    <div className="flex shrink-0 flex-col items-end gap-1.5">
+      <Button variant="outline" disabled={busy} onClick={() => void check(true)}>
+        {phase === 'checking' ? t('update.checking') : t('update.check')}
+      </Button>
+      {phase === 'none' || phase === 'failed' ? (
+        <p className="text-xs text-muted-foreground">
+          {t(phase === 'none' ? 'update.none' : 'update.failed')}
+        </p>
       ) : null}
     </div>
   )
@@ -371,6 +425,7 @@ function ConnectionSettings() {
     }
     setBusy(true)
     try {
+      await persistDraft()
       await invoke('init_ledger', { directory })
       desktop.appendLog(t('settings.createFirstLedgerDone'))
     } catch (caught) {
@@ -506,6 +561,7 @@ function ConnectionSettings() {
     }
   }
 
+  const folderLocked = busy || switchNeedsConfirm(desktop.status)
   const engineLabel = t(linkModeMessage('engine'))
   const shellLabel = t(linkModeMessage('shell'))
   const directLabel = t(linkModeMessage('direct'))
@@ -567,7 +623,7 @@ function ConnectionSettings() {
             <span className={formTitleClass}>{t('settings.directory')}</span>
             <span className="flex w-full flex-wrap gap-2">
               <Input value={directory} readOnly placeholder={t('settings.browse')} className="min-w-0 flex-1 font-mono" />
-              <Button type="button" variant="outline" onClick={() => void browse()} disabled={busy} className="shrink-0">
+              <Button type="button" variant="outline" onClick={() => void browse()} disabled={folderLocked} className="shrink-0">
                 <FolderOpen data-icon="inline-start" />
                 {t('settings.browse')}
               </Button>
@@ -576,7 +632,7 @@ function ConnectionSettings() {
                   type="button"
                   variant="outline"
                   onClick={() => void createFirstLedger()}
-                  disabled={busy || !directory}
+                  disabled={folderLocked || !directory}
                   className="shrink-0"
                 >
                   <FilePlus2 data-icon="inline-start" />
@@ -586,27 +642,25 @@ function ConnectionSettings() {
             </span>
           </label>
           {mode === 'shell' ? (
-            <>
-              <label className="flex w-full flex-col items-start gap-1.5">
-                <span className={formTitleClass}>{t('settings.command')}</span>
-                <Textarea
-                  value={command}
-                  onChange={(event) => setCommand(event.target.value)}
-                  onBlur={() => void persistDraft()}
-                  placeholder={t('settings.commandPlaceholder')}
-                  spellCheck={false}
-                  rows={2}
-                  className="resize-none font-mono"
-                />
-              </label>
-              <OriginField
-                origin={localOrigin}
-                setOrigin={setLocalOrigin}
+            <label className="flex w-full flex-col items-start gap-1.5">
+              <span className={formTitleClass}>{t('settings.command')}</span>
+              <Textarea
+                value={command}
+                onChange={(event) => setCommand(event.target.value)}
                 onBlur={() => void persistDraft()}
-                label={t('settings.localOrigin')}
+                placeholder={t('settings.commandPlaceholder')}
+                spellCheck={false}
+                rows={2}
+                className="resize-none font-mono"
               />
-            </>
+            </label>
           ) : null}
+          <OriginField
+            origin={localOrigin}
+            setOrigin={setLocalOrigin}
+            onBlur={() => void persistDraft()}
+            label={t('settings.localOrigin')}
+          />
         </>
       )}
 
@@ -710,6 +764,7 @@ function HostStatus({ action }: { action?: ReactNode }) {
       : elapsed.unit === 'minutes'
         ? t('settings.hostUptimeMinutes', { count: elapsed.count })
         : t('settings.hostUptimeSeconds', { count: elapsed.count })
+  const probeKey = hostProbeCopyKey(host.probe)
 
   let detail: ReactNode = null
   if (status === 'ready' && host.owned) {
@@ -726,6 +781,7 @@ function HostStatus({ action }: { action?: ReactNode }) {
       <div className="flex w-full flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={session.variant}>{t(session.key)}</Badge>
+          {probeKey ? <span className="text-xs text-muted-foreground">{t(probeKey)}</span> : null}
           {detail ? <span className="text-xs text-muted-foreground">{detail}</span> : null}
         </div>
         {action}

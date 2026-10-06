@@ -59,6 +59,8 @@ export const en = {
 
   brand: {
     short: 'BeanDesk',
+    window: 'BeanDesk',
+    tagline: 'Local-first double-entry workbench for one-person companies and private management accounting',
   },
 
   boot: {
@@ -251,6 +253,12 @@ export const en = {
     tabGeneral: 'General',
     tabSimple: 'Ledger Connection',
     tabBackup: 'Backup',
+    tabAbout: 'About',
+    aboutBlurb: 'Directly connects to a local Fava instance with zero cloud dependencies.',
+    aboutAuthor: 'Author',
+    aboutAuthorBlog: 'Blog',
+    aboutLicense: 'License',
+    aboutLicenseName: 'GNU AGPLv3',
     calendarNoticeTitle: 'Upcoming Due Date',
     calendarNoticeBody: '{summary} · {date}',
     backupCurrentLedger: 'Current Ledger',
@@ -384,6 +392,9 @@ export const en = {
     hostSessionReady: 'Connected',
     hostPleaseConnect: 'Not connected to ledger service',
     hostPortOccupied: 'Target port is occupied by an unexpected service',
+    hostProbeFava: 'Active Fava service detected',
+    hostProbeOccupied: 'Target port is occupied by another process',
+    hostProbeClosed: 'Service is not running or not responding',
     airplayPort:
       'Current port is occupied by macOS AirPlay. Turn off AirPlay Receiver in System Settings → General → AirDrop & Handoff, or choose another port.',
     hostOwned: 'Managed by current window',

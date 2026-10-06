@@ -27,6 +27,12 @@ describe('catalogue parity', () => {
   test('the modern language is actually translated, not copied', () => {
     expect(zhCN.balanceSheet.title).not.toBe(en.balanceSheet.title)
     expect(zhCN.balanceSheet.title).toBe('资产负债表')
+    expect(en.brand.short).toBe('BeanDesk')
+    expect(en.brand.window).toBe('BeanDesk')
+    expect(zhCN.brand.short).toBe('经营账本')
+    expect(zhCN.brand.window).toBe('经营账本')
+    expect(en.brand.tagline).toContain('one-person companies')
+    expect(zhCN.brand.tagline).toBe('一人公司对公财税与合规工作台')
   })
 })
 

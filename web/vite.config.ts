@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 
-import { rewriteDocsDirectoryRequest } from './src/lib/handbook-docs-routing'
+import { rewriteDocsDirectoryRequest } from './src/lib/handbook-docs-routing.ts'
 
 const favaProxy = {
   '/api/fava': {

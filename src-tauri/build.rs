@@ -18,6 +18,7 @@ fn main() {
             "backup_snapshots",
             "backup_test_s3",
             "backup_open_workdir",
+            "open_url",
         ]),
     ))
     .expect("failed to run build script");

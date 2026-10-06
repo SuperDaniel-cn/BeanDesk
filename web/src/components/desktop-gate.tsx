@@ -20,6 +20,7 @@ import {
   hostFromSnapshot,
   idleHost,
   sessionLost,
+  shouldProbeOrigin,
   type DesktopStatus,
   type HostView,
 } from '@/lib/host'
@@ -108,6 +109,9 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
 
   const release = useCallback(() => {
     setState((current) => ({ status: 'setup', file: current.file, connection: null }))
+    const cleared = idleHost()
+    hostRef.current = cleared
+    setHost(cleared)
     void queryClient.removeQueries()
   }, [queryClient])
 
@@ -180,11 +184,16 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
     const refresh = async () => {
       const snap = await loadHostSnapshot()
       const current = stateRef.current
-      const origin = current.connection?.origin ?? activeConnection(current.file)?.origin ?? null
+      // Disconnected sessions only refresh whether this window still owns a
+      // process. Probe the saved origin after Connect, not a leftover address.
       let probe: HostView['probe'] = { kind: 'idle' }
-      if (origin) {
-        if (favaClient.origin() !== origin) favaClient.useOrigin(origin)
-        probe = await favaClient.probe().catch(() => ({ kind: 'closed' as const }))
+      let origin: string | null = null
+      if (shouldProbeOrigin(current.status)) {
+        origin = current.connection?.origin ?? activeConnection(current.file)?.origin ?? null
+        if (origin) {
+          if (favaClient.origin() !== origin) favaClient.useOrigin(origin)
+          probe = await favaClient.probe().catch(() => ({ kind: 'closed' as const }))
+        }
       }
       if (cancelled) return
       const next = hostFromSnapshot(snap, probe, origin, Date.now())

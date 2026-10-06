@@ -256,6 +256,18 @@ describe('readConnectionFile', () => {
     })
     expect(engine.remote).toEqual({ origin: 'https://books.example' })
 
+    const enginePort = fileForLinkMode(
+      'engine',
+      '/tmp/ledger',
+      'make run',
+      'http://127.0.0.1:5001',
+      'https://books.example',
+      engine,
+    )
+    expect(enginePort.local?.launch).toBe('engine')
+    expect(enginePort.local?.origin).toBe('http://127.0.0.1:5001')
+    expect(enginePort.local?.command).toBe('make run')
+
     const direct = fileForLinkMode(
       'direct',
       '/tmp/ledger',

@@ -61,7 +61,9 @@ export const zhCN = {
   },
 
   brand: {
-    short: 'BeanDesk',
+    short: '经营账本',
+    window: '经营账本',
+    tagline: '一人公司对公财税与合规工作台',
   },
 
   boot: {
@@ -252,6 +254,12 @@ export const zhCN = {
     tabGeneral: '常规设置',
     tabSimple: '账本连接',
     tabBackup: '数据备份',
+    tabAbout: '关于',
+    aboutBlurb: '直连本地 Fava 服务，数据完全保留在本地，无需注册云端账号。',
+    aboutAuthor: '关于作者',
+    aboutAuthorBlog: '个人博客',
+    aboutLicense: '许可证',
+    aboutLicenseName: 'GNU AGPLv3',
     calendarNoticeTitle: '即将到期',
     calendarNoticeBody: '{summary} · {date}',
     backupCurrentLedger: '当前账本',
@@ -261,7 +269,7 @@ export const zhCN = {
     backupDebounce: '防抖延迟（秒）',
     backupNow: '立即备份',
     backupOpen: '打开目录',
-    backupNeedFolder: '请先在账本连接中选择工作目录。',
+    backupNeedFolder: '请先在账本连接里选择账本目录。',
     backupGitOk: '本地快照已生成（提交：{hash}）',
     backupEncrypt: '加密备份',
     backupArchiveAuto: '自动备份',
@@ -376,8 +384,11 @@ export const zhCN = {
     hostSessionReady: '已连接',
     hostPleaseConnect: '未连接账本服务',
     hostPortOccupied: '目标端口已被占用，且非有效 Fava 服务',
+    hostProbeFava: '检测到 Fava 服务正常响应',
+    hostProbeOccupied: '目标端口已被其他进程占用',
+    hostProbeClosed: '服务未启动或地址无响应',
     airplayPort:
-      '当前端口已被 macOS 隔空播放（AirPlay）占用。请在系统设置的“通用 → 隔空播放与接力”中关闭“隔空播放接收器”，或将服务地址与启动命令更换为其他端口。',
+      '当前端口已被 macOS 隔空播放（AirPlay）占用。请在系统设置的“通用 → 隔空播放与接力”中关闭“隔空播放接收器”，或将本机地址更换为其他端口。',
     hostOwned: '当前窗口托管运行',
     hostAttached: '已接入外部服务',
     hostDown: '账本服务已停止响应',

@@ -4,9 +4,11 @@ import {
   connectionAction,
   finishBoot,
   hostFromSnapshot,
+  hostProbeCopyKey,
   hostUptime,
   idleHost,
   sessionLost,
+  shouldProbeOrigin,
   switchNeedsConfirm,
   switchWarning,
   type DesktopStatus,
@@ -50,6 +52,25 @@ describe('sessionLost', () => {
     expect(sessionLost(idleHost(), attached, 'ready')).toBe(false)
     expect(sessionLost(attached, down, 'setup')).toBe(false)
     expect(sessionLost(idleHost(), down, 'ready')).toBe(false)
+  })
+})
+
+describe('shouldProbeOrigin', () => {
+  test('does not probe a saved origin after disconnect', () => {
+    expect(shouldProbeOrigin('ready')).toBe(true)
+    expect(shouldProbeOrigin('boot')).toBe(true)
+    expect(shouldProbeOrigin('setup')).toBe(false)
+  })
+})
+
+describe('hostProbeCopyKey', () => {
+  test('names a live probe and stays silent when idle', () => {
+    expect(hostProbeCopyKey({ kind: 'fava' })).toBe('settings.hostProbeFava')
+    expect(hostProbeCopyKey({ kind: 'occupied', server: 'nginx' })).toBe(
+      'settings.hostProbeOccupied',
+    )
+    expect(hostProbeCopyKey({ kind: 'closed' })).toBe('settings.hostProbeClosed')
+    expect(hostProbeCopyKey({ kind: 'idle' })).toBeNull()
   })
 })
 

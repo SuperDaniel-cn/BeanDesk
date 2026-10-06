@@ -67,9 +67,28 @@ export function sessionLost(
 
 export type SwitchWarning = 'stop' | 'detach' | 'interrupt'
 
+function liveSession(status: DesktopStatus): boolean {
+  return status === 'ready' || status === 'boot'
+}
+
+/** Probe the saved origin only while connected or still starting. */
+export function shouldProbeOrigin(status: DesktopStatus): boolean {
+  return liveSession(status)
+}
+
+/** Copy key for a live probe. Idle (including disconnected) stays silent. */
+export function hostProbeCopyKey(
+  probe: HostProbe,
+): 'settings.hostProbeFava' | 'settings.hostProbeOccupied' | 'settings.hostProbeClosed' | null {
+  if (probe.kind === 'fava') return 'settings.hostProbeFava'
+  if (probe.kind === 'occupied') return 'settings.hostProbeOccupied'
+  if (probe.kind === 'closed') return 'settings.hostProbeClosed'
+  return null
+}
+
 /** A live or starting session has to be confirmed before the link mode changes. */
 export function switchNeedsConfirm(status: DesktopStatus): boolean {
-  return status === 'ready' || status === 'boot'
+  return liveSession(status)
 }
 
 /** Owned processes stop. A start still in flight is interrupted. An attached service only detaches. */

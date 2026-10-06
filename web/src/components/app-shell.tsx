@@ -24,6 +24,10 @@ import { cn } from '@/lib/utils'
 function useDocumentTitle(title: string) {
   useEffect(() => {
     document.title = title
+    if (!isTauri()) return
+    void import('@tauri-apps/api/window')
+      .then(({ getCurrentWindow }) => getCurrentWindow().setTitle(title))
+      .catch(() => undefined)
   }, [title])
 }
 
@@ -38,7 +42,7 @@ function HandbookControl({
   const { isDark } = useTheme()
   const label = t('handbook.title')
   if (!isTauri()) return null
-  const windowTitle = `${label} - ${t('brand.short')}`
+  const windowTitle = t('brand.window')
 
   const open = () => {
     onOpened?.()
@@ -71,18 +75,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
   const starting = useStartupScreen()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const pageKey =
-    REPORT_PAGES.find((page) => page.path === pathname)?.key
-    ?? (pathname === '/calendar'
-      ? 'calendar.title'
-      : pathname === '/settings'
-        ? 'settings.title'
-        : REPORT_PAGES[0].key)
   const brand = t('brand.short')
   const settingsDesktop = pathname === '/settings' && isTauri()
   const calendarPage = pathname === '/calendar'
   const hideLedgerErrors = settingsDesktop || calendarPage
-  useDocumentTitle(`${t(pageKey)} - ${brand}`)
+  useDocumentTitle(t('brand.window'))
   useLayoutEffect(() => {
     window.scrollTo(0, 0)
   }, [pathname])

@@ -1,5 +1,7 @@
 # BeanDesk
 
+> Local-first double-entry workbench for one-person companies and private management accounting.
+
 A modern financial workbench for Beancount and Fava, built with React 19, TypeScript, Tailwind CSS, shadcn/ui, and Tauri 2. Operates both as a web application and a cross-platform desktop client.
 
 The architecture is analogous to MetaCubeXD for Clash or AriaNg for Aria2: Fava serves as the underlying accounting engine, while BeanDesk acts as an independent presentation and workbench layer communicating directly with a local, private, or remote Fava instance without custom backend services or databases.

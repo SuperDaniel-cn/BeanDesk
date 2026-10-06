@@ -2,22 +2,15 @@ import { isTauri } from '@tauri-apps/api/core'
 
 import {
   ensureHandbookWindow,
+  firstSettled,
+  HANDBOOK_WARM_MS,
   waitHandbookPageReady,
   type HandbookTheme,
 } from '@/lib/handbook-window'
 
-export const HANDBOOK_WARM_MS = 1500
+export { firstSettled, HANDBOOK_WARM_MS }
 
 let warming: Promise<void> | null = null
-
-export function firstSettled(done: Promise<void>, ms: number): Promise<void> {
-  return Promise.race([
-    done,
-    new Promise<void>((resolve) => {
-      setTimeout(resolve, ms)
-    }),
-  ])
-}
 
 /** Preload the handbook, then show main. Never waits for Fava. */
 export async function warmAndRevealMainWindow(

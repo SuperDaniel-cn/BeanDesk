@@ -4,7 +4,9 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 
 import {
+  firstSettled,
   HANDBOOK_READY_EVENT,
+  HANDBOOK_WARM_MS,
   HANDBOOK_WINDOW,
   HANDBOOK_WINDOW_SIZE,
   handbookChrome,
@@ -37,6 +39,22 @@ describe('handbook window', () => {
       backgroundColor: '#ffffff',
     })
   })
+
+  test('shows after the handbook ready signal or the warm budget', async () => {
+    expect(HANDBOOK_WARM_MS).toBe(1500)
+    const started = Date.now()
+    await firstSettled(new Promise<void>(() => undefined), 20)
+    expect(Date.now() - started).toBeLessThan(200)
+    let released = false
+    await firstSettled(
+      new Promise<void>((resolve) => {
+        released = true
+        resolve()
+      }),
+      500,
+    )
+    expect(released).toBe(true)
+  })
 })
 
 describe('handbook window capability', () => {
@@ -58,6 +76,7 @@ describe('main window handbook chrome', () => {
   test('can show a window that was created hidden', () => {
     const names = capability.permissions.filter((item): item is string => typeof item === 'string')
     expect(names).toContain('core:window:allow-show')
+    expect(names).toContain('core:window:allow-set-title')
     expect(names).not.toContain('core:window:allow-hide')
   })
 })

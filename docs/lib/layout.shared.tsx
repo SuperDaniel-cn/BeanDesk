@@ -4,7 +4,7 @@ import { handbookPageUrl } from '@/lib/handbook-url';
 export function baseOptions(locale: string): BaseLayoutProps {
   return {
     nav: {
-      title: 'BeanDesk',
+      title: locale === 'zh-CN' ? '经营账本' : 'BeanDesk',
       url: handbookPageUrl([], locale),
     },
   };

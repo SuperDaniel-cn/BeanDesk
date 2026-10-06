@@ -9,6 +9,7 @@
     "core:window:allow-unminimize",
     "core:window:allow-set-focus",
     "core:window:allow-show",
+    "core:window:allow-set-title",
     "dialog:default",
     "store:default",
     "log:default",
@@ -32,6 +33,7 @@
     "allow-backup-snapshots",
     "allow-backup-test-s3",
     "allow-backup-open-workdir",
+    "allow-open-url",
     {
       "identifier": "http:default",
       "allow": [

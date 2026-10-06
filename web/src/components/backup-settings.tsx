@@ -712,6 +712,11 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
           <Spinner />
         </DialogContent>
       </Dialog>
+      {!workDirectory ? (
+        <Alert>
+          <AlertDescription>{t('settings.backupNeedFolder')}</AlertDescription>
+        </Alert>
+      ) : null}
       {waitingInit ? (
         <Alert>
           <AlertDescription>{t('settings.backupNeedsInit')}</AlertDescription>

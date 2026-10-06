@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     default: 'BeanDesk handbook',
     template: '%s — BeanDesk',
   },
-  description: 'A first book, or a Beancount folder you already have.',
+  description: 'Local-first double-entry workbench for one-person companies and private management accounting.',
 };
 
 export default function Layout({ children }: { children: ReactNode }) {

@@ -104,7 +104,8 @@ pub fn run() {
             backup::backup_restore,
             backup::backup_snapshots,
             backup::backup_test_s3,
-            backup::backup_open_workdir
+            backup::backup_open_workdir,
+            open_url
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -286,9 +287,45 @@ fn system_locales() -> Vec<String> {
         .collect()
 }
 
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    open_external_url(&url)
+}
+
+fn open_external_url(url: &str) -> Result<(), String> {
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("invalid protocol".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(url)
+            .status()
+            .map_err(|error| error.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "", url])
+            .status()
+            .map_err(|error| error.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(url)
+            .status()
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{bundled_launch, directory_from_connection, local_project, read_user_text_file_at};
+    use super::{
+        bundled_launch, directory_from_connection, local_project, open_external_url,
+        read_user_text_file_at,
+    };
 
     #[test]
     fn reads_the_active_local_project() {
@@ -408,6 +445,18 @@ mod tests {
                 .err()
                 .as_deref(),
             Some("path")
+        );
+    }
+
+    #[test]
+    fn open_external_url_rejects_unsafe_protocols() {
+        assert_eq!(
+            open_external_url("file:///etc/passwd").err().as_deref(),
+            Some("invalid protocol")
+        );
+        assert_eq!(
+            open_external_url("javascript:alert(1)").err().as_deref(),
+            Some("invalid protocol")
         );
     }
 }

@@ -50,7 +50,9 @@
     ],
     "resources": {
       "binaries/engine/": "engine/",
-      "binaries/restic/": "restic/"
+      "binaries/restic/": "restic/",
+      "infoplist/zh-Hans.lproj/": "zh-Hans.lproj/",
+      "infoplist/zh_CN.lproj/": "zh_CN.lproj/"
     }
   },
   "plugins": {
