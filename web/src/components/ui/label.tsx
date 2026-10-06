@@ -18,4 +18,7 @@ function Label({
   )
 }
 
+/** Field title at the same size as the default sm control. */
+export const formTitleClass = 'text-[0.8rem] font-medium leading-none'
+
 export { Label }

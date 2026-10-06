@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { invoke } from '@tauri-apps/api/core'
-import { FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Cloud, FolderOpen, HardDrive, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
@@ -22,24 +23,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from '@/components/ui/empty'
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSeparator,
-  FieldSet,
-} from '@/components/ui/field'
+import { Field, FieldContent, FieldDescription, FieldLabel } from '@/components/ui/field'
+import { formTitleClass } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
 import {
   Select,
   SelectContent,
@@ -89,6 +76,9 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
   const [status, setStatus] = useState(emptyBackupStatus)
   const [statusLoaded, setStatusLoaded] = useState(false)
   const [passphrase, setPassphrase] = useState('')
+  const [keyDialog, setKeyDialog] = useState(false)
+  const [keyRepeat, setKeyRepeat] = useState('')
+  const [keyAck, setKeyAck] = useState(false)
   const [work, setWork] = useState<
     'backup' | 'restore' | 'list' | 'pick' | 'key' | 's3' | 'add' | 'edit' | 'remove' | null
   >(null)
@@ -232,12 +222,32 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
     }
   }
 
+  function openKeyDialog() {
+    if (!passphrase || locked) return
+    setKeyRepeat('')
+    setKeyAck(false)
+    setKeyDialog(true)
+  }
+
+  function clearKeyDialog() {
+    setKeyDialog(false)
+    setKeyRepeat('')
+    setKeyAck(false)
+  }
+
+  function closeKeyDialog() {
+    if (work === 'key') return
+    clearKeyDialog()
+  }
+
   async function saveKey() {
+    if (!keyAck || keyRepeat !== passphrase) return
     setWork('key')
     try {
       const next = await invoke<BackupStatus>('backup_set_key', { password: passphrase })
       setStatus(next)
       setPassphrase('')
+      clearKeyDialog()
     } catch (caught) {
       fail(caught)
     } finally {
@@ -379,25 +389,6 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
     }
   }
 
-  function debounceField(id: string) {
-    return (
-      <Field data-disabled={locked || undefined}>
-        <FieldLabel htmlFor={id}>{t('settings.backupDebounce')}</FieldLabel>
-        <Input
-          id={id}
-          type="number"
-          min={1}
-          value={settings.debounceSecs}
-          disabled={locked}
-          onChange={(event) =>
-            patchString('debounceSecs', Math.max(1, Number(event.target.value) || 1))
-          }
-          onBlur={persistCurrent}
-        />
-      </Field>
-    )
-  }
-
   async function testDraftS3() {
     if (draft.endpoint.trim() && !validateS3Endpoint(draft.endpoint)) {
       toast.error(t('settings.backupErrorS3Endpoint'))
@@ -425,20 +416,18 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
     }
   }
 
+  const keyMismatch = keyRepeat !== '' && keyRepeat !== passphrase
+
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault()
-      }}
-    >
+    <section className="flex flex-col gap-4">
       <Dialog open={repos !== null} onOpenChange={(open) => !open && setRepos(null)}>
         <DialogContent className="min-w-0 overflow-hidden sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{t('settings.backupRestorePick')}</DialogTitle>
             <DialogDescription>{t('settings.backupKeepHint')}</DialogDescription>
           </DialogHeader>
-          <Field className="min-w-0">
-            <FieldLabel>{t('settings.backupRestoreRepo')}</FieldLabel>
+          <div className="flex min-w-0 flex-col items-start gap-1.5">
+            <span className={formTitleClass}>{t('settings.backupRestoreRepo')}</span>
             <Select value={restoreRepo} onValueChange={chooseRestoreRepo}>
               <SelectTrigger className="min-w-0 w-full overflow-hidden **:data-[slot=select-value]:block **:data-[slot=select-value]:truncate">
                 <SelectValue />
@@ -453,9 +442,9 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                 </SelectGroup>
               </SelectContent>
             </Select>
-          </Field>
-          <Field className="min-w-0">
-            <FieldLabel>{t('settings.backupRestoreSnapshot')}</FieldLabel>
+          </div>
+          <div className="flex min-w-0 flex-col items-start gap-1.5">
+            <span className={formTitleClass}>{t('settings.backupRestoreSnapshot')}</span>
             <Select value={restoreSnapshot} onValueChange={setRestoreSnapshot}>
               <SelectTrigger className="min-w-0 w-full overflow-hidden **:data-[slot=select-value]:block **:data-[slot=select-value]:truncate">
                 <SelectValue />
@@ -474,7 +463,7 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                 </SelectGroup>
               </SelectContent>
             </Select>
-          </Field>
+          </div>
           <DialogFooter>
             <Button
               type="button"
@@ -495,9 +484,9 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
             </DialogTitle>
             <DialogDescription>{t('settings.backupAddDestHint')}</DialogDescription>
           </DialogHeader>
-          <FieldGroup className="min-h-0 flex-1 overflow-y-auto pr-1">
-            <Field>
-              <FieldLabel>{t('settings.backupDestKind')}</FieldLabel>
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
+            <div className="flex flex-col items-start gap-1.5">
+              <span className={formTitleClass}>{t('settings.backupDestKind')}</span>
               <ToggleGroup
                 type="single"
                 variant="outline"
@@ -517,10 +506,10 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                   {t('settings.backupArchiveCloud')}
                 </ToggleGroupItem>
               </ToggleGroup>
-            </Field>
+            </div>
             {draft.kind === 'local' ? (
-              <Field data-invalid={draftNested || undefined}>
-                <FieldLabel htmlFor="backup-add-dir">{t('settings.backupArchiveDirectory')}</FieldLabel>
+              <label className="flex w-full flex-col items-start gap-1.5">
+                <span className={formTitleClass}>{t('settings.backupArchiveDirectory')}</span>
                 <div className="flex w-full gap-2">
                   <Input
                     id="backup-add-dir"
@@ -542,14 +531,14 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                   </Button>
                 </div>
                 {draftNested ? (
-                  <FieldError>{t('settings.backupErrorArchiveNested')}</FieldError>
+                  <p className="text-xs text-destructive">{t('settings.backupErrorArchiveNested')}</p>
                 ) : null}
-              </Field>
+              </label>
             ) : (
               <>
-                <FieldDescription>{t('settings.backupS3Hint')}</FieldDescription>
-                <Field data-invalid={draftEndpointInvalid || undefined}>
-                  <FieldLabel htmlFor="backup-add-endpoint">{t('settings.backupS3Endpoint')}</FieldLabel>
+                <p className="text-xs text-muted-foreground">{t('settings.backupS3Hint')}</p>
+                <label className="flex w-full flex-col items-start gap-1.5">
+                  <span className={formTitleClass}>{t('settings.backupS3Endpoint')}</span>
                   <Input
                     id="backup-add-endpoint"
                     value={draft.endpoint}
@@ -560,9 +549,9 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                     }
                   />
                   {draftEndpointInvalid ? (
-                    <FieldError>{t('settings.backupErrorS3Endpoint')}</FieldError>
+                    <p className="text-xs text-destructive">{t('settings.backupErrorS3Endpoint')}</p>
                   ) : null}
-                </Field>
+                </label>
                 <DraftField
                   id="backup-add-bucket"
                   label={t('settings.backupS3Bucket')}
@@ -581,8 +570,8 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                   value={draft.accessKeyId}
                   onChange={(accessKeyId) => setDraft((current) => ({ ...current, accessKeyId }))}
                 />
-                <Field>
-                  <FieldLabel htmlFor="backup-add-secret">{t('settings.backupS3Secret')}</FieldLabel>
+                <label className="flex w-full flex-col items-start gap-1.5">
+                  <span className={formTitleClass}>{t('settings.backupS3Secret')}</span>
                   <Input
                     id="backup-add-secret"
                     type="password"
@@ -591,9 +580,9 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                       setDraft((current) => ({ ...current, secretAccessKey: event.target.value }))
                     }
                   />
-                </Field>
-                <Field orientation="horizontal">
-                  <FieldLabel htmlFor="backup-add-path">{t('settings.backupS3PathStyle')}</FieldLabel>
+                </label>
+                <div className="flex flex-col items-start gap-1.5">
+                  <span className={formTitleClass}>{t('settings.backupS3PathStyle')}</span>
                   <Switch
                     id="backup-add-path"
                     checked={draft.pathStyleAccess}
@@ -601,27 +590,25 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
                       setDraft((current) => ({ ...current, pathStyleAccess }))
                     }
                   />
-                </Field>
+                </div>
                 <DraftField
                   id="backup-add-prefix"
                   label={t('settings.backupS3Prefix')}
                   value={draft.prefix}
                   onChange={(prefix) => setDraft((current) => ({ ...current, prefix }))}
                 />
-                <Field>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={locked || !canConfirmDraft}
-                    onClick={() => void testDraftS3()}
-                  >
-                    {work === 's3' ? <Spinner data-icon="inline-start" /> : null}
-                    {t('settings.backupS3Test')}
-                  </Button>
-                </Field>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={locked || !canConfirmDraft}
+                  onClick={() => void testDraftS3()}
+                >
+                  {work === 's3' ? <Spinner data-icon="inline-start" /> : null}
+                  {t('settings.backupS3Test')}
+                </Button>
               </>
             )}
-          </FieldGroup>
+          </div>
           <DialogFooter className="shrink-0">
             <Button type="button" variant="outline" disabled={busy} onClick={closeEditor}>
               {t('common.cancel')}
@@ -644,9 +631,9 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
             <DialogDescription>{t('settings.backupDestRemoveBody')}</DialogDescription>
           </DialogHeader>
           {removing ? (
-            <FieldDescription className="font-mono break-all">
+            <p className="font-mono text-xs break-all text-muted-foreground">
               {presentBackupRepo(removing.location, t)}
-            </FieldDescription>
+            </p>
           ) : null}
           <DialogFooter>
             <Button type="button" variant="outline" disabled={busy} onClick={() => setRemoveId(null)}>
@@ -655,6 +642,50 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
             <Button type="button" disabled={locked} onClick={() => void confirmRemove()}>
               {work === 'remove' ? <Spinner data-icon="inline-start" /> : null}
               {t('settings.backupDestRemove')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={keyDialog} onOpenChange={(open) => !open && closeKeyDialog()}>
+        <DialogContent className="min-w-0 overflow-hidden sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('settings.backupKeyConfirmTitle')}</DialogTitle>
+          </DialogHeader>
+          <label className="flex w-full flex-col items-start gap-1.5">
+            <span className={formTitleClass}>{t('settings.backupKeyRepeat')}</span>
+            <Input
+              type="password"
+              value={keyRepeat}
+              autoComplete="new-password"
+              spellCheck={false}
+              aria-invalid={keyMismatch}
+              onChange={(event) => setKeyRepeat(event.target.value)}
+            />
+            {keyMismatch ? (
+              <p className="text-xs text-destructive">{t('settings.backupKeyMismatch')}</p>
+            ) : null}
+          </label>
+          <Field orientation="horizontal" className="items-start">
+            <Checkbox
+              id="backup-key-ack"
+              checked={keyAck}
+              onCheckedChange={(value) => setKeyAck(value === true)}
+            />
+            <FieldLabel htmlFor="backup-key-ack" className={formTitleClass}>
+              {t('settings.backupKeyAck')}
+            </FieldLabel>
+          </Field>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={work === 'key'} onClick={closeKeyDialog}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={work === 'key' || !keyAck || keyRepeat !== passphrase}
+              onClick={() => void saveKey()}
+            >
+              {work === 'key' ? <Spinner data-icon="inline-start" /> : null}
+              {t('settings.backupKeySave')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -691,181 +722,186 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
           <AlertDescription>{t('settings.backupForeign')}</AlertDescription>
         </Alert>
       ) : null}
-      <FieldGroup>
-        <Field>
-          <FieldLabel htmlFor="backup-workdir">{t('settings.directory')}</FieldLabel>
-          <div className="flex w-full gap-2">
+      <label className="flex w-full flex-col items-start gap-1.5">
+        <span className={formTitleClass}>{t('settings.backupCurrentLedger')}</span>
+        <span className="flex w-full gap-2">
+          <Input
+            id="backup-workdir"
+            value={workDirectory}
+            disabled
+            className="min-w-0 flex-1 font-mono"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={locked}
+            className="shrink-0"
+            onClick={() => void invoke('backup_open_workdir')}
+          >
+            <FolderOpen data-icon="inline-start" />
+            {t('settings.backupOpen')}
+          </Button>
+        </span>
+      </label>
+
+      <Separator />
+
+      <div className="flex w-full flex-col gap-4">
+        <Field orientation="horizontal" data-disabled={locked || undefined}>
+          <FieldContent>
+            <FieldLabel htmlFor="backup-watch" className={formTitleClass}>
+              {t('settings.backupWatch')}
+            </FieldLabel>
+            <FieldDescription>{t('settings.backupWatchHint')}</FieldDescription>
+          </FieldContent>
+          <Switch
+            id="backup-watch"
+            className="self-center"
+            checked={settings.watch}
+            disabled={locked}
+            onCheckedChange={(watch) => update({ watch })}
+          />
+        </Field>
+        <label className="flex w-full flex-col items-start gap-1.5">
+          <span className={formTitleClass}>{t('settings.backupDebounce')}</span>
+          <Input
+            id="backup-debounce"
+            type="number"
+            min={1}
+            value={settings.debounceSecs}
+            disabled={locked || !settings.watch}
+            onChange={(event) =>
+              patchString('debounceSecs', Math.max(1, Number(event.target.value) || 1))
+            }
+            onBlur={persistCurrent}
+          />
+        </label>
+        {status.lastGitHash ? (
+          <p className="text-xs text-muted-foreground">
+            {t('settings.backupGitOk', { hash: status.lastGitHash })}
+          </p>
+        ) : null}
+      </div>
+
+      <Separator />
+
+      <div className="flex w-full flex-col gap-4">
+        <div className="flex flex-col items-start gap-1.5">
+          <span className={formTitleClass}>{t('settings.backupEncrypt')}</span>
+          <p className="text-xs text-muted-foreground">{t('settings.backupSectionEncrypt')}</p>
+          <p className="text-xs text-muted-foreground">{t('settings.backupKeepHint')}</p>
+        </div>
+        {status.hasKey ? (
+          <Alert>
+            <AlertDescription>{t('settings.backupKeySet')}</AlertDescription>
+          </Alert>
+        ) : null}
+        {ready && !status.resticReady ? (
+          <Alert>
+            <AlertDescription>{t('settings.backupErrorRestic')}</AlertDescription>
+          </Alert>
+        ) : null}
+        {folderError ? (
+          <Alert>
+            <AlertDescription>{explainBackupError(folderError, t)}</AlertDescription>
+          </Alert>
+        ) : null}
+        <label className="flex w-full flex-col items-start gap-1.5">
+          <span className={formTitleClass}>{t('settings.backupKey')}</span>
+          <span className="flex w-full flex-wrap gap-2">
             <Input
-              id="backup-workdir"
-              value={workDirectory}
-              readOnly
-              className="min-w-0 flex-1 font-mono"
+              id="backup-key"
+              type="password"
+              value={passphrase}
+              disabled={locked}
+              className="min-w-0 flex-1"
+              onChange={(event) => setPassphrase(event.target.value)}
             />
             <Button
               type="button"
               variant="outline"
-              disabled={locked}
+              disabled={locked || !passphrase}
               className="shrink-0"
-              onClick={() => void invoke('backup_open_workdir')}
+              onClick={openKeyDialog}
             >
-              <FolderOpen data-icon="inline-start" />
-              {t('settings.backupOpen')}
+              {work === 'key' ? <Spinner data-icon="inline-start" /> : null}
+              {t('settings.backupKeySave')}
             </Button>
+            <Button
+              type="button"
+              disabled={!canArchive}
+              className="shrink-0"
+              onClick={() => void runBackup()}
+            >
+              {work === 'backup' ? <Spinner data-icon="inline-start" /> : null}
+              {t('settings.backupNow')}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!hasKey || locked}
+              className="shrink-0"
+              onClick={() => void restore()}
+            >
+              {work === 'list' || work === 'restore' ? <Spinner data-icon="inline-start" /> : null}
+              {t('settings.backupRestore')}
+            </Button>
+          </span>
+          {status.lastSnapshot ? (
+            <p className="text-xs text-muted-foreground">
+              {t('settings.backupLastSnapshot')}:{' '}
+              {presentBackupSnapshot(status.lastSnapshot, status.lastSnapshotAt ?? '')}
+            </p>
+          ) : null}
+        </label>
+      </div>
+
+      <Separator />
+
+      <Field orientation="horizontal" data-disabled={!hasKey || locked || undefined}>
+        <FieldContent>
+          <FieldLabel htmlFor="backup-auto" className={formTitleClass}>
+            {t('settings.backupArchiveAuto')}
+          </FieldLabel>
+          <FieldDescription>{t('settings.backupArchiveAutoHint')}</FieldDescription>
+        </FieldContent>
+        <Switch
+          id="backup-auto"
+          className="self-center"
+          checked={settings.archiveAuto && status.hasKey}
+          disabled={!hasKey || locked}
+          onCheckedChange={(archiveAuto) => update({ archiveAuto })}
+        />
+      </Field>
+
+      <Separator />
+
+      <div className="flex w-full flex-col gap-4">
+        <span className="flex w-full items-center justify-between gap-4">
+          <span className={formTitleClass}>{t('settings.backupDests')}</span>
+          <Button type="button" variant="outline" disabled={locked} onClick={openAdd}>
+            <Plus data-icon="inline-start" />
+            {t('settings.backupAddDest')}
+          </Button>
+        </span>
+        {settings.dests.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{t('settings.backupDestsEmpty')}</p>
+        ) : (
+          <div className="flex w-full flex-col gap-4">
+            {settings.dests.map((dest) => (
+              <DestCard
+                key={dest.id}
+                dest={dest}
+                pulse={destPulseOf(status, dest.id)}
+                locked={locked}
+                onEdit={() => openEdit(dest)}
+                onRemove={() => setRemoveId(dest.id)}
+              />
+            ))}
           </div>
-        </Field>
-
-        <FieldSeparator />
-
-        <FieldSet>
-          <FieldLegend>{t('settings.backupSectionLocal')}</FieldLegend>
-          <FieldGroup>
-            <Field orientation="horizontal" data-disabled={locked || undefined}>
-              <FieldContent>
-                <FieldLabel htmlFor="backup-watch">{t('settings.backupWatch')}</FieldLabel>
-                <FieldDescription>{t('settings.backupWatchHint')}</FieldDescription>
-                {status.lastGitHash ? (
-                  <FieldDescription>
-                    {t('settings.backupGitOk', { hash: status.lastGitHash })}
-                  </FieldDescription>
-                ) : null}
-              </FieldContent>
-              <Switch
-                id="backup-watch"
-                checked={settings.watch}
-                disabled={locked}
-                onCheckedChange={(watch) => update({ watch })}
-              />
-            </Field>
-            {debounceField('backup-debounce')}
-          </FieldGroup>
-        </FieldSet>
-
-        <FieldSeparator />
-
-        <FieldSet>
-          <FieldLegend>{t('settings.backupEncrypt')}</FieldLegend>
-          <FieldDescription>{t('settings.backupSectionEncrypt')}</FieldDescription>
-          <FieldGroup>
-            {status.hasKey ? (
-              <Alert>
-                <AlertDescription>{t('settings.backupKeySet')}</AlertDescription>
-              </Alert>
-            ) : null}
-            {ready && !status.resticReady ? (
-              <Alert>
-                <AlertDescription>{t('settings.backupErrorRestic')}</AlertDescription>
-              </Alert>
-            ) : null}
-            {folderError ? (
-              <Alert>
-                <AlertDescription>{explainBackupError(folderError, t)}</AlertDescription>
-              </Alert>
-            ) : null}
-            <Field data-disabled={locked || undefined}>
-              <FieldLabel htmlFor="backup-key">{t('settings.backupKey')}</FieldLabel>
-              <div className="flex w-full flex-wrap gap-2">
-                <Input
-                  id="backup-key"
-                  type="password"
-                  value={passphrase}
-                  disabled={locked}
-                  className="min-w-0 flex-1"
-                  onChange={(event) => setPassphrase(event.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={locked || !passphrase}
-                  className="shrink-0"
-                  onClick={() => void saveKey()}
-                >
-                  {work === 'key' ? <Spinner data-icon="inline-start" /> : null}
-                  {t('settings.backupKeySave')}
-                </Button>
-                <Button
-                  type="button"
-                  disabled={!canArchive}
-                  className="shrink-0"
-                  onClick={() => void runBackup()}
-                >
-                  {work === 'backup' ? <Spinner data-icon="inline-start" /> : null}
-                  {t('settings.backupNow')}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={!hasKey || locked}
-                  className="shrink-0"
-                  onClick={() => void restore()}
-                >
-                  {work === 'list' || work === 'restore' ? <Spinner data-icon="inline-start" /> : null}
-                  {t('settings.backupRestore')}
-                </Button>
-              </div>
-              {status.lastSnapshot ? (
-                <FieldDescription>
-                  {t('settings.backupLastSnapshot')}:{' '}
-                  {presentBackupSnapshot(status.lastSnapshot, status.lastSnapshotAt ?? '')}
-                </FieldDescription>
-              ) : null}
-            </Field>
-            <Field orientation="horizontal" data-disabled={!hasKey || locked || undefined}>
-              <FieldContent>
-                <FieldLabel htmlFor="backup-auto">{t('settings.backupArchiveAuto')}</FieldLabel>
-                <FieldDescription>{t('settings.backupArchiveAutoHint')}</FieldDescription>
-              </FieldContent>
-              <Switch
-                id="backup-auto"
-                checked={settings.archiveAuto && status.hasKey}
-                disabled={!hasKey || locked}
-                onCheckedChange={(archiveAuto) => update({ archiveAuto })}
-              />
-            </Field>
-            <Field>
-              <FieldLabel>{t('settings.backupKeep')}</FieldLabel>
-              <FieldDescription>{t('settings.backupKeepHint')}</FieldDescription>
-            </Field>
-            <Field>
-              <div className="flex items-center justify-between gap-2">
-                <FieldLabel>{t('settings.backupDests')}</FieldLabel>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={locked}
-                  onClick={openAdd}
-                >
-                  <Plus data-icon="inline-start" />
-                  {t('settings.backupAddDest')}
-                </Button>
-              </div>
-              <FieldDescription>{t('settings.backupDestsHint')}</FieldDescription>
-            </Field>
-            {settings.dests.length === 0 ? (
-              <Empty>
-                <EmptyHeader>
-                  <EmptyTitle>{t('settings.backupDestsEmpty')}</EmptyTitle>
-                  <EmptyDescription>{t('settings.backupAddDestHint')}</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : (
-              <FieldGroup>
-                {settings.dests.map((dest) => (
-                  <DestCard
-                    key={dest.id}
-                    dest={dest}
-                    pulse={destPulseOf(status, dest.id)}
-                    locked={locked}
-                    onEdit={() => openEdit(dest)}
-                    onRemove={() => setRemoveId(dest.id)}
-                  />
-                ))}
-              </FieldGroup>
-            )}
-          </FieldGroup>
-        </FieldSet>
-      </FieldGroup>
-    </form>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -894,48 +930,43 @@ function DestCard({
         : state === 'ready'
           ? t('settings.backupDestReady')
           : t('settings.backupDestIncomplete')
+  const stateVariant =
+    state === 'ready' ? 'positive' : state === 'check-pending' ? 'warning' : state === 'missing' ? 'destructive' : 'secondary'
+
   return (
     <Card className="min-w-0" data-invalid={dest.missing || undefined}>
       <CardHeader>
-        <CardTitle className="min-w-0 truncate" title={destTitle(dest)}>
-          {destTitle(dest)}
+        <CardTitle className="flex min-w-0 items-center gap-2 text-[0.8rem]">
+          {dest.kind === 's3' ? (
+            <Cloud className="size-3.5 shrink-0" aria-label={t('settings.backupArchiveCloud')} />
+          ) : (
+            <HardDrive className="size-3.5 shrink-0" aria-label={t('settings.backupArchiveLocal')} />
+          )}
+          <span className="min-w-0 truncate" title={destTitle(dest)}>
+            {destTitle(dest)}
+          </span>
+          <Badge variant={stateVariant}>{stateLabel}</Badge>
         </CardTitle>
-        <CardDescription>
-          {dest.kind === 's3' ? t('settings.backupArchiveCloud') : t('settings.backupArchiveLocal')}
-        </CardDescription>
         <CardAction className="flex gap-1">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={locked}
-            onClick={onEdit}
-          >
+          <Button type="button" variant="ghost" size="xs" disabled={locked} onClick={onEdit}>
             <Pencil data-icon="inline-start" />
             {t('settings.backupDestEdit')}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={locked}
-            onClick={onRemove}
-          >
+          <Button type="button" variant="ghost" size="xs" disabled={locked} onClick={onRemove}>
             <Trash2 data-icon="inline-start" />
             {t('settings.backupDestRemove')}
           </Button>
         </CardAction>
       </CardHeader>
-      <CardContent className="flex min-w-0 flex-col gap-1.5">
-        <p className="min-w-0 truncate font-mono text-muted-foreground" title={path}>
-          {t('settings.backupDestPath')}: {path}
-        </p>
-        <p className={state === 'ready' ? 'text-muted-foreground' : 'text-destructive'}>
-          {t('settings.backupDestStatus')}: {stateLabel}
-        </p>
-        <p className="text-muted-foreground">
-          {t('settings.backupDestLast')}: {when || t('settings.backupDestNever')}
-        </p>
+      <CardContent>
+        <dl className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-4 gap-y-2 text-[0.8rem]">
+          <dt className="text-muted-foreground">{t('settings.backupDestPath')}</dt>
+          <dd className="min-w-0 truncate text-right font-mono" title={path}>
+            {path}
+          </dd>
+          <dt className="text-muted-foreground">{t('settings.backupDestLast')}</dt>
+          <dd className="text-right">{when || t('settings.backupDestNever')}</dd>
+        </dl>
       </CardContent>
     </Card>
   )
@@ -953,14 +984,14 @@ function DraftField({
   onChange: (value: string) => void
 }) {
   return (
-    <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+    <label className="flex w-full flex-col items-start gap-1.5">
+      <span className={formTitleClass}>{label}</span>
       <Input
         id={id}
         value={value}
         spellCheck={false}
         onChange={(event) => onChange(event.target.value)}
       />
-    </Field>
+    </label>
   )
 }

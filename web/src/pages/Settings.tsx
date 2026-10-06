@@ -34,6 +34,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { formTitleClass } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import {
   Sidebar,
@@ -94,12 +95,12 @@ function GeneralSettings({ tauri }: { tauri: boolean }) {
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-col items-start gap-1.5">
-        <span className="text-xs text-muted-foreground">{t('theme.label')}</span>
+        <span className={formTitleClass}>{t('theme.label')}</span>
         <ThemeToggle />
       </div>
       <Separator />
       <div className="flex flex-col items-start gap-1.5">
-        <span className="text-xs text-muted-foreground">{t('locale.switcherLabel')}</span>
+        <span className={formTitleClass}>{t('locale.switcherLabel')}</span>
         <LocaleToggle />
       </div>
       {tauri ? (
@@ -209,7 +210,7 @@ function McpHostSettings() {
 
   return (
     <div className="flex flex-col items-start gap-1.5">
-      <span className="text-xs text-muted-foreground">{t('settings.mcpLabel')}</span>
+      <span className={formTitleClass}>{t('settings.mcpLabel')}</span>
       <p className="text-xs text-muted-foreground">{t('settings.mcpHint')}</p>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" onClick={() => void copy('json')}>
@@ -243,9 +244,9 @@ function UpdateCheck() {
 
   return (
     <div className="flex flex-col items-start gap-1.5">
-      <span className="text-xs text-muted-foreground">{t('update.label')}</span>
+      <span className={formTitleClass}>{t('update.label')}</span>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm">{`v${version}`}</span>
+        <span className="text-[0.8rem]">{`v${version}`}</span>
         <Button variant="outline" disabled={busy} onClick={() => void check(true)}>
           {phase === 'checking' ? t('update.checking') : t('update.check')}
         </Button>
@@ -528,7 +529,7 @@ function ConnectionSettings() {
       <Separator />
 
       <div className="flex flex-col items-start gap-1.5">
-        <span className="text-xs text-muted-foreground">{t('settings.connectionMode')}</span>
+        <span className={formTitleClass}>{t('settings.connectionMode')}</span>
         <ToggleGroup
           type="single"
           variant="outline"
@@ -563,7 +564,7 @@ function ConnectionSettings() {
       ) : (
         <>
           <label className="flex w-full flex-col items-start gap-1.5">
-            <span className="text-xs text-muted-foreground">{t('settings.directory')}</span>
+            <span className={formTitleClass}>{t('settings.directory')}</span>
             <span className="flex w-full flex-wrap gap-2">
               <Input value={directory} readOnly placeholder={t('settings.browse')} className="min-w-0 flex-1 font-mono" />
               <Button type="button" variant="outline" onClick={() => void browse()} disabled={busy} className="shrink-0">
@@ -587,7 +588,7 @@ function ConnectionSettings() {
           {mode === 'shell' ? (
             <>
               <label className="flex w-full flex-col items-start gap-1.5">
-                <span className="text-xs text-muted-foreground">{t('settings.command')}</span>
+                <span className={formTitleClass}>{t('settings.command')}</span>
                 <Textarea
                   value={command}
                   onChange={(event) => setCommand(event.target.value)}
@@ -635,7 +636,7 @@ function ConnectionSettings() {
       <Separator />
 
       <div className="flex w-full flex-col items-start gap-1.5">
-        <span className="text-xs text-muted-foreground">{t('settings.log')}</span>
+        <span className={formTitleClass}>{t('settings.log')}</span>
         <Card className="w-full">
           <CardHeader>
             <CardAction>
@@ -721,7 +722,7 @@ function HostStatus({ action }: { action?: ReactNode }) {
 
   return (
     <div className="flex flex-col items-start gap-1.5">
-      <span className="text-xs text-muted-foreground">{t('settings.hostStatus')}</span>
+      <span className={formTitleClass}>{t('settings.hostStatus')}</span>
       <div className="flex w-full flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={session.variant}>{t(session.key)}</Badge>
@@ -794,7 +795,7 @@ function OriginField({
 }) {
   return (
     <label className="flex w-full flex-col items-start gap-1.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className={formTitleClass}>{label}</span>
       <Input
         value={origin}
         onChange={(event) => setOrigin(event.target.value)}
