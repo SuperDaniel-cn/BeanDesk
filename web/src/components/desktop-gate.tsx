@@ -15,7 +15,14 @@ import {
   type ConnectionFile,
   type LedgerConnection,
 } from '@/lib/connection'
-import { hostFromSnapshot, idleHost, sessionLost, type DesktopStatus, type HostView } from '@/lib/host'
+import {
+  finishBoot,
+  hostFromSnapshot,
+  idleHost,
+  sessionLost,
+  type DesktopStatus,
+  type HostView,
+} from '@/lib/host'
 
 type DesktopState = {
   status: DesktopStatus
@@ -143,11 +150,19 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
             say(tRef.current(connectionStepKey(step)))
           })
           if (cancelled) return
-          if (opened) setState({ status: 'ready', file, connection })
-          else setState({ status: 'setup', file, connection: null })
+          setState((current) =>
+            finishBoot(
+              current,
+              opened
+                ? { status: 'ready', file, connection }
+                : { status: 'setup', file, connection: null },
+            ),
+          )
         } catch (error) {
           say(explainConnectionError(error, tRef.current), 'error')
-          if (!cancelled) setState({ status: 'setup', file, connection })
+          if (!cancelled) {
+            setState((current) => finishBoot(current, { status: 'setup', file, connection }))
+          }
         }
       })
       .catch((error: unknown) => {

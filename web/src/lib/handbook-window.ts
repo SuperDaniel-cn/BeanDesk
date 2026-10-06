@@ -44,8 +44,19 @@ export async function openHandbookWindow(
   if (!isTauri()) return
   if (opening) return opening
   opening = (async () => {
+    const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const existing = await WebviewWindow.getByLabel(HANDBOOK_WINDOW)
+    if (existing) {
+      await revealHandbookWindow(existing)
+      return
+    }
     const win = await ensureHandbookWindow(title, locale, theme)
-    await waitHandbookPageReady()
+    await Promise.race([
+      waitHandbookPageReady(),
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, 1500)
+      }),
+    ])
     if (win) await revealHandbookWindow(win)
   })().finally(() => {
     opening = null

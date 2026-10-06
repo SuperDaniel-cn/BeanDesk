@@ -5,12 +5,17 @@ import type { MessageKey } from '@/i18n/locales/en'
  * A saved Fava source. Local projects stay on a loopback address and can be
  * started from this window. Remote entries are an address only.
  *
- * The file keeps both drafts and one `active` mode. Connecting with one mode
- * leaves the other draft on disk and does not start it.
+ * The file keeps both drafts and one active mode. The three link modes are
+ * mutually exclusive: bundled engine (`local` + `launch: engine`), an external
+ * command (`local` + `launch: shell`), or a direct address (`remote`).
+ * Switching modes keeps the other draft on disk and does not start it.
  */
 
 /** `engine` starts the bundled runtime. `shell` runs `command` as written. */
 export type Launch = 'engine' | 'shell'
+
+/** Bundled engine, external command, or address only. One of these is selected. */
+export type LinkMode = 'engine' | 'shell' | 'direct'
 
 export type LocalDraft = {
   directory: string
@@ -108,8 +113,8 @@ export function isLoopbackOrigin(origin: string): boolean {
 
 /**
  * Work folder plus a loopback origin. An empty command is the bundled engine.
- * A saved shell command stays on the draft when `launch` is `engine`, so the
- * simple page can start the runtime without erasing the advanced command.
+ * A saved shell command stays on the draft when `launch` is `engine`, so
+ * choosing the bundled engine does not erase the external command.
  */
 export function localWorkdir(
   directory: string,
@@ -171,6 +176,34 @@ export function withDrafts(
     local: local ?? previous?.local ?? null,
     remote: remote ?? previous?.remote ?? null,
   }
+}
+
+export function linkModeOf(file: ConnectionFile | null | undefined): LinkMode {
+  if (file?.active === 'remote') return 'direct'
+  if (file?.active === 'local' && file.local?.launch === 'shell') return 'shell'
+  return 'engine'
+}
+
+/**
+ * Save which link mode is selected. Directory, command, and both origins stay.
+ * An incomplete local edit keeps the previous local draft.
+ */
+export function fileForLinkMode(
+  mode: LinkMode,
+  directory: string,
+  command: string,
+  localOrigin: string,
+  remoteOrigin: string,
+  previous: ConnectionFile | null,
+): ConnectionFile {
+  const launch: Launch | undefined =
+    mode === 'shell' ? 'shell' : mode === 'engine' ? 'engine' : previous?.local?.launch
+  return withDrafts(
+    mode === 'direct' ? 'remote' : 'local',
+    localWorkdir(directory, localOrigin, command, launch),
+    remoteDraft(remoteOrigin),
+    previous,
+  )
 }
 
 export function activeConnection(file: ConnectionFile | null | undefined): LedgerConnection | null {

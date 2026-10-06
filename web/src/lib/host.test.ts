@@ -2,10 +2,14 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   connectionAction,
+  finishBoot,
   hostFromSnapshot,
   hostUptime,
   idleHost,
   sessionLost,
+  switchNeedsConfirm,
+  switchWarning,
+  type DesktopStatus,
 } from './host'
 
 const owned = hostFromSnapshot(
@@ -46,6 +50,31 @@ describe('sessionLost', () => {
     expect(sessionLost(idleHost(), attached, 'ready')).toBe(false)
     expect(sessionLost(attached, down, 'setup')).toBe(false)
     expect(sessionLost(idleHost(), down, 'ready')).toBe(false)
+  })
+})
+
+describe('switchNeedsConfirm', () => {
+  test('asks before leaving a live or starting session', () => {
+    expect(switchNeedsConfirm('ready')).toBe(true)
+    expect(switchNeedsConfirm('boot')).toBe(true)
+    expect(switchNeedsConfirm('setup')).toBe(false)
+  })
+
+  test('names what the confirm step will disconnect', () => {
+    expect(switchWarning('ready', true)).toBe('stop')
+    expect(switchWarning('boot', true)).toBe('stop')
+    expect(switchWarning('ready', false)).toBe('detach')
+    expect(switchWarning('boot', false)).toBe('interrupt')
+  })
+
+  test('a finished startup does not replace a session that already left boot', () => {
+    const booting: { status: DesktopStatus; file: string } = { status: 'boot', file: 'old' }
+    const released: { status: DesktopStatus; file: string } = { status: 'setup', file: 'new' }
+    expect(finishBoot(booting, { status: 'ready', file: 'old' })).toEqual({
+      status: 'ready',
+      file: 'old',
+    })
+    expect(finishBoot(released, { status: 'ready', file: 'old' })).toEqual(released)
   })
 })
 

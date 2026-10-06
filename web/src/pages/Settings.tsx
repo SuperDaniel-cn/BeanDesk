@@ -6,8 +6,10 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  Cpu,
   FilePlus2,
   FolderOpen,
+  Link2,
   Plug,
   Settings as SettingsIcon,
   Terminal,
@@ -23,6 +25,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardAction, CardContent, CardHeader } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -36,27 +46,30 @@ import {
   SidebarProvider,
 } from '@/components/ui/sidebar'
 import { Spinner } from '@/components/ui/spinner'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useI18n } from '@/i18n'
 import {
   activeConnection,
   connectionStepKey,
   emptyConnectionForm,
   explainConnectionError,
+  fileForLinkMode,
   formFromConnectionFile,
   isPristineConnectionForm,
-  localDraft,
+  linkModeOf,
   localWorkdir,
   normalizeOrigin,
-  remoteDraft,
-  withDrafts,
   type ConnectionFile,
-  type LedgerConnection,
-  type LocalDraft,
-  type RemoteDraft,
+  type LinkMode,
 } from '@/lib/connection'
-import { connectionAction, hostUptime, type DesktopStatus } from '@/lib/host'
+import {
+  connectionAction,
+  hostUptime,
+  switchNeedsConfirm,
+  switchWarning,
+  type DesktopStatus,
+} from '@/lib/host'
 import {
   disconnectSession,
   favaWasStarted,
@@ -67,9 +80,13 @@ import {
 } from '@/lib/desktop'
 import { loadMcpHostConfig, mcpHostConfigText } from '@/lib/mcp-host'
 
-type Kind = LedgerConnection['kind']
-type SettingsTab = 'general' | 'simple' | 'geek' | 'backup'
-type ConnectionVariant = 'simple' | 'geek'
+type SettingsTab = 'general' | 'simple' | 'backup'
+
+function linkModeMessage(mode: LinkMode) {
+  if (mode === 'shell') return 'settings.modeShell'
+  if (mode === 'direct') return 'settings.modeDirect'
+  return 'settings.modeEngine'
+}
 
 function GeneralSettings({ tauri }: { tauri: boolean }) {
   const { t } = useI18n()
@@ -106,7 +123,6 @@ export function Settings() {
   const items = [
     { value: 'general' as const, icon: SettingsIcon, label: t('settings.tabGeneral') },
     { value: 'simple' as const, icon: Plug, label: t('settings.tabSimple') },
-    { value: 'geek' as const, icon: Terminal, label: t('settings.tabGeek') },
     { value: 'backup' as const, icon: Archive, label: t('settings.tabBackup') },
   ]
 
@@ -152,8 +168,7 @@ export function Settings() {
         <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
           <LedgerErrors />
           {tab === 'general' ? <GeneralSettings tauri /> : null}
-          {tab === 'simple' ? <ConnectionSettings variant="simple" /> : null}
-          {tab === 'geek' ? <ConnectionSettings variant="geek" /> : null}
+          {tab === 'simple' ? <ConnectionSettings /> : null}
           {tab === 'backup' ? (
             <BackupSettingsPanel workDirectory={desktop.file?.local?.directory ?? ''} />
           ) : null}
@@ -243,12 +258,13 @@ function UpdateCheck() {
   )
 }
 
-function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
+function ConnectionSettings() {
   const { t } = useI18n()
   const desktop = useDesktop()
   const saved = desktop.file
   const blank = emptyConnectionForm()
-  const [kind, setKind] = useState<Kind>(saved?.active ?? blank.kind)
+  const [mode, setMode] = useState<LinkMode>(() => linkModeOf(saved))
+  const [pendingMode, setPendingMode] = useState<LinkMode | null>(null)
   const [directory, setDirectory] = useState(saved?.local?.directory ?? blank.directory)
   const [command, setCommand] = useState(saved?.local?.command ?? blank.command)
   const [localOrigin, setLocalOrigin] = useState(saved?.local?.origin ?? blank.localOrigin)
@@ -259,26 +275,27 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
   const logRef = useRef<HTMLDivElement>(null)
   const writeLock = useRef(Promise.resolve())
   const connectInFlight = useRef(false)
-  const fields = useRef({ directory, command, localOrigin, remoteOrigin, saved, kind })
+  const modeTouched = useRef(false)
+  const fields = useRef({ directory, command, localOrigin, remoteOrigin, saved, mode })
   fields.current.directory = directory
   fields.current.command = command
   fields.current.localOrigin = localOrigin
   fields.current.remoteOrigin = remoteOrigin
   fields.current.saved = saved
-  fields.current.kind = kind
+  fields.current.mode = mode
 
   useEffect(() => {
-    if (!saved) return
+    if (!saved || modeTouched.current) return
     const current = {
-      kind: fields.current.kind,
+      kind: fields.current.mode === 'direct' ? 'remote' : 'local',
       directory: fields.current.directory,
       command: fields.current.command,
       localOrigin: fields.current.localOrigin,
       remoteOrigin: fields.current.remoteOrigin,
-    }
+    } as const
     if (!isPristineConnectionForm(current)) return
     const next = formFromConnectionFile(saved)
-    setKind(next.kind)
+    setMode(linkModeOf(saved))
     setDirectory(next.directory)
     setCommand(next.command)
     setLocalOrigin(next.localOrigin)
@@ -305,18 +322,16 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
     return run
   }
 
-  function persistDraft(kindOverride?: Kind, allowEmptyCommand = false) {
+  function persistDraft() {
     return enqueue(async () => {
       if (connectInFlight.current) return
       const current = fields.current
-      const launch = current.saved?.local?.launch
-      const local = allowEmptyCommand
-        ? localWorkdir(current.directory, current.localOrigin, current.command, launch)
-        : localDraft(current.directory, current.command, current.localOrigin, launch)
-      const next = withDrafts(
-        current.saved?.active ?? kindOverride ?? current.kind,
-        local,
-        remoteDraft(current.remoteOrigin),
+      const next = fileForLinkMode(
+        current.mode,
+        current.directory,
+        current.command,
+        current.localOrigin,
+        current.remoteOrigin,
         current.saved,
       )
       if (!next.local && !next.remote) return
@@ -329,6 +344,23 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
         desktop.appendLog(explainConnectionError(caught, t), 'error')
       }
     })
+  }
+
+  function commitMode(next: LinkMode) {
+    modeTouched.current = true
+    fields.current.mode = next
+    setMode(next)
+    void persistDraft()
+  }
+
+  function requestMode(next: string) {
+    if (next !== 'engine' && next !== 'shell' && next !== 'direct') return
+    if (next === fields.current.mode || busy) return
+    if (switchNeedsConfirm(desktop.status)) {
+      setPendingMode(next)
+      return
+    }
+    commitMode(next)
   }
 
   async function createFirstLedger() {
@@ -358,7 +390,7 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
     if (typeof picked !== 'string') return
     fields.current.directory = picked
     setDirectory(picked)
-    void persistDraft(undefined, variant === 'simple')
+    void persistDraft()
   }
 
   function fail(message: string) {
@@ -368,69 +400,71 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
 
   async function connect() {
     if (desktop.status !== 'setup' || busy) return
-    const remote = remoteDraft(remoteOrigin)
-    const launch = fields.current.saved?.local?.launch
-    if (kind === 'local') {
-      if (!directory) {
-        fail(t('settings.missingDirectory'))
+    if (mode === 'direct') {
+      if (!normalizeOrigin(remoteOrigin)) {
+        fail(t('settings.invalidOrigin'))
         return
       }
-      if (!command.trim()) {
-        fail(t('settings.missingCommand'))
+    } else {
+      if (!directory) {
+        fail(t('settings.missingWorkDirectory'))
         return
       }
       if (!normalizeOrigin(localOrigin)) {
         fail(t('settings.invalidOrigin'))
         return
       }
-      const local = localDraft(directory, command, localOrigin, 'shell')
+      if (mode === 'shell' && !command.trim()) {
+        fail(t('settings.missingCommand'))
+        return
+      }
+      const local = localWorkdir(directory, localOrigin, command, mode === 'shell' ? 'shell' : 'engine')
       if (!local) {
         fail(t('settings.loopback'))
         return
       }
-      await openSaved('local', local, remote)
-      return
     }
-    if (!remote) {
-      fail(t('settings.invalidOrigin'))
-      return
-    }
-    const local = command.trim()
-      ? localDraft(directory, command, localOrigin, launch)
-      : localWorkdir(directory, localOrigin, '', launch ?? 'engine')
-    await openSaved('remote', local, remote)
+    await openSaved(
+      fileForLinkMode(mode, directory, command, localOrigin, remoteOrigin, fields.current.saved),
+    )
   }
 
-  async function connectSimple() {
-    if (desktop.status !== 'setup' || busy) return
-    const local = localWorkdir(directory, localOrigin, command, 'engine')
-    const remote = remoteDraft(remoteOrigin)
-    if (!directory) {
-      fail(t('settings.missingWorkDirectory'))
-      return
+  async function confirmModeSwitch() {
+    const next = pendingMode
+    if (!next || busy) return
+    setBusy(true)
+    try {
+      const notice = switchWarning(desktop.status, desktop.host.owned)
+      const outcome = await disconnectSession()
+      desktop.release()
+      desktop.appendLog(
+        t(
+          outcome === 'stopped'
+            ? 'settings.logStop'
+            : notice === 'interrupt'
+              ? 'settings.logInterrupt'
+              : 'settings.logDisconnect',
+        ),
+      )
+      setPendingMode(null)
+      commitMode(next)
+    } catch (caught) {
+      fail(explainConnectionError(caught, t))
+    } finally {
+      setBusy(false)
     }
-    if (!normalizeOrigin(localOrigin)) {
-      fail(t('settings.invalidOrigin'))
-      return
-    }
-    if (!local) {
-      fail(t('settings.loopback'))
-      return
-    }
-    await openSaved('local', local, remote)
   }
 
-  async function openSaved(kind: Kind, local: LocalDraft | null, remote: RemoteDraft | null) {
+  async function openSaved(next: ConnectionFile) {
     setBusy(true)
     connectInFlight.current = true
     try {
       await setSuspended(false)
       await writeLock.current
-      if (kind === 'remote' && (await favaWasStarted())) {
+      if (next.active === 'remote' && (await favaWasStarted())) {
         await stopStartedFava()
         desktop.appendLog(t('settings.logReleased'))
       }
-      const next = withDrafts(kind, local, remote, fields.current.saved)
       await saveConnection(next)
       fields.current.saved = next
       desktop.remember(next)
@@ -471,73 +505,87 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
     }
   }
 
+  const engineLabel = t(linkModeMessage('engine'))
+  const shellLabel = t(linkModeMessage('shell'))
+  const directLabel = t(linkModeMessage('direct'))
+  const pendingLabel = pendingMode ? t(linkModeMessage(pendingMode)) : ''
+  const warning = switchWarning(desktop.status, desktop.host.owned)
+  const warningKey =
+    warning === 'stop'
+      ? 'settings.switchModeStop'
+      : warning === 'detach'
+        ? 'settings.switchModeDetach'
+        : 'settings.switchModeInterrupt'
+
   return (
     <section className="flex flex-col gap-4">
       <HostStatus
         action={
-          <ConnectionButton
-            busy={busy}
-            onConnect={() => void (variant === 'simple' ? connectSimple() : connect())}
-            onStop={() => void stop()}
-          />
+          <ConnectionButton busy={busy} onConnect={() => void connect()} onStop={() => void stop()} />
         }
       />
 
       <Separator />
 
-      {variant === 'simple' ? (
+      <div className="flex flex-col items-start gap-1.5">
+        <span className="text-xs text-muted-foreground">{t('settings.connectionMode')}</span>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          spacing={0}
+          value={mode}
+          disabled={busy}
+          aria-label={t('settings.connectionMode')}
+          onValueChange={requestMode}
+        >
+          <ToggleGroupItem value="engine" aria-label={engineLabel} className="gap-1.5 px-3">
+            <Cpu className="size-3.5" />
+            <span>{engineLabel}</span>
+          </ToggleGroupItem>
+          <ToggleGroupItem value="shell" aria-label={shellLabel} className="gap-1.5 px-3">
+            <Terminal className="size-3.5" />
+            <span>{shellLabel}</span>
+          </ToggleGroupItem>
+          <ToggleGroupItem value="direct" aria-label={directLabel} className="gap-1.5 px-3">
+            <Link2 className="size-3.5" />
+            <span>{directLabel}</span>
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+
+      {mode === 'direct' ? (
+        <OriginField
+          origin={remoteOrigin}
+          setOrigin={setRemoteOrigin}
+          onBlur={() => void persistDraft()}
+          label={t('settings.origin')}
+        />
+      ) : (
         <>
           <label className="flex w-full flex-col items-start gap-1.5">
-            <span className="text-xs text-muted-foreground">{t('settings.simpleDirectory')}</span>
+            <span className="text-xs text-muted-foreground">{t('settings.directory')}</span>
             <span className="flex w-full flex-wrap gap-2">
               <Input value={directory} readOnly placeholder={t('settings.browse')} className="min-w-0 flex-1 font-mono" />
               <Button type="button" variant="outline" onClick={() => void browse()} disabled={busy} className="shrink-0">
                 <FolderOpen data-icon="inline-start" />
                 {t('settings.browse')}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void createFirstLedger()}
-                disabled={busy || !directory}
-                className="shrink-0"
-              >
-                <FilePlus2 data-icon="inline-start" />
-                {t('settings.createFirstLedger')}
-              </Button>
+              {mode === 'engine' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void createFirstLedger()}
+                  disabled={busy || !directory}
+                  className="shrink-0"
+                >
+                  <FilePlus2 data-icon="inline-start" />
+                  {t('settings.createFirstLedger')}
+                </Button>
+              ) : null}
             </span>
           </label>
-        </>
-      ) : (
-        <>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs text-muted-foreground">{t('settings.connectionMode')}</span>
-            <Tabs
-              value={kind}
-              onValueChange={(value) => {
-                const nextKind = value as Kind
-                setKind(nextKind)
-                void persistDraft(nextKind)
-              }}
-            >
-              <TabsList>
-                <TabsTrigger value="local">{t('settings.local')}</TabsTrigger>
-                <TabsTrigger value="remote">{t('settings.remote')}</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-          {kind === 'local' ? (
+          {mode === 'shell' ? (
             <>
-              <label className="flex w-full flex-col items-start gap-1.5">
-                <span className="text-xs text-muted-foreground">{t('settings.directory')}</span>
-                <span className="flex w-full gap-2">
-                  <Input value={directory} readOnly placeholder={t('settings.browse')} className="font-mono" />
-                  <Button type="button" variant="outline" onClick={() => void browse()} disabled={busy} className="shrink-0">
-                    <FolderOpen data-icon="inline-start" />
-                    {t('settings.browse')}
-                  </Button>
-                </span>
-              </label>
               <label className="flex w-full flex-col items-start gap-1.5">
                 <span className="text-xs text-muted-foreground">{t('settings.command')}</span>
                 <Textarea
@@ -554,19 +602,35 @@ function ConnectionSettings({ variant }: { variant: ConnectionVariant }) {
                 origin={localOrigin}
                 setOrigin={setLocalOrigin}
                 onBlur={() => void persistDraft()}
-                label={t('settings.origin')}
+                label={t('settings.localOrigin')}
               />
             </>
-          ) : (
-            <OriginField
-              origin={remoteOrigin}
-              setOrigin={setRemoteOrigin}
-              onBlur={() => void persistDraft()}
-              label={t('settings.origin')}
-            />
-          )}
+          ) : null}
         </>
       )}
+
+      <Dialog
+        open={pendingMode !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) setPendingMode(null)
+        }}
+      >
+        <DialogContent className="min-w-0 overflow-hidden sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('settings.switchModeTitle')}</DialogTitle>
+            <DialogDescription>{t(warningKey, { mode: pendingLabel })}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => setPendingMode(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="button" variant="destructive" disabled={busy} onClick={() => void confirmModeSwitch()}>
+              {busy ? <Spinner data-icon="inline-start" /> : null}
+              {t('settings.switchModeConfirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Separator />
 

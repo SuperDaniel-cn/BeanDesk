@@ -65,6 +65,28 @@ export function sessionLost(
   return attachedMisses >= 2
 }
 
+export type SwitchWarning = 'stop' | 'detach' | 'interrupt'
+
+/** A live or starting session has to be confirmed before the link mode changes. */
+export function switchNeedsConfirm(status: DesktopStatus): boolean {
+  return status === 'ready' || status === 'boot'
+}
+
+/** Owned processes stop. A start still in flight is interrupted. An attached service only detaches. */
+export function switchWarning(status: DesktopStatus, owned: boolean): SwitchWarning {
+  if (owned) return 'stop'
+  if (status === 'boot') return 'interrupt'
+  return 'detach'
+}
+
+/**
+ * A finished startup attempt must not replace a session that already left boot,
+ * such as a confirmed mode switch that disconnected while startup was still running.
+ */
+export function finishBoot<T extends { status: DesktopStatus }>(current: T, next: T): T {
+  return current.status === 'boot' ? next : current
+}
+
 export function connectionAction(input: {
   status: DesktopStatus
   owned: boolean

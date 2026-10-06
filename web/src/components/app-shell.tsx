@@ -80,9 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         : REPORT_PAGES[0].key)
   const brand = t('brand.short')
   const settingsDesktop = pathname === '/settings' && isTauri()
-  const awayFromReports = pathname === '/calendar'
-  const hidePeriod = pathname === '/settings' || awayFromReports
-  const hideLedgerErrors = settingsDesktop || awayFromReports
+  const hideLedgerErrors = settingsDesktop || pathname === '/calendar'
   useDocumentTitle(`${t(pageKey)} - ${brand}`)
   useLayoutEffect(() => {
     window.scrollTo(0, 0)
@@ -182,7 +180,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="flex items-center gap-1 sm:gap-2">
-            {hidePeriod ? null : <TimeFilterSelector />}
+            <TimeFilterSelector />
             <NavLink
               to="/calendar"
               aria-label={t('calendar.title')}

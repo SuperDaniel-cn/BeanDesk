@@ -7,20 +7,18 @@ description: Ledger connection, service supervision, backups, and app preference
 
 ## Ledger Connection
 
-- Ledger Directory: Select your local ledger folder.
-- Initialize Ledger: Create a standard Beancount ledger in an empty folder.
-- Connect / Stop: Launch or attach to the bundled engine. Stopping only terminates processes launched by the current window.
+Choose a connection mode under Service Status. The three modes are exclusive and share one log. Switching while connected or still starting asks first. Confirming disconnects the current session and leaves you on the new panel. It does not connect the new mode for you.
 
-## Advanced Connection
+- Bundled Engine: Choose a ledger directory and, in an empty folder, initialize it. Connect starts the bundled engine. A saved start command stays on file and is not run.
+- External Command: Same directory, plus a start command and a local address. The command is passed to the shell unchanged. The port is probed first; if Fava is already there, BeanDesk attaches.
+- Direct Address: A service URL only. No process is started.
 
-- Local Service: Specify a local start command (e.g. `fava --host 127.0.0.1 --port 5000 main.bean`). Probes the port first, attaching directly if a local Fava service is already running.
-- External Service: Connect directly to an active Fava service URL (e.g. `http://127.0.0.1:5000`).
+Stop ends a process this window started. Disconnecting a direct address leaves the other service running.
 
 ## Settings Tabs
 
 - General: Language, theme, and local MCP configuration.
-- Ledger Connection: Local working directory and bundled engine management.
-- Advanced Connection: Custom commands and remote service URLs.
+- Ledger Connection: Bundled engine, external command, or direct address.
 - Backup: Git Auto-Snapshot and restic encrypted backups (available for BeanDesk-initialized ledgers; see [First book](/setup/first-book)).
 
 ## Connection Logs

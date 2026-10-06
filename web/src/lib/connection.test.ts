@@ -6,10 +6,12 @@ import {
   activeConnection,
   emptyConnectionForm,
   explainConnectionError,
+  fileForLinkMode,
   formFromConnectionFile,
   isLedgerConnection,
   isLoopbackOrigin,
   isPristineConnectionForm,
+  linkModeOf,
   localDraft,
   localWorkdir,
   normalizeOrigin,
@@ -191,6 +193,93 @@ describe('readConnectionFile', () => {
     expect(explainConnectionError('ledger-exists', t)).toBe('settings.createFirstLedgerExists')
     expect(explainConnectionError('not-empty', t)).toBe('settings.createFirstLedgerNotEmpty')
     expect(explainConnectionError('airplay', t)).toBe('settings.airplayPort')
+  })
+
+  test('reads the three exclusive link modes', () => {
+    const engine = readConnectionFile({
+      active: 'local',
+      local: {
+        directory: '/tmp/ledger',
+        command: 'make run',
+        origin: 'http://127.0.0.1:5000',
+        launch: 'engine',
+      },
+      remote: { origin: 'https://books.example' },
+    })
+    const shell = readConnectionFile({
+      active: 'local',
+      local: {
+        directory: '/tmp/ledger',
+        command: 'make run',
+        origin: 'http://127.0.0.1:5000',
+        launch: 'shell',
+      },
+      remote: null,
+    })
+    if (shell == null) throw new Error('expected a shell connection')
+    const direct = readConnectionFile({
+      active: 'remote',
+      local: shell.local,
+      remote: { origin: 'https://books.example' },
+    })
+    expect(linkModeOf(null)).toBe('engine')
+    expect(linkModeOf(engine)).toBe('engine')
+    expect(linkModeOf(shell)).toBe('shell')
+    expect(linkModeOf(direct)).toBe('direct')
+  })
+
+  test('switching link mode keeps the other draft', () => {
+    const previous = readConnectionFile({
+      active: 'local',
+      local: {
+        directory: '/tmp/ledger',
+        command: 'make run',
+        origin: 'http://127.0.0.1:5000',
+        launch: 'shell',
+      },
+      remote: { origin: 'https://books.example' },
+    })
+    const engine = fileForLinkMode(
+      'engine',
+      '/tmp/ledger',
+      'make run',
+      'http://127.0.0.1:5000',
+      'https://books.example',
+      previous,
+    )
+    expect(engine.active).toBe('local')
+    expect(engine.local).toEqual({
+      directory: '/tmp/ledger',
+      command: 'make run',
+      origin: 'http://127.0.0.1:5000',
+      launch: 'engine',
+    })
+    expect(engine.remote).toEqual({ origin: 'https://books.example' })
+
+    const direct = fileForLinkMode(
+      'direct',
+      '/tmp/ledger',
+      'make run',
+      'http://127.0.0.1:5000',
+      'https://books.example',
+      engine,
+    )
+    expect(direct.active).toBe('remote')
+    expect(direct.local?.launch).toBe('engine')
+    expect(direct.local?.command).toBe('make run')
+    expect(linkModeOf(direct)).toBe('direct')
+
+    const shell = fileForLinkMode(
+      'shell',
+      '/tmp/ledger',
+      'make run',
+      'http://127.0.0.1:5000',
+      'https://books.example',
+      direct,
+    )
+    expect(shell.active).toBe('local')
+    expect(shell.local?.launch).toBe('shell')
+    expect(shell.remote?.origin).toBe('https://books.example')
   })
 
   test('an incomplete edit does not erase the saved local project', () => {
