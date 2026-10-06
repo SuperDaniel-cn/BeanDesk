@@ -12,7 +12,12 @@ One source is active at a time, and only in the desktop app:
 - Local file: import an `.ics` file. It is read on this computer.
 - HTTPS subscription: paste an `https://` or `webcal://` address. `webcal://` is stored as `https://`.
 
-## Sync and notices
+Clear removes the current source and leaves the month empty.
 
-- Copy subscription URL copies that HTTPS address for a phone or another calendar app. Copy ICS content and Download .ics file export the calendar that is currently loaded.
-- While the desktop app is running, an event due within 7 days shows one in-app notice and one system banner. The browser does not load a calendar.
+## Local copy
+
+The desktop app keeps one local copy of the active calendar and shows it as soon as the page opens. A subscription is checked again once the copy is older than 24 hours, or older than the interval the feed declares with `REFRESH-INTERVAL` or `X-PUBLISHED-TTL` (at least one hour). The check sends the last ETag, so an unchanged feed is not downloaded again. Refresh checks right away. A failed check keeps the copy, and the dialog shows when it was last updated. A local file is read again every time the page opens.
+
+## Notices
+
+While the desktop app is running, an event due within 7 days shows one in-app notice and one system banner. The browser does not load a calendar.

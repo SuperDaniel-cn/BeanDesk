@@ -95,6 +95,12 @@ export function formatDate(iso: string | null, locale: string): string {
   }).format(parsed)
 }
 
+export function formatDateTime(iso: string, locale: string): string {
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return iso
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(parsed)
+}
+
 const COMMODITY = /^[A-Z][A-Z0-9._-]{0,15}$/
 
 function finiteNumber(value: unknown): number | null {

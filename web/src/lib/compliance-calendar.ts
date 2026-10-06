@@ -13,11 +13,74 @@ export type CalendarFile = {
   seenUids: string[]
 }
 
+/** The local copy of the active source: its text plus the validators the server gave us. */
+export type CalendarCopy = Pick<CalendarFile, 'active' | 'file' | 'url'> & {
+  ics: string
+  etag: string
+  lastModified: string
+  syncedAt: string
+}
+
 export const UPCOMING_MONTHS = 12
 export const NOTICE_DAYS = 7
+export const DEFAULT_REFRESH_MS = 24 * 60 * 60 * 1000
+export const MIN_REFRESH_MS = 60 * 60 * 1000
 
 export function emptyCalendarFile(): CalendarFile {
   return { active: 'file', file: '', url: '', seenUids: [] }
+}
+
+export function readCalendarCopy(value: unknown): CalendarCopy | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  if (record.active !== 'file' && record.active !== 'url') return null
+  if (typeof record.ics !== 'string' || !record.ics) return null
+  const text = (key: string) => (typeof record[key] === 'string' ? (record[key] as string) : '')
+  return {
+    active: record.active,
+    file: text('file'),
+    url: text('url'),
+    ics: record.ics,
+    etag: text('etag'),
+    lastModified: text('lastModified'),
+    syncedAt: text('syncedAt'),
+  }
+}
+
+export function isIcs(text: string): boolean {
+  return text.includes('BEGIN:VCALENDAR')
+}
+
+/** A local file is read again on every open. A subscription waits out its interval. */
+export function copyStale(copy: CalendarCopy, now: number): boolean {
+  if (copy.active === 'file') return true
+  const synced = Date.parse(copy.syncedAt)
+  if (!Number.isFinite(synced)) return true
+  return now - synced >= refreshIntervalMs(copy.ics)
+}
+
+/** RFC 7986 REFRESH-INTERVAL or the older X-PUBLISHED-TTL, clamped to at least an hour. */
+export function refreshIntervalMs(ics: string): number {
+  const firstEvent = ics.indexOf('BEGIN:VEVENT')
+  for (const line of unfoldIcs(firstEvent < 0 ? ics : ics.slice(0, firstEvent))) {
+    const parsed = parseIcsLine(line)
+    if (!parsed || (parsed.name !== 'REFRESH-INTERVAL' && parsed.name !== 'X-PUBLISHED-TTL')) continue
+    const ms = durationMs(parsed.value)
+    if (ms !== null) return Math.max(ms, MIN_REFRESH_MS)
+  }
+  return DEFAULT_REFRESH_MS
+}
+
+function durationMs(value: string): number | null {
+  const match = /^P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/i.exec(value.trim())
+  if (!match) return null
+  const [, weeks, days, hours, minutes, seconds] = match
+  const total =
+    (Number(weeks ?? 0) * 7 + Number(days ?? 0)) * 86_400 +
+    Number(hours ?? 0) * 3_600 +
+    Number(minutes ?? 0) * 60 +
+    Number(seconds ?? 0)
+  return total > 0 ? total * 1000 : null
 }
 
 export function readCalendarFile(value: unknown): CalendarFile | null {
@@ -48,24 +111,16 @@ export function withCalendarSource(
   }
 }
 
-export function sameCalendarSource(left: CalendarFile, right: CalendarFile): boolean {
+export function sameCalendarSource(
+  left: CalendarFile | CalendarCopy,
+  right: CalendarFile | CalendarCopy,
+): boolean {
   return left.active === right.active && left.file === right.file && left.url === right.url
 }
 
 export function sourceReady(file: CalendarFile): boolean {
   if (file.active === 'file') return file.file.trim().length > 0
   return normalizeCalendarUrl(file.url) !== null
-}
-
-export function calendarSubscribeUrl(file: CalendarFile): string {
-  if (file.active === 'url') return normalizeCalendarUrl(file.url) ?? ''
-  return ''
-}
-
-export function calendarSourceDetail(file: CalendarFile): string {
-  if (file.active === 'file') return file.file.trim().split(/[/\\]/).pop() ?? ''
-  const href = normalizeCalendarUrl(file.url)
-  return href ? new URL(href).host : ''
 }
 
 export function noticeKey(event: CalendarEvent): string {

@@ -25,6 +25,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import {
   formatCurrency as formatCurrencyRaw,
   formatDate as formatDateRaw,
+  formatDateTime as formatDateTimeRaw,
   formatNumber as formatNumberRaw,
   formatSignedCurrency as formatSignedCurrencyRaw,
 } from '@/lib/format'
@@ -73,6 +74,7 @@ export interface I18nValue {
   formatCurrency: (value: number, currency: string) => string
   formatSignedCurrency: (value: number, currency: string) => string
   formatDate: (iso: string | null) => string
+  formatDateTime: (iso: string) => string
   formatNumber: (value: number) => string
 }
 
@@ -133,6 +135,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       formatSignedCurrency: (amount, currency) =>
         formatSignedCurrencyRaw(amount, currency, locale),
       formatDate: (iso) => formatDateRaw(iso, locale),
+      formatDateTime: (iso) => formatDateTimeRaw(iso, locale),
       formatNumber: (count) => formatNumberRaw(count, locale),
     }
   }, [locale, setLocale])

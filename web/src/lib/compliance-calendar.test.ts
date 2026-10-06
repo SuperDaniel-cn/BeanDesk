@@ -1,19 +1,24 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
-  calendarSourceDetail,
-  calendarSubscribeUrl,
+  DEFAULT_REFRESH_MS,
+  MIN_REFRESH_MS,
+  copyStale,
   emptyCalendarFile,
   eventsFromIcs,
+  isIcs,
   noticeKey,
   noticesDue,
   normalizeCalendarUrl,
+  readCalendarCopy,
   readCalendarFile,
+  refreshIntervalMs,
   rememberNotices,
   sameCalendarSource,
   sourceReady,
   upcomingEvents,
   withCalendarSource,
+  type CalendarCopy,
 } from './compliance-calendar'
 
 const GOOGLE_STYLE = [
@@ -116,13 +121,6 @@ describe('one active source and notice keys', () => {
     expect(sourceReady(webcal)).toBe(true)
     expect(sameCalendarSource(url, { ...url, seenUids: ['x'] })).toBe(true)
     expect(sameCalendarSource(url, file)).toBe(false)
-    expect(calendarSourceDetail(file)).toBe('custom.ics')
-    expect(calendarSourceDetail(url)).toBe('calendar.google.com')
-    expect(calendarSourceDetail(emptyCalendarFile())).toBe('')
-    expect(calendarSubscribeUrl(emptyCalendarFile())).toBe('')
-    expect(calendarSubscribeUrl(url)).toBe('https://calendar.google.com/calendar/ical/demo/basic.ics')
-    expect(calendarSubscribeUrl(file)).toBe('')
-    expect(calendarSubscribeUrl(withCalendarSource('url', { url: 'not-a-url' }, emptyCalendarFile()))).toBe('')
   })
 
   test('the same occurrence does not notify twice; a later RRULE day can', () => {
@@ -140,5 +138,58 @@ describe('one active source and notice keys', () => {
   test('rewrites webcal and rejects plain http', () => {
     expect(normalizeCalendarUrl('webcal://example.com/cal.ics')).toBe('https://example.com/cal.ics')
     expect(normalizeCalendarUrl('http://example.com/cal.ics')).toBeNull()
+  })
+})
+
+describe('local copy and refresh interval', () => {
+  const HOUR = 60 * 60 * 1000
+  const now = Date.parse('2026-10-06T10:00:00Z')
+  const copy: CalendarCopy = {
+    active: 'url',
+    file: '',
+    url: 'https://example.com/cal.ics',
+    ics: GOOGLE_STYLE,
+    etag: '"v1"',
+    lastModified: '',
+    syncedAt: new Date(now - 2 * HOUR).toISOString(),
+  }
+
+  test('a feed without a declared interval is checked again after a day', () => {
+    expect(refreshIntervalMs(GOOGLE_STYLE)).toBe(DEFAULT_REFRESH_MS)
+    expect(copyStale(copy, now)).toBe(false)
+    expect(copyStale(copy, now + 23 * HOUR)).toBe(true)
+  })
+
+  test('REFRESH-INTERVAL and X-PUBLISHED-TTL set the interval, never below an hour', () => {
+    const weekly = GOOGLE_STYLE.replace('VERSION:2.0', 'VERSION:2.0\r\nREFRESH-INTERVAL;VALUE=DURATION:P1W')
+    const halfDay = GOOGLE_STYLE.replace('VERSION:2.0', 'VERSION:2.0\r\nX-PUBLISHED-TTL:PT12H')
+    const tooOften = GOOGLE_STYLE.replace('VERSION:2.0', 'VERSION:2.0\r\nX-PUBLISHED-TTL:PT5M')
+    const broken = GOOGLE_STYLE.replace('VERSION:2.0', 'VERSION:2.0\r\nREFRESH-INTERVAL;VALUE=DURATION:soon')
+    expect(refreshIntervalMs(weekly)).toBe(7 * 24 * HOUR)
+    expect(refreshIntervalMs(halfDay)).toBe(12 * HOUR)
+    expect(refreshIntervalMs(tooOften)).toBe(MIN_REFRESH_MS)
+    expect(refreshIntervalMs(broken)).toBe(DEFAULT_REFRESH_MS)
+    expect(copyStale({ ...copy, ics: weekly }, now + 6 * 24 * HOUR)).toBe(false)
+    expect(copyStale({ ...copy, ics: weekly }, now + 8 * 24 * HOUR)).toBe(true)
+  })
+
+  test('a local file is read again every time; a copy without a sync time is stale', () => {
+    expect(copyStale({ ...copy, active: 'file', file: '/tmp/a.ics', syncedAt: new Date(now).toISOString() }, now)).toBe(true)
+    expect(copyStale({ ...copy, syncedAt: '' }, now)).toBe(true)
+  })
+
+  test('reads a stored copy and tells it apart from the saved source', () => {
+    expect(readCalendarCopy(copy)).toEqual(copy)
+    expect(readCalendarCopy({ ...copy, ics: '' })).toBeNull()
+    expect(readCalendarCopy({ ...copy, active: 'bundled' })).toBeNull()
+    expect(readCalendarCopy(null)).toBeNull()
+    const saved = withCalendarSource('url', { url: 'https://example.com/cal.ics' }, emptyCalendarFile())
+    expect(sameCalendarSource(copy, saved)).toBe(true)
+    expect(sameCalendarSource(copy, withCalendarSource('url', { url: 'https://example.com/other.ics' }, saved))).toBe(false)
+  })
+
+  test('only calendar text counts as a calendar', () => {
+    expect(isIcs(GOOGLE_STYLE)).toBe(true)
+    expect(isIcs('<!doctype html><title>Sign in</title>')).toBe(false)
   })
 })

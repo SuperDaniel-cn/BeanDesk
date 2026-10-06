@@ -80,7 +80,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         : REPORT_PAGES[0].key)
   const brand = t('brand.short')
   const settingsDesktop = pathname === '/settings' && isTauri()
-  const hideLedgerErrors = settingsDesktop || pathname === '/calendar'
+  const calendarPage = pathname === '/calendar'
+  const hideLedgerErrors = settingsDesktop || calendarPage
   useDocumentTitle(`${t(pageKey)} - ${brand}`)
   useLayoutEffect(() => {
     window.scrollTo(0, 0)
@@ -89,7 +90,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (starting) return <StartupLoading />
 
   return (
-    <div className={cn('flex flex-col bg-background', settingsDesktop ? 'h-svh overflow-hidden' : 'min-h-svh')}>
+    <div className={cn('flex flex-col bg-background', settingsDesktop || calendarPage ? 'h-svh overflow-hidden' : 'min-h-svh')}>
       <header className="sticky top-0 z-20 border-b bg-background/85 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-1 px-2 sm:gap-2 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-1">
@@ -208,7 +209,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         className={
           settingsDesktop
             ? 'flex min-h-0 w-full flex-1 flex-col'
-            : 'mx-auto flex w-full max-w-7xl flex-col gap-6 px-3 py-6 sm:px-6 sm:py-8 lg:px-8'
+            : calendarPage
+              ? 'mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-3 py-6 sm:px-6 sm:py-8 lg:px-8'
+              : 'mx-auto flex w-full max-w-7xl flex-col gap-6 px-3 py-6 sm:px-6 sm:py-8 lg:px-8'
         }
       >
         {hideLedgerErrors ? null : <LedgerErrors />}

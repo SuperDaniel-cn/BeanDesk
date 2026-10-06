@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { isTauri } from '@tauri-apps/api/core'
-import { CalendarDays, Copy, Download, FolderOpen } from 'lucide-react'
+import { CalendarDays, FolderOpen, RefreshCwIcon } from 'lucide-react'
 import { enUS, zhCN } from 'react-day-picker/locale'
+import { toast } from 'sonner'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -12,14 +13,12 @@ import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Spinner } from '@/components/ui/spinner'
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -28,11 +27,18 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useI18n } from '@/i18n'
-import { explainCalendarError, loadCalendar, resolveCalendar, saveCalendar } from '@/lib/calendar'
+import {
+  clearCalendar,
+  emptyCalendarFeed,
+  explainCalendarError,
+  loadCalendarFeed,
+  refreshCalendarFeed,
+  saveCalendarSource,
+  shouldRefresh,
+  type CalendarFeed,
+} from '@/lib/calendar'
 import {
   calendarDateKey,
-  calendarSubscribeUrl,
-  calendarSourceDetail,
   calendarToday,
   emptyCalendarFile,
   eventsInRange,
@@ -41,110 +47,107 @@ import {
   sourceReady,
   upcomingEvents,
   withCalendarSource,
-  type CalendarEvent,
-  type CalendarFile,
   type CalendarSource,
 } from '@/lib/compliance-calendar'
+import { cn } from '@/lib/utils'
+
+type Pending = '' | 'refresh' | 'apply'
 
 export function Calendar() {
-  const { t, locale } = useI18n()
+  const { t, locale, formatDateTime } = useI18n()
   const desktop = isTauri()
-  const [file, setFile] = useState(emptyCalendarFile)
+  const [feed, setFeed] = useState<CalendarFeed>(emptyCalendarFeed)
+  const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [pending, setPending] = useState<Pending>('')
   const [draft, setDraft] = useState(emptyCalendarFile)
-  const [catalog, setCatalog] = useState<CalendarEvent[]>([])
-  const [ics, setIcs] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(true)
-  const [applying, setApplying] = useState(false)
+  const [draftError, setDraftError] = useState('')
   const [open, setOpen] = useState(false)
-  const [copied, setCopied] = useState<'ics' | 'url' | ''>('')
   const [month, setMonth] = useState(() => new Date())
   const [selected, setSelected] = useState<Date | undefined>()
   const token = useRef(0)
-  const fileRef = useRef(file)
 
-  async function apply(next: CalendarFile) {
-    if (!sourceReady(next)) {
-      if (next.active === 'url') setError(next.url.trim() ? t('calendar.invalidUrl') : '')
-      return
-    }
-    const applied = fileRef.current
-    if (sameCalendarSource(applied, next) && ics && !error) return
-    const id = ++token.current
-    setApplying(true)
-    try {
-      const resolved = await resolveCalendar(next)
-      if (id !== token.current) return
-      await saveCalendar(next)
-      if (id !== token.current) return
-      fileRef.current = next
-      setFile(next)
-      setDraft((current) => (sameCalendarSource(current, applied) ? next : current))
-      setIcs(resolved.ics)
-      setCatalog(resolved.catalog)
-      setError('')
-    } catch (caught) {
-      if (id !== token.current) return
-      setError(explainCalendarError(caught, t))
-    } finally {
-      if (id === token.current) {
-        setApplying(false)
-        setBusy(false)
-      }
-    }
+  function applyFeed(next: CalendarFeed) {
+    setFeed(next)
+    setLoaded(true)
   }
 
   useEffect(() => {
     const id = ++token.current
-    void loadCalendar()
-      .then(async (next) => {
+    void (async () => {
+      try {
+        const local = await loadCalendarFeed()
         if (id !== token.current) return
-        fileRef.current = next
-        setFile(next)
-        setDraft(next)
-        try {
-          const resolved = await resolveCalendar(next)
-          if (id !== token.current) return
-          setIcs(resolved.ics)
-          setCatalog(resolved.catalog)
-        } catch (caught) {
-          if (id !== token.current) return
-          setError(explainCalendarError(caught, t))
-        } finally {
-          if (id === token.current) setBusy(false)
-        }
-      })
-      .catch((caught: unknown) => {
+        applyFeed(local)
+        if (!shouldRefresh(local)) return
+        setPending('refresh')
+        const fresh = await refreshCalendarFeed(local)
         if (id !== token.current) return
-        setBusy(false)
-        setError(explainCalendarError(caught, t))
-      })
+        applyFeed(fresh)
+      } catch (caught) {
+        if (id !== token.current) return
+        setLoaded(true)
+        setLoadError(explainCalendarError(caught, t))
+      } finally {
+        if (id === token.current) setPending('')
+      }
+    })()
   }, [])
 
-  useEffect(() => {
-    if (!copied) return
-    const id = window.setTimeout(() => setCopied(''), 2000)
-    return () => window.clearTimeout(id)
-  }, [copied])
-
+  const { catalog } = feed
   const selectedKey = selected ? calendarDateKey(selected) : ''
   const upcoming = useMemo(() => upcomingEvents(catalog, calendarToday()), [catalog])
   const markedKeys = useMemo(() => new Set(catalog.map((event) => event.date)), [catalog])
   const rows = selectedKey ? eventsInRange(catalog, selectedKey, selectedKey) : upcoming
-  const sourceName =
-    calendarSourceDetail(file) || (file.active === 'file' ? t('calendar.file') : t('calendar.url'))
+  const applying = pending === 'apply'
+  const refreshing = pending === 'refresh'
+  // A load failure only ever happens without a copy; with a copy the copy stays and the failure rides on feed.error.
+  const busy = !loadError && (!loaded || (refreshing && !feed.copy))
+  const canRefresh = desktop && loaded && pending === '' && sourceReady(feed.file)
+  const canClear = sourceReady(feed.file) || draft.file.trim().length > 0 || draft.url.trim().length > 0
+  const draftIsSaved = sameCalendarSource(draft, feed.file) && sourceReady(feed.file)
+
+  function closeDraft() {
+    if (applying) {
+      token.current += 1
+      setPending('')
+    }
+    setOpen(false)
+  }
 
   function openSubscribe(next: boolean) {
-    setOpen(next)
-    if (next) setDraft(file)
-    else if (ics) setError('')
+    if (!next) {
+      closeDraft()
+      return
+    }
+    setDraft(feed.file)
+    setDraftError('')
+    setOpen(true)
+  }
+
+  async function refreshNow() {
+    const id = ++token.current
+    setPending('refresh')
+    setLoadError('')
+    try {
+      const fresh = await refreshCalendarFeed(feed)
+      if (id !== token.current) return
+      applyFeed(fresh)
+      if (fresh.error) {
+        toast.error(t('calendar.refreshFailed', { reason: explainCalendarError(fresh.error, t) }))
+      }
+    } catch (caught) {
+      if (id !== token.current) return
+      setLoadError(explainCalendarError(caught, t))
+    } finally {
+      if (id === token.current) setPending('')
+    }
   }
 
   function selectSource(active: CalendarSource) {
     if (!desktop) return
-    const next = withCalendarSource(active, {}, draft)
-    setDraft(next)
-    void apply(next)
+    setDraft(withCalendarSource(active, {}, draft))
+    setDraftError('')
   }
 
   async function browseIcs() {
@@ -156,39 +159,65 @@ export function Calendar() {
       defaultPath: draft.file || undefined,
     })
     if (typeof picked !== 'string') return
-    const next = withCalendarSource('file', { file: picked }, fileRef.current)
-    setDraft(next)
-    await apply(next)
+    setDraft(withCalendarSource('file', { file: picked }, draft))
+    setDraftError('')
   }
 
-  const subscribeUrl = calendarSubscribeUrl(draft)
-
-  async function copyIcs() {
-    if (!ics) return
-    await navigator.clipboard.writeText(ics)
-    setCopied('ics')
+  async function clearSource() {
+    if (!sourceReady(feed.file)) {
+      setDraft(emptyCalendarFile())
+      setDraftError('')
+      return
+    }
+    const id = ++token.current
+    setPending('apply')
+    setDraftError('')
+    try {
+      const next = await clearCalendar()
+      if (id !== token.current) return
+      applyFeed(emptyCalendarFeed(next))
+      setLoadError('')
+      setOpen(false)
+    } catch (caught) {
+      if (id !== token.current) return
+      setDraftError(explainCalendarError(caught, t))
+    } finally {
+      if (id === token.current) setPending('')
+    }
   }
 
-  async function copySubscribeUrl() {
-    if (!subscribeUrl) return
-    await navigator.clipboard.writeText(subscribeUrl)
-    setCopied('url')
-  }
-
-  function downloadIcs() {
-    if (!ics) return
-    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
-    const href = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = href
-    link.download = 'calendar.ics'
-    link.click()
-    URL.revokeObjectURL(href)
+  async function confirmSource() {
+    const next = draft.active === 'url' ? withCalendarSource('url', { url: draft.url }, draft) : draft
+    if (!sourceReady(next)) {
+      setDraftError(next.active === 'file' ? t('calendar.missingFile') : t('calendar.invalidUrl'))
+      return
+    }
+    if (sameCalendarSource(feed.file, next) && feed.copy) {
+      setOpen(false)
+      return
+    }
+    const id = ++token.current
+    setPending('apply')
+    setDraftError('')
+    try {
+      const fresh = await refreshCalendarFeed(emptyCalendarFeed(next))
+      if (id !== token.current) return
+      const saved = await saveCalendarSource(next)
+      if (id !== token.current) return
+      applyFeed({ ...fresh, file: saved })
+      setLoadError('')
+      setOpen(false)
+    } catch (caught) {
+      if (id !== token.current) return
+      setDraftError(explainCalendarError(caught, t))
+    } finally {
+      if (id === token.current) setPending('')
+    }
   }
 
   return (
-    <section className="flex flex-col gap-6">
-      <div className="grid gap-x-6 gap-y-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:grid-rows-[auto_1fr]">
+    <section className="flex min-h-0 flex-1 flex-col">
+      <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-x-6 gap-y-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:grid-rows-[auto_minmax(0,1fr)]">
         <div className="order-3 flex h-7 items-center lg:order-none lg:col-start-1 lg:row-start-1">
           <span className="text-xs text-muted-foreground">
             {selectedKey || t('calendar.upcoming')}
@@ -205,12 +234,16 @@ export function Calendar() {
           >
             {t('calendar.thisMonth')}
           </Button>
+          <Button type="button" variant="outline" onClick={() => void refreshNow()} disabled={!canRefresh}>
+            <RefreshCwIcon data-icon="inline-start" className={cn(refreshing && 'animate-spin')} />
+            {t('common.refresh')}
+          </Button>
           <Button type="button" variant="outline" onClick={() => openSubscribe(true)}>
             {t('calendar.subscribe')}
           </Button>
         </div>
-        <div className="order-4 flex min-h-0 min-w-0 flex-col lg:order-none lg:col-start-1 lg:row-start-2">
-          {rows.length === 0 && !busy && !(error && !ics) ? (
+        <div className="order-4 flex h-full min-h-0 min-w-0 flex-col overflow-hidden lg:order-none lg:col-start-1 lg:row-start-2">
+          {rows.length === 0 && !busy && !loadError ? (
             <Empty className="flex-1">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -225,13 +258,14 @@ export function Calendar() {
               <div className="flex flex-1 items-center p-3">
                 <Spinner />
               </div>
-            ) : error && !ics ? (
+            ) : loadError ? (
               <Alert className="m-3">
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription>{loadError}</AlertDescription>
               </Alert>
             ) : (
-              <Table>
-                <TableHeader>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+              <table className="w-full caption-bottom text-[0.8rem]">
+                <TableHeader className="sticky top-0 z-10 bg-card">
                   <TableRow>
                     <TableHead>{t('calendar.date')}</TableHead>
                     <TableHead>{t('calendar.summary')}</TableHead>
@@ -245,7 +279,8 @@ export function Calendar() {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </table>
+              </div>
             )}
           </div>
           )}
@@ -261,7 +296,7 @@ export function Calendar() {
           formatters={{
             formatMonthDropdown: (date) => String(date.getMonth() + 1),
           }}
-          className="order-2 rounded-lg border [--cell-size:2.75rem] md:[--cell-size:3rem] lg:order-none lg:col-start-2 lg:row-start-2"
+          className="order-2 self-start rounded-lg border [--cell-size:2.75rem] md:[--cell-size:3rem] lg:order-none lg:col-start-2 lg:row-start-2"
           components={{
             DayButton: (props) => (
               <CalendarDayButton {...props}>
@@ -276,14 +311,9 @@ export function Calendar() {
       </div>
 
       <Dialog open={open} onOpenChange={openSubscribe}>
-        <DialogContent className="flex h-[29rem] flex-col overflow-hidden sm:max-w-lg">
+        <DialogContent className="flex max-h-[min(29rem,calc(100dvh-2rem))] flex-col overflow-hidden sm:max-w-lg">
           <DialogHeader className="shrink-0">
             <DialogTitle>{t('calendar.subscribe')}</DialogTitle>
-            <DialogDescription>
-              {t('calendar.using', { source: sourceName })}
-              {' '}
-              {t('calendar.drawerHint')}
-            </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto">
           <FieldGroup>
@@ -301,10 +331,9 @@ export function Calendar() {
                     <TabsTrigger value="url">{t('calendar.url')}</TabsTrigger>
                   </TabsList>
                 </Tabs>
-              ) : null}
-              <FieldDescription>
-                {t(desktop ? (draft.active === 'file' ? 'calendar.fileHint' : 'calendar.urlHint') : 'calendar.desktopOnly')}
-              </FieldDescription>
+              ) : (
+                <FieldDescription>{t('calendar.desktopOnly')}</FieldDescription>
+              )}
             </Field>
 
             {desktop && draft.active === 'file' ? (
@@ -332,19 +361,15 @@ export function Calendar() {
             ) : null}
 
             {desktop && draft.active === 'url' ? (
-              <Field data-invalid={error ? true : undefined}>
+              <Field data-invalid={draftError ? true : undefined}>
                 <FieldLabel htmlFor="calendar-url">{t('calendar.url')}</FieldLabel>
                 <Input
                   id="calendar-url"
                   value={draft.url}
-                  aria-invalid={error ? true : undefined}
+                  aria-invalid={draftError ? true : undefined}
                   onChange={(event) => {
                     setDraft({ ...draft, active: 'url', url: event.target.value })
-                  }}
-                  onBlur={(event) => {
-                    const next = withCalendarSource('url', { url: event.currentTarget.value }, fileRef.current)
-                    setDraft(next)
-                    void apply(next)
+                    setDraftError('')
                   }}
                   placeholder={t('calendar.urlPlaceholder')}
                   spellCheck={false}
@@ -354,34 +379,43 @@ export function Calendar() {
               </Field>
             ) : null}
 
-            <div className="min-h-16">
-              {error ? (
-                <Alert>
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              ) : null}
-            </div>
+            {desktop && draftIsSaved ? (
+              <FieldDescription>
+                {feed.copy
+                  ? t('calendar.syncedAt', { time: formatDateTime(feed.copy.syncedAt) })
+                  : t('calendar.neverSynced')}
+              </FieldDescription>
+            ) : null}
+
+            {draftError ? (
+              <Alert>
+                <AlertDescription>{draftError}</AlertDescription>
+              </Alert>
+            ) : desktop && draftIsSaved && feed.error ? (
+              <Alert>
+                <AlertDescription>
+                  {t('calendar.refreshFailed', { reason: explainCalendarError(feed.error, t) })}
+                </AlertDescription>
+              </Alert>
+            ) : null}
           </FieldGroup>
           </div>
-          <DialogFooter className="shrink-0 flex-row [&>button]:flex-1">
-            {subscribeUrl ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void copySubscribeUrl()}
-                disabled={applying}
-              >
-                <Copy data-icon="inline-start" />
-                {copied === 'url' ? t('settings.copied') : t('calendar.copyUrl')}
-              </Button>
-            ) : null}
-            <Button type="button" variant="outline" onClick={() => void copyIcs()} disabled={applying || !ics}>
-              <Copy data-icon="inline-start" />
-              {copied === 'ics' ? t('settings.copied') : t('calendar.copy')}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="destructive"
+              className="sm:mr-auto"
+              onClick={() => void clearSource()}
+              disabled={!desktop || applying || !canClear}
+            >
+              {t('calendar.clear')}
             </Button>
-            <Button type="button" variant="outline" onClick={downloadIcs} disabled={applying || !ics}>
-              <Download data-icon="inline-start" />
-              {t('calendar.download')}
+            <Button type="button" variant="outline" onClick={closeDraft} disabled={applying}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="button" onClick={() => void confirmSource()} disabled={!desktop || applying}>
+              {applying ? <Spinner data-icon="inline-start" /> : null}
+              {t('common.confirm')}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -91,12 +91,14 @@ Includes query templates, keyboard execution shortcuts, sortable table output, a
 ![BQL Query Console](./docs/images/en/query.png)
 
 ### Calendar subscription
-BeanDesk is a subscriber, not a reminder host, and it does not ship calendar content. The Calendar page (`/calendar`) shows a month grid and the upcoming list. Source and ICS copy live in the Subscribe calendar dialog. It picks one source:
+BeanDesk is a subscriber, not a reminder host, and it does not ship calendar content. The Calendar page (`/calendar`) shows a month grid and the upcoming list. The source is chosen in the Subscribe calendar dialog, and can be cleared there. It picks one source:
 
 - **Local `.ics`**: a file on this computer. It does not leave the machine.
-- **HTTPS ICS**: an address the user pastes. Google Calendar’s secret iCal address or a public `basic.ics`, and Outlook / Microsoft 365 “Publish calendar” links, work. Sign-in pages, CalDAV, and OAuth do not. `webcal://` is stored as `https://`. The desktop HTTP plugin fetches once when the page opens.
+- **HTTPS ICS**: an address the user pastes. Google Calendar’s secret iCal address or a public `basic.ics`, and Outlook / Microsoft 365 “Publish calendar” links, work. Sign-in pages, CalDAV, and OAuth do not. `webcal://` is stored as `https://`.
 
-Copy subscription URL copies that HTTPS address for a phone. A local file cannot. While the desktop app is open, an event due within 7 days shows one toast and one system banner per UID and occurrence date. Closing the app stops notices. The browser calendar stays empty.
+The desktop app keeps a local copy and shows it at once. A subscription is checked again after 24 hours (or the interval the feed declares) with a conditional request, or when Refresh is clicked. A failed check keeps the copy.
+
+While the desktop app is open, an event due within 7 days shows one toast and one system banner per UID and occurrence date. Closing the app stops notices. The browser calendar stays empty.
 
 ### Local MCP
 The same desktop binary speaks MCP on stdio when launched with a bare `mcp` argument (not `--mcp`). Settings → General copies `{ command, args: ["mcp"] }` for a host. The process reads the same `connection.json` as Settings. Tools confirm the work folder, create the first ledger skeleton (`confirmWrite` required), run bean-check, and **read** the live Fava (BQL, statements, journal, documents). Writing entries stays in the work folder. It does not search for a named ledger repository, start Fava, or touch backup or calendar.
