@@ -5,26 +5,35 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Prefer PYTHON from Actions (setup-python python-path). `python3` on an
-# Apple Silicon runner is the arm64 Framework interpreter even when x64
-# Python is on PATH.
+# Actions passes python-path. `python3` on an Apple Silicon runner is the
+# arm64 Framework interpreter even when an x64 copy is on PATH.
 if [ -n "${PYTHON:-}" ]; then
     HOST_PYTHON="$PYTHON"
-elif command -v python >/dev/null 2>&1; then
-    HOST_PYTHON="$(command -v python)"
 elif command -v python3 >/dev/null 2>&1; then
     HOST_PYTHON="$(command -v python3)"
+elif command -v python >/dev/null 2>&1; then
+    HOST_PYTHON="$(command -v python)"
 else
     echo "python is needed to freeze the engine" >&2
     exit 1
 fi
 
+CHECK_ARCH=
 if [ "$(uname -s)" = Darwin ] && [ -n "${ENGINE_ARCH:-}" ]; then
-    host_arch="$("$HOST_PYTHON" -c 'import platform; print(platform.machine())')"
-    if [ "$host_arch" != "$ENGINE_ARCH" ]; then
-        echo "interpreter $HOST_PYTHON is $host_arch, expected ${ENGINE_ARCH}" >&2
+    CHECK_ARCH=1
+fi
+
+require_arch() {
+    local exe="$1"
+    local arch="$("$exe" -c 'import platform; print(platform.machine())')"
+    if [ "$arch" != "$ENGINE_ARCH" ]; then
+        echo "interpreter $exe is $arch, expected ${ENGINE_ARCH}" >&2
         exit 1
     fi
+}
+
+if [ -n "$CHECK_ARCH" ] && [ -n "${PYTHON:-}" ]; then
+    require_arch "$HOST_PYTHON"
 fi
 
 VENV="$ROOT/.engine-venv"
@@ -35,16 +44,20 @@ if [ ! -x "$VENV/bin/python" ] && [ ! -x "$VENV/Scripts/python.exe" ]; then
     "$HOST_PYTHON" -m venv "$VENV"
 fi
 if [ -x "$VENV/bin/python" ]; then
-    PYTHON="$VENV/bin/python"
+    VENV_PYTHON="$VENV/bin/python"
 else
-    PYTHON="$VENV/Scripts/python.exe"
+    VENV_PYTHON="$VENV/Scripts/python.exe"
 fi
 
-"$PYTHON" -m pip install -q -r "$ROOT/engine/requirements.txt"
+if [ -n "$CHECK_ARCH" ] && [ -z "${PYTHON:-}" ]; then
+    require_arch "$VENV_PYTHON"
+fi
+
+"$VENV_PYTHON" -m pip install -q -r "$ROOT/engine/requirements.txt"
 mkdir -p "$ROOT/src-tauri/binaries"
 (
     cd "$ROOT/engine"
-    "$PYTHON" -m PyInstaller --noconfirm --clean beandesk_engine.spec
+    "$VENV_PYTHON" -m PyInstaller --noconfirm --clean beandesk_engine.spec
 )
 SRC="$ROOT/engine/dist/beandesk-engine"
 DEST="$ROOT/src-tauri/binaries/engine"
@@ -64,7 +77,7 @@ if [ ! -f "$EXE" ] || [ ! -d "$DEST/_internal" ]; then
     exit 1
 fi
 chmod +x "$EXE" 2>/dev/null || true
-if [ "$(uname -s)" = Darwin ] && [ -n "${ENGINE_ARCH:-}" ]; then
+if [ -n "$CHECK_ARCH" ]; then
     arches="$(lipo -archs "$EXE" 2>/dev/null || true)"
     case " $arches " in
         *" ${ENGINE_ARCH} "*) ;;
