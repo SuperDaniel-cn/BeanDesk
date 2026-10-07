@@ -54,9 +54,10 @@ Equipped with common financial query templates, keyboard shortcuts, sortable tab
 ### Out-of-the-Box Cross-Platform Desktop Client (Tauri 2)
 - **Bundled Engine Sidecar**: Includes a self-contained runtime environment out of the box—no pre-installed Python or virtual environment required.
 - **Intelligent Lifecycle Supervisor**: Probes ports before launch; connects instantly if Fava is already running, or launches and manages an isolated process group that terminates cleanly on exit.
-- **First-Book Skeleton Initialization**: Generates a standardized account hierarchy (`main.bean`) and initial configuration in an empty directory with one click.
+- **First-Book Skeleton Initialization**: Generates a standardized account hierarchy (`main.bean`), policy directory (`policies/`), and initial configuration in an empty directory with one click.
+- **Silent File-Change Sync**: Silently tracks Fava reload states; reports refresh automatically within 4 seconds when edited by external tools or AI agents without manual reloading.
 - **Dual Local Backup System**:
-  - **Automated Git Snapshots**: Debounced file-watcher captures ledger and document changes in real time as local version snapshots.
+  - **Automated Git Snapshots**: Debounced file-watcher captures changes across the ledger and policy rules in real time as local version snapshots (supporting documents are archived via restic, not Git).
   - **restic Strong Encryption**: Incremental backups on demand or automatically to multiple local destinations and S3-compatible buckets (Cloudflare R2, MinIO, AWS S3). Passwords and credentials are provided via isolated files or environment variables without exposing plaintext in process arguments.
 
 ![Desktop Settings & Backup Management](./docs/images/en/settings.png)
@@ -65,10 +66,20 @@ Equipped with common financial query templates, keyboard shortcuts, sortable tab
 Supports local `.ics` files and standard HTTPS iCal subscription feeds (e.g., Google Calendar or Outlook published links). Events due within 7 days trigger desktop system notifications and in-app banners while the app is running.
 
 ### Local MCP Server (Model Context Protocol)
-The desktop binary speaks stdio MCP when launched with the `mcp` argument. Settings provides a one-click copyable configuration for AI assistants such as Cursor and Claude Desktop. Supports read-only BQL execution, statement retrieval, journal and document directory inspection, syntax checks, and ledger skeleton initialization.
+The desktop binary speaks stdio MCP when launched with the `mcp` argument. Settings provides a one-click copyable configuration for AI assistants such as Cursor and Claude Desktop. Supports read-only BQL execution, statement retrieval, journal and document directory inspection, reading business policies (`list_policies` / `get_policy`), and skeleton initialization. `check_ledger` provides a unified gate: running foundational `bean-check` syntax and balance checks first; when TOML rules are present in `policies/`, it applies automated compliance checks to postings within their effective date window (rule errors fail the check; warnings notify).
 
 ### Built-in Offline User Handbook
 Includes an embedded Fumadocs handbook opened in a dedicated hot-loaded window, accessible offline anytime without an internet connection.
+
+## Human-AI Bookkeeping Workflow
+
+Combines local MCP tools and desktop capabilities into a 5-step daily bookkeeping loop:
+
+1. **Install Desktop App**: No Python or database configuration required; ready out of the box.
+2. **Initialize Ledger**: Pick an empty folder and generate standard account definitions, documents folders, and `policies/` skeleton with one click.
+3. **Connect AI Agent**: Copy the stdio MCP command from desktop Settings into Cursor, Claude Desktop, or local LLM clients capable of editing the directory.
+4. **Log Transactions Daily**: Hand digital invoices or bank statements to your AI agent. The agent organizes files into `documents/`, writes monthly `.bean` double-entry postings, and runs `check_ledger` to verify balance and configured policy rules.
+5. **Instant Desktop Review**: Reports reflect disk changes silently within 4 seconds; click any transaction in the journal to preview the underlying source document in a modal.
 
 ## Design Principles & Boundaries
 

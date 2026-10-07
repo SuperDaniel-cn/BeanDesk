@@ -43,8 +43,40 @@ fava --host 127.0.0.1 --port 5000 main.bean
 
 - `.beandesk`：标识为 BeanDesk 标准账本。缺少该标记时，桌面端备份与快照功能保持停用。
 - `.gitignore`：必须忽略 `.backup_key`、`.env` 与 `backups/`。
-- `policies/`：可选的记账与合规策略目录。未创建时不影响基础记账。目录内可存放业务指引（Markdown 文件，供 Agent 过账前通读特定科目与凭证要求）与自动化规则（TOML 文件，每条需指定生效起始日期 `from`，可选指定失效日期 `until`，不含当天）。若配置了 TOML 规则，`check_ledger` 会在确认基础语法与金额平衡后，自动对生效区间内的分录执行格式与规则核对。本检查仅供格式合规参考，不代替正式税务审计。
+- `policies/`：可选的记账与合规策略目录。未创建时不影响基础记账。支持最多两层子目录：
+  - **业务指引（Markdown）**：供 Agent 记账前通过 `list_policies` 与 `get_policy` 阅读业务与凭证口径。
+  - **机器规则（TOML）**：由 `check_ledger` 在基础语法与金额平衡通过后，对生效区间内的分录执行自动化格式核验（`error` 报错拦截，`warning` 仅提示）。
 - `main.bean`：主入口文件，必须声明 `option "documents" "documents"` 以启用凭证自动扫描：
+
+### 自动化规则编写规范（policies/*.toml）
+
+规则文件放置于 `policies/*.toml` 或 `policies/*/*.toml`（单文件不超过 256KB）。每条规则必须包含基础信息，且**仅包含一项**检查动作：
+
+```toml
+[[rules]]
+id = "rd-tag"                                # 规则唯一标识
+description = "研发支出必须附带 #rd 标签"      # 违规提示说明
+severity = "error"                           # "error"（报错拦截）或 "warning"（仅提示）
+from = "2026-01-01"                          # 生效起始日期（含当天）
+until = "2027-01-01"                         # 可选：失效日期（不含当天，左闭右开）
+account = "Expenses:Operations:RD"           # 目标科目（与动作 1-4 配合）
+require_tag = "rd"                           # 动作 1：交易必须附带该标签
+
+# 动作 2：交易对手非空（Payee 必填）
+# account = "Assets:Bank:Checking"
+# require_payee = true
+
+# 动作 3：分录摘要正则匹配
+# account = "Liabilities:Owner:Advance"
+# narration_regex = ".*(还股东借款|还垫付款).*"
+
+# 动作 4：金额正负号校验（"positive" 或 "negative"）
+# account = "Assets:Bank:Checking"
+# posting_sign = "negative"
+
+# 动作 5：禁用科目列表（无需 account 字段，命中即违规）
+# forbidden_accounts = ["Expenses:Tax:VAT:Input"]
+```
 
 ```beancount
 option "title" "Ledger"
