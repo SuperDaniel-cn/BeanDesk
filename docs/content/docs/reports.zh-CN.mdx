@@ -34,6 +34,23 @@ description: 试算平衡表、三张法定财务报表、日记账与 BQL 查�
 - `cashflow: "<line>"`：指定该科目在现金流量表中所对应的法定行次。若发生资金变动但对方科目未标记行次，金额将归入未归类项目。
 - `cashflow-in` / `cashflow-out`：当同一科目在资金流入与流出时需归入不同法定行次时使用。
 
+合法行次 id，顺序与目录一致：
+
+经营活动：
+
+- 流入：`sales`、`operating-other-in`
+- 流出：`purchases`、`wages`、`taxes`、`operating-other-out`
+
+投资活动：
+
+- 流入：`investment-proceeds`、`investment-income`、`asset-disposal`
+- 流出：`investment-acquire`、`capex`
+
+筹资活动：
+
+- 流入：`borrowings`、`capital`
+- 流出：`debt-principal`、`debt-interest`、`dividends`
+
 由经营账本初始化的标准账本已预置主要银行、收入、费用、实收资本及法人垫资科目的元数据标记。
 
 ## 日记账与凭证穿透

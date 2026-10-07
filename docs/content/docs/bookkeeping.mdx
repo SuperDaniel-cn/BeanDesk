@@ -1,0 +1,102 @@
+---
+title: Bookkeeping and documents
+description: Enterprise operating ledger structure, document filing, and daily posting guidelines.
+---
+
+BeanDesk works with Beancount to manage daily company operating income and expenditures. All transaction postings remain in local plain-text ledger files, while original invoices and bank statements are stored in the document repository. Financial statements are computed locally in real time without cloud dependencies.
+
+## Operating Ledger Principles
+
+When maintaining corporate management accounts, follow these foundational standards:
+
+- **Entity Separation**: Corporate accounts record operating transactions only. Shareholder personal spending and household expenses must remain separate from company books.
+- **Advances Distinct from Equity**: Shareholder or founder working capital advances should be booked as corporate liabilities (such as `Liabilities:Owner:Advance`), keeping them strictly separate from paid-in capital (`Equity:Capital`). Note repayments as “Repay owner loan” or “Repay working capital advance”.
+- **Three-Way Consistency**: For outgoing and incoming transactions, ensure contractual parties, invoice billing details, and corporate bank accounts remain aligned.
+- **Complete Evidentiary Chain**: Retain invoices, electronic bank slips, or payment receipts for all revenues and expenses.
+- **Month-End Reconciliation**: Beancount balance assertions (`balance`) take effect at midnight on the specified date. When validating month-end balances, use the first day of the subsequent month.
+
+## Ledger Directory Anatomy
+
+A standard BeanDesk ledger directory is organized as follows:
+
+```
+<work folder>/
+├── .beandesk
+├── .gitignore
+├── main.bean
+├── config/
+│   └── accounts.bean
+├── data/
+│   └── YYYY/
+│       ├── YYYY.bean
+│       └── YYYY-MM.bean
+└── documents/
+```
+
+- `.beandesk`: Marks the working directory as a BeanDesk-initialized standard ledger. This marker unlocks the desktop Backup tab for configuring Git snapshots and restic encrypted backups (without this marker, backup operations remain disabled).
+- `main.bean`: Primary ledger entry point, declaring operating currency and importing configurations. Must include `option "documents" "documents"` to activate automatic document scanning and linking.
+- `config/accounts.bean`: Chart of accounts. Any account referenced in postings must first be declared here via an `open` directive.
+- `data/YYYY/YYYY-MM.bean`: Monthly transaction files. The annual file `data/YYYY/YYYY.bean` aggregates and includes each month.
+- `documents/`: Central document archive storing electronic invoices, bank slips, and contracts.
+- `.gitignore`: Standard version control ignore list, protecting backup keys (`.backup_key`), environment secrets (`.env`), and backup archives (`backups/`).
+
+## Document Filing & Journal Preview
+
+When receiving an invoice or bank slip, place the file inside `documents/`. The directory path matches the account name, replacing colons with path separators:
+
+```
+documents/<account path>/YYYY-MM-DD.<note>.<ext>
+```
+
+### Filing Example
+
+Given bank account `Assets:Bank:Checking` and expense account `Expenses:Operations:Hosting`:
+
+- **Bank Receipt**: Save to `documents/Assets/Bank/Checking/2026-02-10.bank-debit-hosting.pdf`
+- **Vendor Invoice**: Save to `documents/Expenses/Operations/Hosting/2026-02-10.cloud-infrastructure-invoice.pdf`
+
+When both the date prefix (`YYYY-MM-DD`) and the account directory path match a posting in the transaction (or when the file name contains the transaction's unique link token), BeanDesk automatically links the file to the transaction. Clicking the document icon in the Journal opens a preview dialog.
+
+## Daily Bookkeeping Walkthrough
+
+Recording a typical transaction involves four simple steps:
+
+### 1. Confirm Account Declarations
+Verify the accounts exist in `config/accounts.bean`. Cash and bank accounts require `cash: TRUE`. Contra accounts require a cash flow classification (`cashflow: "..."`):
+
+```beancount
+2020-01-01 open Assets:Bank:Checking CNY
+  cash: TRUE
+2020-01-01 open Expenses:Operations:Hosting CNY
+  cashflow: "operating-other-out"
+```
+
+### 2. Archive Evidentiary Document
+Place the electronic invoice or receipt into the corresponding account subdirectory under `documents/`.
+
+### 3. Record Transaction Entry
+Append the transaction to the current month file (e.g. `data/2026/2026-02.bean`):
+
+```beancount
+2026-02-10 * "XX Cloud Infrastructure LLC" "Annual compute and storage hosting" #cloud #invoice
+  Expenses:Operations:Hosting      1200.00 CNY
+  Assets:Bank:Checking            -1200.00 CNY
+```
+
+### 4. Verify & Inspect Statements
+Run a syntax check in your terminal (or via local MCP `check_ledger`):
+```bash
+bean-check main.bean
+```
+Once verified with zero errors, switch to BeanDesk. The Trial Balance, Balance Sheet, Income Statement, and Cash Flow Statement update immediately.
+
+## Cash Flow Statement Mapping
+
+If the Cash Flow Statement displays “No cash accounts configured”, check that at least one monetary asset account carries the `cash: TRUE` metadata.
+
+If transactions appear under “Unclassified Items”, assign the appropriate cash flow line to the contra account:
+
+- `cashflow: "<id>"`: Single-direction accounts (e.g., `sales` for revenue, `purchases` for operating costs).
+- `cashflow-in: "<id>"` & `cashflow-out: "<id>"`: Dual-direction accounts (e.g., owner advances: `borrowings` for inflows, `debt-principal` for repayments).
+
+Refer to the [Reports](/reports) manual for the complete list of 16 statutory line identifiers.

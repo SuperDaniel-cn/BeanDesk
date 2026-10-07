@@ -1,0 +1,102 @@
+---
+title: 记账与凭证
+description: 企业经营账本目录规范、凭证归档与日常分录操作指南。
+---
+
+BeanDesk 配合 Beancount 记录企业日常经营收支。所有的交易分录保存在本地明文账本文件中，原始发票与银行单据存放在凭证目录。系统直连本地账本并实时计算财务报表，无需上传云端。
+
+## 日常记账原则
+
+进行企业账目记录时，建议遵循以下基本规范：
+
+- **财产独立**：公司账目仅记录对公经营收支，股东个人消费与家庭支出不入账。
+- **垫资与资本分开**：股东或法人向公司垫付周转资金，应记入对公负债科目（如 `Liabilities:Owner:Advance`），与公司的实收资本（`Equity:Capital`）严格区分；公司还款时摘要注明“还股东借款”或“还垫付款”。
+- **三流一致**：对外发生收付款业务时，业务合同签约方、发票开具或购买方抬头、银行对公账户主体三者保持一致。
+- **凭证链条完整**：每笔经营收入与支出尽可能归档原始发票、对公电子回单或结算对账单。
+- **月末余额对账**：Beancount 的余额断言（`balance`）在指定日期的零点生效。校验月末公户余额时，日期应填次月首日。
+
+## 账本目录结构
+
+标准账本工作目录包含以下文件与结构：
+
+```
+<工作目录>/
+├── .beandesk
+├── .gitignore
+├── main.bean
+├── config/
+│   └── accounts.bean
+├── data/
+│   └── YYYY/
+│       ├── YYYY.bean
+│       └── YYYY-MM.bean
+└── documents/
+```
+
+- `.beandesk`：标识该工作目录为 BeanDesk 初始化的标准账本。拥有此标记才可在桌面端的“备份”页中配置 Git 自动快照与 restic 加密备份（缺少此标记时，备份操作保持停用）。
+- `main.bean`：账本主入口文件，声明币种并引入配置与数据。文件中必须包含 `option "documents" "documents"`，以开启凭证目录的自动扫描与关联。
+- `config/accounts.bean`：科目字典文件。所有在分录中使用的会计科目，必须先在此文件中声明开立（`open`）。
+- `data/YYYY/YYYY-MM.bean`：按月份归档的具体交易分录文件。年度索引文件 `data/YYYY/YYYY.bean` 负责汇总引入每个月份。
+- `documents/`：原始凭证归档目录，存放电子发票、银行回单与合同扫描件。
+- `.gitignore`：版本控制忽略配置，默认忽略备份密钥（`.backup_key`）、环境配置（`.env`）与备份归档目录（`backups/`）。
+
+## 凭证归档与穿透预览
+
+当公司收到发票或银行电子回单时，将文件存放在 `documents/` 目录下。归档路径与交易科目严格对应，科目层级中的冒号转换为目录分隔符：
+
+```
+documents/<科目路径>/YYYY-MM-DD.<说明>.<扩展名>
+```
+
+### 归档示例
+
+假设开立的银行科目为 `Assets:Bank:Checking`，发生的费用科目为 `Expenses:Operations:Hosting`：
+
+- **银行回单**：存入 `documents/Assets/Bank/Checking/2026-02-10.银行回单-云服务扣款.pdf`
+- **采购发票**：存入 `documents/Expenses/Operations/Hosting/2026-02-10.XX云算力服务发票.pdf`
+
+当凭证文件的日期（`YYYY-MM-DD`）与科目子目录路径均与分录完全匹配（或文件名包含该笔交易的唯一 link 标记）时，BeanDesk 才会自动建立关联。在软件的“日记账”页面中点击凭证列，即可直接弹窗预览原始文件。
+
+## 日常记账操作流（实战演练）
+
+记录一笔日常业务只需完成以下步骤：
+
+### 1. 确认科目已开立
+在 `config/accounts.bean` 中确认使用的科目已经 `open`。如果需要开立新科目，货币资金账户需标注 `cash: TRUE`；业务收支科目需标注现金流量表分类（`cashflow: "..."`）：
+
+```beancount
+2020-01-01 open Assets:Bank:Checking CNY
+  cash: TRUE
+2020-01-01 open Expenses:Operations:Hosting CNY
+  cashflow: "operating-other-out"
+```
+
+### 2. 存放凭证文件
+将获取的发票或电子回单按规范保存至 `documents/` 下对应科目的子目录中。
+
+### 3. 编写交易分录
+在当月数据文件（例如 `data/2026/2026-02.bean`）中录入分录：
+
+```beancount
+2026-02-10 * "XX云网络技术有限公司" "采购年度云服务器及带宽" #cloud #invoice
+  Expenses:Operations:Hosting      1200.00 CNY
+  Assets:Bank:Checking            -1200.00 CNY
+```
+
+### 4. 校验与报表查看
+在命令行运行语法校验（或通过本机 MCP 调用 `check_ledger`）：
+```bash
+bean-check main.bean
+```
+无报错后切换回 BeanDesk 界面，试算平衡表、资产负债表、利润表与现金流量表将自动出数，日记账中亦可同步查看凭证。
+
+## 现金流量表映射
+
+若发现现金流量表中显示“未设置资金账户”，说明尚未在任何货币资金科目上添加 `cash: TRUE` 元数据。
+
+若发生资金收付后金额进入“未归类项目”，只需在对应的对方科目（如收入、费用、资产采购）的开户指令上补全现金流行次即可：
+
+- `cashflow: "<id>"`：单一流向科目（如营业收入记 `sales`，日常采购记 `purchases`）。
+- `cashflow-in: "<id>"` 与 `cashflow-out: "<id>"`：兼有资金流入与流出的科目（例如法人垫资借款：流入记 `borrowings`，还款流出记 `debt-principal`）。
+
+全部 16 个合法行次代码请查阅 [报表](/zh-CN/reports) 手册。

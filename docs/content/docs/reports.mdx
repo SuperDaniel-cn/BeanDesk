@@ -34,6 +34,23 @@ Cash flow mappings rely on metadata on Beancount account opening directives (`op
 - `cashflow: "<line>"`: Maps the counter-account to a statutory cash flow line. Postings without a line mapping are grouped into Unclassified Items.
 - `cashflow-in` / `cashflow-out`: Separates line mappings for inflows and outflows on the same account.
 
+Legal line ids, in catalogue order:
+
+Operating:
+
+- In: `sales`, `operating-other-in`
+- Out: `purchases`, `wages`, `taxes`, `operating-other-out`
+
+Investing:
+
+- In: `investment-proceeds`, `investment-income`, `asset-disposal`
+- Out: `investment-acquire`, `capex`
+
+Financing:
+
+- In: `borrowings`, `capital`
+- Out: `debt-principal`, `debt-interest`, `dividends`
+
 Standard ledgers initialized by BeanDesk include preconfigured cash metadata for sample bank, revenue, expense, equity, and owner-advance accounts.
 
 ## Journal & Document Drilldown

@@ -39,6 +39,11 @@ const PAGES: &[HandbookPage] = &[
         en: include_str!("../../../docs/content/docs/reports.mdx"),
         zh: include_str!("../../../docs/content/docs/reports.zh-CN.mdx"),
     },
+    HandbookPage {
+        slug: "bookkeeping",
+        en: include_str!("../../../docs/content/docs/bookkeeping.mdx"),
+        zh: include_str!("../../../docs/content/docs/bookkeeping.zh-CN.mdx"),
+    },
 ];
 
 struct HandbookPage {
@@ -303,7 +308,8 @@ mod tests {
                 "desktop",
                 "calendar",
                 "mcp",
-                "reports"
+                "reports",
+                "bookkeeping"
             ]
         );
         assert!(card.display_block.contains("setup/first-book"));

@@ -1,1 +1,1 @@
-BeanDesk and this MCP share the Settings connection and the same live Fava. They do not search for a named ledger repository. Writing entries stays in the work folder.
+BeanDesk and this MCP share the Settings connection and the same live Fava. They do not search for a named ledger repository. Writing entries stays in the work folder. Folder structure, document naming, and posting rules are in the bundled handbook; omit the page parameter to list chapters.
