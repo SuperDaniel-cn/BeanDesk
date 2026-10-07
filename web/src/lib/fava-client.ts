@@ -249,6 +249,12 @@ export class FavaClient {
     return `${this.prefix()}/${this.slug}/api/${endpoint}${query ? `?${query}` : ''}`
   }
 
+  async ledgerChanged(signal?: AbortSignal): Promise<boolean> {
+    await this.ensureSlug()
+    const json = await this.fetchJson(`${this.prefix()}/${this.slug}/api/changed`, signal)
+    return json.data === true
+  }
+
   async getBalanceSheet(time?: string, conversion?: string, signal?: AbortSignal): Promise<unknown> {
     await this.ensureSlug()
     const json = await this.fetchJson(this.reportUrl('balance_sheet', time, conversion), signal)

@@ -778,8 +778,8 @@ function HostStatus({ action }: { action?: ReactNode }) {
   return (
     <div className="flex flex-col items-start gap-1.5">
       <span className={formTitleClass}>{t('settings.hostStatus')}</span>
-      <div className="flex w-full flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex w-full items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <Badge variant={session.variant}>{t(session.key)}</Badge>
           {probeKey ? <span className="text-xs text-muted-foreground">{t(probeKey)}</span> : null}
           {detail ? <span className="text-xs text-muted-foreground">{detail}</span> : null}

@@ -179,6 +179,25 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
   }, [appendLog])
 
   useEffect(() => {
+    if (state.status !== 'ready') return
+    let cancelled = false
+    const tick = async () => {
+      if (cancelled || document.hidden) return
+      const changed = await favaClient.ledgerChanged().catch(() => false)
+      if (!cancelled && changed) void queryClient.invalidateQueries()
+    }
+    void tick()
+    const id = window.setInterval(() => void tick(), 4_000)
+    const onVisibility = () => void tick()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [queryClient, state.status])
+
+  useEffect(() => {
     if (!isTauri()) return
     let cancelled = false
     const refresh = async () => {

@@ -82,3 +82,25 @@ describe('FavaClient.ensureSlug', () => {
     await expect(client.ensureSlug()).rejects.toThrow(FAVA_SLUG)
   })
 })
+
+describe('FavaClient.ledgerChanged', () => {
+  function mockChanged(data: boolean) {
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const href = String(url)
+      if (href.includes('/beancount/api/ledger_data')) {
+        return new Response('{}', { status: 200 })
+      }
+      if (href.includes('/beancount/api/changed')) {
+        return new Response(JSON.stringify({ data }), { status: 200 })
+      }
+      return new Response(null, { status: 404 })
+    }) as unknown as typeof fetch
+  }
+
+  test('is true only when Fava reports data true', async () => {
+    for (const data of [true, false]) {
+      mockChanged(data)
+      expect(await new FavaClient().ledgerChanged()).toBe(data)
+    }
+  })
+})
