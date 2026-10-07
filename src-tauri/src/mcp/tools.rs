@@ -10,6 +10,7 @@ use crate::ledger_init::{app_created_ledger, init_ledger_tree};
 use crate::supervisor::accepts_local_origin;
 
 use super::card::Card;
+use super::policy_lint::{PolicyLint, PolicyViolation, Severity, lint_policies};
 use super::store::{connection_value, load_saved_connection};
 
 pub(crate) const PREVIEW_LINES: usize = 12;
@@ -42,6 +43,10 @@ pub(crate) struct CheckBody {
     pub code: i32,
     pub preview: String,
     pub directory: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy_ok: Option<bool>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub violations: Vec<PolicyViolation>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -214,23 +219,98 @@ pub(crate) fn check_ledger_card(
         return Err("main.bean is missing in the Settings folder.".into());
     }
     let outcome = run_check(&directory)?;
-    let display = if outcome.ok {
-        "bean-check passed on the Settings folder.".to_string()
-    } else {
-        format!(
-            "bean-check failed on the Settings folder (exit {}).",
-            outcome.code
-        )
-    };
-    Ok(Card::new(
-        display,
+    Ok(assemble_check_card(&directory, outcome))
+}
+
+fn assemble_check_card(directory: &Path, outcome: CheckOutcome) -> Card<CheckBody> {
+    let directory_text = directory.to_string_lossy().into_owned();
+    if !outcome.ok {
+        return Card::new(
+            format!(
+                "bean-check failed on the Settings folder (exit {}).",
+                outcome.code
+            ),
+            CheckBody {
+                ok: false,
+                code: outcome.code,
+                preview: outcome.preview,
+                directory: directory_text,
+                policy_ok: None,
+                violations: Vec::new(),
+            },
+        );
+    }
+    match lint_policies(directory) {
+        None => passed_check_card(directory_text, outcome, None),
+        Some(PolicyLint::LoadError(error)) => {
+            let preview = preview_output(&error);
+            Card::new(
+                format!(
+                    "bean-check passed on the Settings folder. Policy rules could not be loaded.\n{preview}"
+                ),
+                CheckBody {
+                    ok: false,
+                    code: 1,
+                    preview,
+                    directory: directory_text,
+                    policy_ok: Some(false),
+                    violations: Vec::new(),
+                },
+            )
+        }
+        Some(PolicyLint::Checked(violations)) => {
+            let policy_ok = !violations
+                .iter()
+                .any(|item| item.severity == Severity::Error);
+            if policy_ok && violations.is_empty() {
+                return passed_check_card(directory_text, outcome, Some(true));
+            }
+            let preview = preview_output(&format_violations(&violations));
+            let label = if policy_ok { "warnings" } else { "errors" };
+            Card::new(
+                format!("bean-check passed on the Settings folder. Policy {label}:\n{preview}"),
+                CheckBody {
+                    ok: policy_ok,
+                    code: if policy_ok { outcome.code } else { 1 },
+                    preview,
+                    directory: directory_text,
+                    policy_ok: Some(policy_ok),
+                    violations,
+                },
+            )
+        }
+    }
+}
+
+fn passed_check_card(
+    directory: String,
+    outcome: CheckOutcome,
+    policy_ok: Option<bool>,
+) -> Card<CheckBody> {
+    Card::new(
+        "bean-check passed on the Settings folder.".to_string(),
         CheckBody {
-            ok: outcome.ok,
+            ok: true,
             code: outcome.code,
             preview: outcome.preview,
-            directory: directory.to_string_lossy().into_owned(),
+            directory,
+            policy_ok,
+            violations: Vec::new(),
         },
-    ))
+    )
+}
+
+fn format_violations(violations: &[PolicyViolation]) -> String {
+    violations
+        .iter()
+        .map(|item| {
+            format!(
+                "[{}] {}:{} {}",
+                item.rule_id, item.file, item.line, item.message
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 struct CheckOutcome {
@@ -456,5 +536,113 @@ mod tests {
         assert!(preview.contains('…'));
         assert!(preview.contains("ok"));
         assert!(preview.lines().count() <= PREVIEW_LINES);
+    }
+
+    fn passed() -> CheckOutcome {
+        CheckOutcome {
+            ok: true,
+            code: 0,
+            preview: String::new(),
+        }
+    }
+
+    #[test]
+    fn check_ledger_without_toml_matches_syntax_only_card() {
+        let root = temp_dir("check-notoml");
+        std::fs::create_dir_all(root.join("policies")).unwrap();
+        std::fs::write(root.join("policies/README.md"), "# Bookkeeping policies\n").unwrap();
+        let card = assemble_check_card(&root, passed());
+        assert!(card.body.ok);
+        assert!(card.body.policy_ok.is_none());
+        assert!(card.body.violations.is_empty());
+        assert_eq!(
+            card.display_block,
+            "bean-check passed on the Settings folder."
+        );
+        let json = serde_json::to_value(&card.body).unwrap();
+        assert!(json.get("policyOk").is_none());
+        assert!(json.get("violations").is_none());
+        assert!(!card.display_block.contains(root.to_str().unwrap()));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn check_ledger_skips_policy_when_syntax_fails() {
+        let root = temp_dir("check-syntax");
+        std::fs::create_dir_all(root.join("policies")).unwrap();
+        std::fs::write(
+            root.join("policies/rules.toml"),
+            r#"
+[[rules]]
+id = "need-tag"
+description = "Must not run after a syntax failure."
+severity = "error"
+from = 2026-01-01
+account = "Assets:Bank:*"
+require_tag = "nope"
+"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("data/2026")).unwrap();
+        std::fs::write(
+            root.join("data/2026/2026-01.bean"),
+            "2026-01-10 * \"Vendor\" \"Cloud\"\n  Expenses:Operations:Hosting   10.00 CNY\n  Assets:Bank:Checking        -10.00 CNY\n",
+        )
+        .unwrap();
+        let card = assemble_check_card(
+            &root,
+            CheckOutcome {
+                ok: false,
+                code: 1,
+                preview: "unbalanced".into(),
+            },
+        );
+        assert!(!card.body.ok);
+        assert!(card.body.policy_ok.is_none());
+        assert!(card.body.violations.is_empty());
+        assert!(card.display_block.contains("bean-check failed"));
+        assert!(!card.display_block.contains("need-tag"));
+        assert!(!card.display_block.contains(root.to_str().unwrap()));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn check_ledger_fails_on_in_window_policy_errors() {
+        let root = temp_dir("check-lint");
+        std::fs::create_dir_all(root.join("policies")).unwrap();
+        std::fs::write(
+            root.join("policies/repay.toml"),
+            r#"
+[[rules]]
+id = "repay-narration"
+description = "Repayment narration must mention the shareholder loan."
+severity = "error"
+from = 2026-01-01
+account = "Liabilities:Owner:Advance"
+narration_regex = "还股东借款|还垫付款"
+"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("data/2025")).unwrap();
+        std::fs::create_dir_all(root.join("data/2026")).unwrap();
+        std::fs::write(
+            root.join("data/2025/2025-12.bean"),
+            "2025-12-15 * \"Owner\" \"转账\"\n  Liabilities:Owner:Advance    100.00 CNY\n  Assets:Bank:Checking       -100.00 CNY\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("data/2026/2026-03.bean"),
+            "2026-03-15 * \"Owner\" \"转账\"\n  Liabilities:Owner:Advance    100.00 CNY\n  Assets:Bank:Checking       -100.00 CNY\n",
+        )
+        .unwrap();
+        let card = assemble_check_card(&root, passed());
+        assert!(!card.body.ok);
+        assert_eq!(card.body.policy_ok, Some(false));
+        assert_eq!(card.body.violations.len(), 1);
+        assert_eq!(card.body.violations[0].file, "data/2026/2026-03.bean");
+        assert!(card.display_block.contains("Policy errors"));
+        assert!(card.display_block.contains("repay-narration"));
+        assert!(!card.display_block.contains(root.to_str().unwrap()));
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

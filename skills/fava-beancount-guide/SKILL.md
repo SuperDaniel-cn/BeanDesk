@@ -43,7 +43,7 @@ fava --host 127.0.0.1 --port 5000 main.bean
 
 - `.beandesk`：标识为 BeanDesk 标准账本。缺少该标记时，桌面端备份与快照功能保持停用。
 - `.gitignore`：必须忽略 `.backup_key`、`.env` 与 `backups/`。
-- `policies/`：可选。没有此目录不影响记账。有则过账前先用 MCP `list_policies` / `get_policy` 读取其中的 Markdown。`check_ledger` 只检查语法与平衡，不检查这些规则是否已执行。
+- `policies/`：可选的记账与合规策略目录。未创建时不影响基础记账。目录内可存放业务指引（Markdown 文件，供 Agent 过账前通读特定科目与凭证要求）与自动化规则（TOML 文件，每条需指定生效起始日期 `from`，可选指定失效日期 `until`，不含当天）。若配置了 TOML 规则，`check_ledger` 会在确认基础语法与金额平衡后，自动对生效区间内的分录执行格式与规则核对。本检查仅供格式合规参考，不代替正式税务审计。
 - `main.bean`：主入口文件，必须声明 `option "documents" "documents"` 以启用凭证自动扫描：
 
 ```beancount
@@ -96,7 +96,9 @@ include "data/YYYY/YYYY.bean"
 3. **提取凭据信息**：核对日期、对方单位（payee）、摘要（narration）、金额与收付款账户，确保三流一致。
 4. **归档凭证单据**：将发票或银行回单放入 `documents/` 下对应科目的子目录，文件名日期与交易对齐。
 5. **编写交易分录**：将分录录入当月文件 `data/YYYY/YYYY-MM.bean`，并在 `data/YYYY/YYYY.bean` 中显式 `include`。只使用已 `open` 的科目。
-6. **语法与平衡校验**：在账本目录下运行 `bean-check main.bean`，或通过 MCP 调用 `check_ledger`。这只检查语法与平衡，不代替上一步的策略。
+6. **语法校验与规则核查**：
+   - 命令行运行 `bean-check main.bean`：仅校验底层语法与分录金额平衡（合计归零）。终端命令不扫描 TOML。
+   - 通过 MCP 调用 `check_ledger`：在执行上述语法与分录平衡检查后，若 `policies/` 目录下存在 TOML 规则，还会根据生效区间核验分录规范（`error` 报错拦截，`warning` 仅提示）。
 7. **报表与凭证穿透确认**：在 BeanDesk 界面或通过 MCP 查看财务报表与日记账，核对单据已正常建立预览关联。
 
 ## 4. 上游版本与排错

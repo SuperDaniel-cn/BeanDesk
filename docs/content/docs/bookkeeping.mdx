@@ -40,7 +40,7 @@ A standard BeanDesk ledger directory is organized as follows:
 - `config/accounts.bean`: Chart of accounts. Any account referenced in postings must first be declared here via an `open` directive.
 - `data/YYYY/YYYY-MM.bean`: Monthly transaction files. The annual file `data/YYYY/YYYY.bean` aggregates and includes each month.
 - `documents/`: Central document archive storing electronic invoices, bank slips, and contracts.
-- `policies/`: Optional extra posting rules as Markdown. Without this folder, posting still works. When it exists, a local agent should list and read it before posting. `check_ledger` / `bean-check` check syntax and balance, not whether those extra rules were followed.
+- `policies/`: Optional bookkeeping and compliance policies directory. Basic bookkeeping works without this folder. It may contain guidance documents (Markdown files for AI assistants to follow specific account and document requirements) and automated rules (TOML files, where each rule defines an effective date window using `from` (inclusive) and optional `until` (exclusive, ending before that date)). When TOML rules exist, `check_ledger` verifies postings within their active window after syntax and balance checks. Verification confirms format compliance and does not substitute for a formal tax opinion.
 - `.gitignore`: Standard version control ignore list, protecting backup keys (`.backup_key`), environment secrets (`.env`), and backup archives (`backups/`).
 
 ## Document Filing & Journal Preview
@@ -91,7 +91,7 @@ Run a syntax check in your terminal (or via local MCP `check_ledger`):
 ```bash
 bean-check main.bean
 ```
-Once verified with zero errors, switch to BeanDesk. The Trial Balance, Balance Sheet, Income Statement, and Cash Flow Statement update immediately.
+`check_ledger` runs this syntax check first. If `policies/` contains active TOML rules, it also validates in-window postings against those rules. Once verified with zero errors, switch to BeanDesk. The Trial Balance, Balance Sheet, Income Statement, and Cash Flow Statement update immediately.
 
 ## Cash Flow Statement Mapping
 

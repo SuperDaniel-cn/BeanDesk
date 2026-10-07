@@ -1,6 +1,6 @@
 [package]
 name = "BeanDesk"
-version = "0.2.1"
+version = "0.2.2"
 description = "BeanDesk desktop shell"
 license = "AGPL-3.0-only"
 repository = "https://github.com/SuperDaniel-cn/BeanDesk"
@@ -19,6 +19,8 @@ tauri-build = { version = "2.7.1", features = [] }
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+regex = "1"
 log = "0.4"
 tauri = { version = "2.12.1", features = ["tray-icon", "image-png"] }
 tauri-plugin-log = "2"

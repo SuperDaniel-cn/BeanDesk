@@ -14,7 +14,7 @@ BeanDesk operates as a standard stdio MCP server. In Settings → General, click
 
 ## Tool Capabilities
 
-- Ledger Services: Provides working directory identification, read-only financial statements, native BQL queries, document listing, and syntax checking. Supports initializing a new ledger skeleton upon explicit write confirmation, but exposes no transaction write endpoints or background process supervision. `check_ledger` runs bean-check (syntax and balance); it does not audit extra posting rules.
+- Ledger Services: Provides working directory identification, read-only financial statements, native BQL queries, document listing, and syntax checking. Supports initializing a new ledger skeleton upon explicit write confirmation, but exposes no transaction write endpoints or background process supervision. `check_ledger` verifies syntax and balance via `bean-check`, and applies any active TOML compliance rules within their effective date window. Successful verification confirms format compliance and does not constitute a formal tax opinion.
 - Offline Handbook: AI assistants can invoke `get_handbook` to read any section of this documentation offline without requiring a running Fava engine.
-- Work-folder policies: `list_policies` and `get_policy` list and read Markdown under `policies/` when that folder exists. They do not write entries.
+- Work-folder policies: `list_policies` and `get_policy` list and read Markdown guidance under `policies/` to help AI assistants follow domain-specific bookkeeping rules. Automated TOML rules are evaluated directly by `check_ledger` rather than returned as reading text.
 - Security Boundaries: Protects sensitive local state; does not expose backup passphrases, raw document bytes, or private calendar subscription URLs.

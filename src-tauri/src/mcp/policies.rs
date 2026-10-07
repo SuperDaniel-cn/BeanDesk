@@ -262,6 +262,7 @@ mod tests {
             "../secret.md",
             "/tmp/secret.md",
             "ok.txt",
+            "rules.toml",
             "pack/deep/skip.md",
             "",
         ] {

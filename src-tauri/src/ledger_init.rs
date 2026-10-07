@@ -76,11 +76,15 @@ backups/
 pub const POLICIES_README: &str = "\
 # Bookkeeping policies
 
-General posting rules are in the bundled handbook. Extra Markdown files in this folder are additional rules for a local agent. This folder is optional: without it, posting still works.
+General posting rules are in the bundled handbook. Markdown files in this directory provide additional guidance for local AI agents. This directory is optional; basic bookkeeping works without it.
 
-# 记账策略
+You can also place `.toml` files here to define automated checks executed during `check_ledger` (after syntax and balance checks). Each rule specifies an effective date range using `from` (inclusive) and optional `until` (exclusive, ending before that date).
 
-通用记账规范见桌面手册。把额外的 Markdown 放进此目录后，本机 Agent 即可读取。没有此目录不影响记账。
+# 记账策略与合规指引
+
+通用记账规范请参阅桌面手册。在此目录下放置 Markdown 文件，可为本机 AI 助手提供特定的业务分类与记账指导；未创建此目录时不影响正常记账。
+
+你也可以在此放置 `.toml` 规则文件，用于在 `check_ledger` 完成基础语法与分录平衡检查后执行自动化规则核验（如特定科目的标签、摘要正则等）。每条规则需配置生效起始日期 `from`（含当天），可选配置失效日期 `until`（不含当天，左闭右开）。
 ";
 
 pub fn ensure_backup_gitignore(directory: &Path) -> Result<(), String> {
