@@ -269,7 +269,10 @@ fn backup_one(
         "desktop.ini".to_string(),
     ];
     for path in SNAPSHOT_PATHS {
-        args.push(path.to_string());
+        let abs = directory.join(path);
+        if abs.is_file() || abs.is_dir() {
+            args.push(path.to_string());
+        }
     }
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let output = repo
@@ -574,10 +577,12 @@ mod tests {
         fs::create_dir_all(root.join("config")).unwrap();
         fs::create_dir_all(root.join("data")).unwrap();
         fs::create_dir_all(root.join("documents/Assets")).unwrap();
+        fs::create_dir_all(root.join("policies")).unwrap();
         fs::create_dir_all(&dest).unwrap();
         fs::write(root.join("main.bean"), "option \"title\" \"Ledger\"\n").unwrap();
         fs::write(root.join("config/accounts.bean"), "open Assets:Cash\n").unwrap();
         fs::write(root.join("documents/Assets/note.txt"), "keep").unwrap();
+        fs::write(root.join("policies/README.md"), "# policy\n").unwrap();
         write_key(&root, "hidden").unwrap();
         (root, dest)
     }
@@ -635,6 +640,7 @@ mod tests {
         assert!(out.join("main.bean").is_file());
         assert!(out.join("config/accounts.bean").is_file());
         assert!(out.join("documents/Assets/note.txt").is_file());
+        assert!(out.join("policies/README.md").is_file());
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&dest);
     }

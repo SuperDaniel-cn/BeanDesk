@@ -2,6 +2,7 @@ mod card;
 mod fava;
 mod fava_tools;
 mod handbook;
+mod policies;
 mod store;
 mod tools;
 
@@ -18,6 +19,7 @@ use fava_tools::{
     get_ledger_card, get_trial_balance_card, list_documents_card, run_bql_card,
 };
 use handbook::{HandbookBody, HandbookInput, get_handbook_card};
+use policies::{PoliciesBody, PolicyBody, PolicyInput, get_policy_card, list_policies_card};
 use tools::{
     CheckBody, ConnectionBody, EmptyInput, InitLedgerInput, WriteBody, check_ledger_card,
     get_connection_card, init_ledger_card,
@@ -191,6 +193,28 @@ impl LedgerTools {
     ) -> Result<Json<Card<HandbookBody>>, String> {
         Ok(Json(get_handbook_card(input)?))
     }
+
+    #[tool(
+        description = include_str!("prompts/list_policies.txt"),
+        annotations(read_only_hint = true)
+    )]
+    fn list_policies(
+        &self,
+        Parameters(_input): Parameters<EmptyInput>,
+    ) -> Result<Json<Card<PoliciesBody>>, String> {
+        Ok(Json(list_policies_card(None)?))
+    }
+
+    #[tool(
+        description = include_str!("prompts/get_policy.txt"),
+        annotations(read_only_hint = true)
+    )]
+    fn get_policy(
+        &self,
+        Parameters(input): Parameters<PolicyInput>,
+    ) -> Result<Json<Card<PolicyBody>>, String> {
+        Ok(Json(get_policy_card(None, input)?))
+    }
 }
 
 pub fn run_mcp() -> Result<(), String> {
@@ -281,6 +305,8 @@ mod tests {
             include_str!("prompts/get_journal.txt"),
             include_str!("prompts/list_documents.txt"),
             include_str!("prompts/get_handbook.txt"),
+            include_str!("prompts/list_policies.txt"),
+            include_str!("prompts/get_policy.txt"),
         ];
         for text in std::iter::once(SERVER_INSTRUCTIONS).chain(descriptions) {
             for banned in BANNED {
@@ -294,6 +320,8 @@ mod tests {
         assert!(!SERVER_INSTRUCTIONS.contains("init_ledger"));
         assert!(!SERVER_INSTRUCTIONS.contains("run_bql"));
         assert!(!SERVER_INSTRUCTIONS.contains("confirmWrite"));
+        assert!(!SERVER_INSTRUCTIONS.contains("list_policies"));
+        assert!(!SERVER_INSTRUCTIONS.contains("get_policy"));
         for description in descriptions {
             assert!(!description.contains("confirmWrite"));
         }

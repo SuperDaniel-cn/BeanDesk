@@ -25,6 +25,7 @@ pub(crate) struct ConnectionBody {
     pub origin_kind: String,
     pub launch: String,
     pub directory: String,
+    pub has_policies_dir: bool,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -119,6 +120,9 @@ pub(crate) fn get_connection_card(
     let app_ledger = directory
         .as_ref()
         .is_some_and(|path| app_created_ledger(path));
+    let has_policies_dir = directory
+        .as_ref()
+        .is_some_and(|path| path.join("policies").is_dir());
     let origin_kind = match origin.as_deref() {
         Some(value) if accepts_local_origin(value) => "loopback",
         Some(_) => "remote",
@@ -139,6 +143,7 @@ pub(crate) fn get_connection_card(
             .as_ref()
             .map(|path| path.to_string_lossy().into_owned())
             .unwrap_or_default(),
+        has_policies_dir,
     };
     let display = if directory.is_none() && body.active == "none" {
         "No connection saved in Settings.".to_string()
@@ -158,6 +163,11 @@ pub(crate) fn get_connection_card(
                 "This is a BeanDesk-created ledger."
             } else if body.has_main_bean {
                 "This folder already had a ledger."
+            } else {
+                ""
+            },
+            if body.has_policies_dir {
+                "A policies folder is present."
             } else {
                 ""
             },
@@ -367,6 +377,8 @@ mod tests {
         assert_eq!(card.body.origin_kind, "loopback");
         assert_eq!(card.body.launch, "engine");
         assert!(card.body.has_local_directory);
+        assert!(!card.body.has_policies_dir);
+        assert!(!card.display_block.contains("policies"));
     }
 
     #[test]
@@ -395,7 +407,16 @@ mod tests {
         assert!(written.body.written);
         assert!(root.join("main.bean").is_file());
         assert!(root.join(APP_MARKER).is_file());
+        assert!(root.join("policies/README.md").is_file());
         assert!(!written.display_block.contains(root.to_str().unwrap()));
+        let connected = get_connection_card(Some(&store)).unwrap();
+        assert!(connected.body.has_policies_dir);
+        assert!(
+            connected
+                .display_block
+                .contains("A policies folder is present.")
+        );
+        assert!(!connected.display_block.contains(root.to_str().unwrap()));
 
         let again = init_ledger_card(
             Some(&store),

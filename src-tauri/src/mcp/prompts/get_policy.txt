@@ -1,0 +1,1 @@
+Read one Markdown policy file from the Settings work folder policies directory. name is a relative path from list_policies, such as README.md. Check policies before posting and re-verify entries against them after writing when any exist. Does not need Fava.

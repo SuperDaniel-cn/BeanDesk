@@ -38,6 +38,7 @@ pub fn init_ledger_tree(directory: &Path) -> Result<(), String> {
     fs::create_dir_all(directory.join("config")).map_err(|error| error.to_string())?;
     fs::create_dir_all(&year_dir).map_err(|error| error.to_string())?;
     fs::create_dir_all(directory.join("documents")).map_err(|error| error.to_string())?;
+    fs::create_dir_all(directory.join("policies")).map_err(|error| error.to_string())?;
 
     let month_file = format!("{year}-{month:02}.bean");
     let main = format!(
@@ -54,6 +55,7 @@ pub fn init_ledger_tree(directory: &Path) -> Result<(), String> {
     write_new(year_dir.join(format!("{year}.bean")), &year_index)?;
     write_new(year_dir.join(&month_file), "")?;
     write_new(directory.join(".gitignore"), BACKUP_GITIGNORE)?;
+    write_new(directory.join("policies/README.md"), POLICIES_README)?;
     write_new(directory.join(APP_MARKER), "beandesk\n")?;
     Ok(())
 }
@@ -69,6 +71,16 @@ pub const BACKUP_GITIGNORE: &str = "\
 .env
 backups/
 .DS_Store
+";
+
+pub const POLICIES_README: &str = "\
+# Bookkeeping policies
+
+General posting rules are in the bundled handbook. Extra Markdown files in this folder are additional rules for a local agent. This folder is optional: without it, posting still works.
+
+# 记账策略
+
+通用记账规范见桌面手册。把额外的 Markdown 放进此目录后，本机 Agent 即可读取。没有此目录不影响记账。
 ";
 
 pub fn ensure_backup_gitignore(directory: &Path) -> Result<(), String> {
@@ -123,6 +135,9 @@ mod tests {
         assert!(root.join("main.bean").is_file());
         assert!(root.join("config/accounts.bean").is_file());
         assert!(root.join("documents").is_dir());
+        let policies = fs::read_to_string(root.join("policies/README.md")).unwrap();
+        assert!(policies.contains("Bookkeeping policies"));
+        assert!(policies.contains("记账策略"));
         let main = fs::read_to_string(root.join("main.bean")).unwrap();
         assert!(main.contains("option \"documents\" \"documents\""));
         let ignore = fs::read_to_string(root.join(".gitignore")).unwrap();

@@ -30,7 +30,9 @@ BeanDesk 配合 Beancount 记录企业日常经营收支。所有的交易分录
 │   └── YYYY/
 │       ├── YYYY.bean
 │       └── YYYY-MM.bean
-└── documents/
+├── documents/
+└── policies/
+    └── README.md
 ```
 
 - `.beandesk`：标识该工作目录为 BeanDesk 初始化的标准账本。拥有此标记才可在桌面端的“备份”页中配置 Git 自动快照与 restic 加密备份（缺少此标记时，备份操作保持停用）。
@@ -38,6 +40,7 @@ BeanDesk 配合 Beancount 记录企业日常经营收支。所有的交易分录
 - `config/accounts.bean`：科目字典文件。所有在分录中使用的会计科目，必须先在此文件中声明开立（`open`）。
 - `data/YYYY/YYYY-MM.bean`：按月份归档的具体交易分录文件。年度索引文件 `data/YYYY/YYYY.bean` 负责汇总引入每个月份。
 - `documents/`：原始凭证归档目录，存放电子发票、银行回单与合同扫描件。
+- `policies/`：可选的额外过账规则（Markdown）。没有此目录不影响记账；有则本机 Agent 应先读取再过账。`check_ledger` / `bean-check` 只检查语法与平衡，不检查这些规则是否已执行。
 - `.gitignore`：版本控制忽略配置，默认忽略备份密钥（`.backup_key`）、环境配置（`.env`）与备份归档目录（`backups/`）。
 
 ## 凭证归档与穿透预览

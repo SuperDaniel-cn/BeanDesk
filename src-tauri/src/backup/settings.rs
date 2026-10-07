@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-pub const SNAPSHOT_PATHS: [&str; 4] = ["main.bean", "config", "data", "documents"];
+pub const SNAPSHOT_PATHS: [&str; 5] = ["main.bean", "config", "data", "documents", "policies"];
 /// Git stays on the ledger text. Voucher files belong in the restic repositories.
-pub const GIT_PATHS: [&str; 3] = ["main.bean", "config", "data"];
+pub const GIT_PATHS: [&str; 4] = ["main.bean", "config", "data", "policies"];
 pub const KEY_FILE: &str = ".backup_key";
 pub const DEFAULT_DEBOUNCE_SECS: u32 = 5;
 pub const HOST: &str = "beandesk";
@@ -668,8 +668,11 @@ mod tests {
 
     #[test]
     fn snapshot_paths_are_the_ledger_trees() {
-        assert_eq!(SNAPSHOT_PATHS, ["main.bean", "config", "data", "documents"]);
-        assert_eq!(GIT_PATHS, ["main.bean", "config", "data"]);
+        assert_eq!(
+            SNAPSHOT_PATHS,
+            ["main.bean", "config", "data", "documents", "policies"]
+        );
+        assert_eq!(GIT_PATHS, ["main.bean", "config", "data", "policies"]);
         assert_eq!(bucket_lookup(true), "path");
         assert_eq!(bucket_lookup(false), "dns");
         assert_eq!(

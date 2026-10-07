@@ -9,7 +9,7 @@ In Settings → Ledger Connection, choose an empty directory. To prevent overwri
 
 ## 2. Initialize Ledger
 
-Click Initialize Ledger. BeanDesk generates the standard Beancount directory structure (`main.bean`, `config/`, `data/`, and `documents/`) alongside a `.beandesk` marker.
+Click Initialize Ledger. BeanDesk generates the standard Beancount directory structure (`main.bean`, `config/`, `data/`, `documents/`, and `policies/`) alongside a `.beandesk` marker.
 
 Subsequent bookkeeping is performed by editing monthly `.bean` files under `data/` in your preferred text editor. BeanDesk provides read-only financial reporting.
 
@@ -21,8 +21,8 @@ In Ledger Connection, click Connect. The default mode uses the bundled engine. Y
 
 In Settings → Backup, configure dual local backup protections:
 
-- Git Auto-Snapshot: Watches core ledger files (`main.bean`, `config/`, and `data/`). Takes an initial snapshot when watching begins, then creates local commits with debounce upon file modifications. Commits remain strictly local; credentials and receipt files are excluded from Git and never pushed.
-- restic Encrypted Backup: Client-side encrypted incremental backups to local folders or S3-compatible buckets, covering the entire ledger and `documents/` receipts.
+- Git Auto-Snapshot: Watches core ledger files (`main.bean`, `config/`, `data/`, and `policies/`). Takes an initial snapshot when watching begins, then creates local commits with debounce upon file modifications. Commits remain strictly local; credentials and receipt files are excluded from Git and never pushed.
+- restic Encrypted Backup: Client-side encrypted incremental backups to local folders or S3-compatible buckets, covering the ledger, `documents/` receipts, and `policies/`.
   - Passphrase: Setting an encryption key requires confirmation; lost keys cannot be recovered.
   - Backup Now: Manually triggers an on-demand incremental backup.
   - Automatic Backup: When enabled, file changes automatically sync to all ready destinations.

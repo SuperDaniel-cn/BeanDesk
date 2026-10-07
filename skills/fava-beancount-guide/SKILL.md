@@ -36,11 +36,14 @@ fava --host 127.0.0.1 --port 5000 main.bean
 │   └── YYYY/
 │       ├── YYYY.bean
 │       └── YYYY-MM.bean
-└── documents/
+├── documents/
+└── policies/
+    └── README.md
 ```
 
 - `.beandesk`：标识为 BeanDesk 标准账本。缺少该标记时，桌面端备份与快照功能保持停用。
 - `.gitignore`：必须忽略 `.backup_key`、`.env` 与 `backups/`。
+- `policies/`：可选。没有此目录不影响记账。有则过账前先用 MCP `list_policies` / `get_policy` 读取其中的 Markdown。`check_ledger` 只检查语法与平衡，不检查这些规则是否已执行。
 - `main.bean`：主入口文件，必须声明 `option "documents" "documents"` 以启用凭证自动扫描：
 
 ```beancount
@@ -86,14 +89,15 @@ include "data/YYYY/YYYY.bean"
 
 ## 3. 记一笔账（标准操作流程）
 
-查账优先使用 BeanDesk MCP 的只读工具（`get_ledger`、`run_bql`、报表工具、`get_journal`）。修改分录直接编辑工作目录文件，不要调用 Fava 的写入接口。
+查账优先使用 BeanDesk MCP 的只读工具（`get_ledger`、`run_bql`、报表工具、`get_journal`）。修改分录直接编辑工作目录文件，不要调用 Fava 的写入接口。记账需要能写账本目录的本机 Agent；把单据放进云端对话会把文件送出本机。
 
 1. **确认账本目录**：可通过 MCP `get_connection` 核对当前生效的工作目录。
-2. **提取凭据信息**：核对日期、对方单位（payee）、摘要（narration）、金额与收付款账户，确保三流一致。
-3. **归档凭证单据**：将发票或银行回单放入 `documents/` 下对应科目的子目录，文件名日期与交易对齐。
-4. **编写交易分录**：将分录录入当月文件 `data/YYYY/YYYY-MM.bean`，并在 `data/YYYY/YYYY.bean` 中显式 `include`。只使用已 `open` 的科目。
-5. **语法与平衡校验**：在账本目录下运行 `bean-check main.bean`，或通过 MCP 调用 `check_ledger`。
-6. **报表与凭证穿透确认**：在 BeanDesk 界面或通过 MCP 查看财务报表与日记账，核对单据已正常建立预览关联。
+2. **读取额外策略**：若工作目录有 `policies/`，先 `list_policies` 再 `get_policy`，按其中 Markdown 过账。没有该目录则跳过。
+3. **提取凭据信息**：核对日期、对方单位（payee）、摘要（narration）、金额与收付款账户，确保三流一致。
+4. **归档凭证单据**：将发票或银行回单放入 `documents/` 下对应科目的子目录，文件名日期与交易对齐。
+5. **编写交易分录**：将分录录入当月文件 `data/YYYY/YYYY-MM.bean`，并在 `data/YYYY/YYYY.bean` 中显式 `include`。只使用已 `open` 的科目。
+6. **语法与平衡校验**：在账本目录下运行 `bean-check main.bean`，或通过 MCP 调用 `check_ledger`。这只检查语法与平衡，不代替上一步的策略。
+7. **报表与凭证穿透确认**：在 BeanDesk 界面或通过 MCP 查看财务报表与日记账，核对单据已正常建立预览关联。
 
 ## 4. 上游版本与排错
 

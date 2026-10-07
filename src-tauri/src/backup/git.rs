@@ -132,6 +132,9 @@ mod tests {
         assert_eq!(snapshot(&root).unwrap(), None);
         fs::write(root.join("data/2026-10.bean"), "2026-10-01 * \"rent\"\n").unwrap();
         assert!(snapshot(&root).unwrap().is_some());
+        fs::create_dir_all(root.join("policies")).unwrap();
+        fs::write(root.join("policies/README.md"), "# policy\n").unwrap();
+        assert!(snapshot(&root).unwrap().is_some());
         let _ = fs::remove_dir_all(&root);
     }
 
