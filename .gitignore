@@ -26,3 +26,6 @@ engine/__pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# Demo ledgers
+demo/
