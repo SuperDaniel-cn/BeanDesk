@@ -82,6 +82,7 @@ impl Supervisor {
     ///
     /// The Windows engine is a windowed exe. `cmd /C` returns as soon as that
     /// process is created, so a shell start would look like an instant exit.
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub fn start_program(
         &mut self,
         directory: &Path,
@@ -247,6 +248,7 @@ pub fn accepts_local_origin(origin: &str) -> bool {
     matches!(host, "localhost" | "127.0.0.1" | "::1")
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 fn forward_stdio(stdout: Option<ChildStdout>, stderr: Option<ChildStderr>) {
     fn pump(stream: impl std::io::Read + Send + 'static) {
         thread::spawn(move || {
