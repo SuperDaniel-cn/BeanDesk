@@ -17,6 +17,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
       TAG: ${{ github.event.release.tag_name }}
       NOTES: ${{ github.event.release.body }}
     steps:
