@@ -215,22 +215,23 @@ export class FavaClient {
     if (!got.ok && got.status === 404 && !readLedgerSlug() && (await this.rediscoverSlug())) {
       got = await this.readJson(`${this.prefix()}/${this.slug}${path}`, signal)
     }
-    if (!got.ok) throw new Error(got.detail)
+    if (!got.ok) {
+      throw new Error(got.body.error ? String(got.body.error) : `${got.status} ${got.statusText}`)
+    }
     return got.body
   }
 
   private async readJson(
     url: string,
     signal?: AbortSignal,
-  ): Promise<{ ok: boolean; status: number; body: { data?: unknown; error?: string }; detail: string }> {
+  ): Promise<{ ok: boolean; status: number; statusText: string; body: { data?: unknown; error?: string } }> {
     const res = await this.request(url, { signal })
     const json = (await res.json().catch(() => null)) as { data?: unknown; error?: string } | null
-    const body = json ?? {}
     return {
       ok: res.ok,
       status: res.status,
-      body,
-      detail: body.error ? String(body.error) : `${res.status} ${res.statusText}`,
+      statusText: res.statusText,
+      body: json ?? {},
     }
   }
 
