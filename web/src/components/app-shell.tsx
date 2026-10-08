@@ -1,9 +1,9 @@
-import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
 import { isTauri } from '@tauri-apps/api/core'
 import { NavLink, useLocation } from 'react-router'
 import { BookOpenText, CalendarDays, Menu, Settings } from 'lucide-react'
 
-import { REPORT_PAGES } from '@/app-pages'
+import { REPORT_PAGES, navLabelKey } from '@/app-pages'
 import { BrandMark } from '@/components/brand-mark'
 import { LedgerErrors } from '@/components/ledger-errors'
 import { StartupLoading, useStartupScreen } from '@/components/startup-loading'
@@ -17,6 +17,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import { useTheme } from '@/components/theme-provider'
+import { Hint } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { openHandbookWindow } from '@/lib/handbook-window'
 import { cn } from '@/lib/utils'
@@ -90,7 +91,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className={cn('flex flex-col bg-background', settingsDesktop || calendarPage ? 'h-svh overflow-hidden' : 'min-h-svh')}>
       <header className="sticky top-0 z-20 border-b bg-background/85 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-1 px-2 sm:gap-2 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
                 <Button
@@ -151,30 +152,37 @@ export function AppShell({ children }: { children: ReactNode }) {
 
             <NavLink
               to="/"
-              className="flex items-center gap-1.5 whitespace-nowrap font-heading text-sm font-semibold tracking-tight"
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap font-heading text-sm font-semibold tracking-tight"
             >
               <BrandMark />
               <span>{brand}</span>
             </NavLink>
           </div>
 
-          <nav className="hidden md:flex items-center gap-0.5">
-            {REPORT_PAGES.map(({ path, key }) => (
-              <NavLink
-                key={path}
-                to={path}
-                end={path === '/'}
-                className={({ isActive }) =>
-                  cn(
-                    buttonVariants({
-                      variant: isActive ? 'secondary' : 'ghost',
-                    }),
-                  )
-                }
-              >
-                {t(key)}
-              </NavLink>
-            ))}
+          <nav className="hidden md:flex min-w-0 items-center gap-0.5">
+            {REPORT_PAGES.map((page) => {
+              const { path, key, navKey } = page
+              const link = (
+                <NavLink
+                  to={path}
+                  end={path === '/'}
+                  className={({ isActive }) =>
+                    cn(
+                      buttonVariants({
+                        variant: isActive ? 'secondary' : 'ghost',
+                      }),
+                    )
+                  }
+                >
+                  {t(navLabelKey(page))}
+                </NavLink>
+              )
+              return (
+                <Fragment key={path}>
+                  {navKey ? <Hint label={t(key)}>{link}</Hint> : link}
+                </Fragment>
+              )
+            })}
           </nav>
 
           <div className="flex items-center gap-1 sm:gap-2">

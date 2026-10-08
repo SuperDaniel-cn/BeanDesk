@@ -152,7 +152,10 @@ jobs:
           projectPath: src-tauri
           tagName: v__VERSION__
           releaseName: BeanDesk v__VERSION__
-          releaseBody: Installers for macOS, Windows, and Linux. This version has no mobile build.
+          releaseBody: |
+            Dated TOML policy rules after bean-check, silent report refresh when Fava reloads the ledger, Connect stays on the right in English Settings, MCP report schemas Cursor can parse, the update dialog shows these notes, and the English nav shortens Documents so the brand does not collapse.
+
+            Installers for macOS, Windows, and Linux. This version has no mobile build.
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true

@@ -1,4 +1,4 @@
-use schemars::JsonSchema;
+use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -55,6 +55,7 @@ pub(crate) struct QueryBody {
     pub row_count: usize,
     pub truncated: bool,
     pub types: Vec<String>,
+    #[schemars(schema_with = "json_value_array")]
     pub rows: Vec<Value>,
     pub time: String,
     pub slug: String,
@@ -66,7 +67,21 @@ pub(crate) struct ReportBody {
     pub time: String,
     pub slug: String,
     pub roots: Vec<String>,
+    #[schemars(schema_with = "opaque_json_object")]
     pub data: Value,
+}
+
+fn opaque_json_object(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    json_schema!({
+        "type": "object",
+        "additionalProperties": true
+    })
+}
+
+fn json_value_array(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    json_schema!({
+        "type": "array"
+    })
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -391,11 +406,27 @@ fn collect_accounts(nodes: Option<&Value>, names: &mut Vec<String>, limit: usize
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mcp::card::Card;
     use crate::mcp::tools::fixture_store;
+    use rmcp::handler::server::tool::schema_for_output;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::{Arc, Mutex};
     use std::thread;
+
+    #[test]
+    fn report_and_query_schemas_keep_object_shaped_payloads() {
+        let report = schema_for_output::<Card<ReportBody>>();
+        let data = &report["properties"]["data"];
+        assert!(!data.is_boolean(), "{data}");
+        assert_eq!(data["type"], "object");
+
+        let query = schema_for_output::<Card<QueryBody>>();
+        let rows = &query["properties"]["rows"];
+        assert!(!rows.is_boolean(), "{rows}");
+        assert_eq!(rows["type"], "array");
+        assert!(rows.get("items").is_none_or(|items| !items.is_boolean()));
+    }
 
     fn store_for(origin: &str) -> Value {
         let mut store = fixture_store("/private/tmp/named-repo-must-not-appear", "local");

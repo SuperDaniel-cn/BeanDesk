@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useI18n } from '@/i18n'
+import { updateNotes } from '@/lib/update-notes'
 
 type Phase = 'idle' | 'checking' | 'installing' | 'none' | 'failed'
 
@@ -63,6 +64,8 @@ export function AppUpdate({ children }: { children: ReactNode }) {
     void check(false)
   }, [check])
 
+  const notes = updateNotes(pending?.body)
+
   const install = useCallback(async () => {
     const update = pendingRef.current
     if (!update) return
@@ -87,13 +90,18 @@ export function AppUpdate({ children }: { children: ReactNode }) {
             if (!open && phase !== 'installing') replacePending(null)
           }}
         >
-          <DialogContent showCloseButton={false}>
+          <DialogContent showCloseButton={false} className={notes ? 'sm:max-w-lg' : undefined}>
             <DialogHeader>
               <DialogTitle>{t('update.title')}</DialogTitle>
               <DialogDescription>
                 {pending ? t('update.available', { version: pending.version }) : null}
               </DialogDescription>
             </DialogHeader>
+            {notes ? (
+              <div className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg border bg-muted/40 px-3 py-2 text-muted-foreground">
+                {notes}
+              </div>
+            ) : null}
             <DialogFooter>
               <Button
                 variant="outline"

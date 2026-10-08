@@ -433,6 +433,7 @@ export const en = {
 
   documents: {
     title: 'Documents & Evidentiary Records',
+    nav: 'Documents',
     searchPlaceholder: 'Search file or account…',
     date: 'Date',
     account: 'Account',
