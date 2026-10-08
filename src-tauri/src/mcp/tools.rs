@@ -486,6 +486,7 @@ mod tests {
         .unwrap();
         assert!(written.body.written);
         assert!(root.join("main.bean").is_file());
+        assert!(root.join("config/commodities.bean").is_file());
         assert!(root.join(APP_MARKER).is_file());
         assert!(root.join("policies/README.md").is_file());
         assert!(!written.display_block.contains(root.to_str().unwrap()));

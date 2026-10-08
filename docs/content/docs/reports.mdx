@@ -24,9 +24,9 @@ Computed via the direct method in pure functions, separating net cash flows acro
 Cash flow mappings rely on metadata on Beancount account opening directives (`open`):
 
 ```beancount
-2020-01-01 open Assets:Bank:Checking CNY
+2020-01-01 open Assets:Bank-银行存款:Main-XX银行对公户 CNY
   cash: TRUE
-2020-01-01 open Income:Services:Delivery CNY
+2020-01-01 open Income:Service-主营业务收入:Tech-软件定制开发 CNY
   cashflow: "sales"
 ```
 
@@ -57,7 +57,7 @@ Standard ledgers initialized by BeanDesk include preconfigured cash metadata for
 
 The journal offers multi-dimensional filtering across counterparty, narration, accounting element, and tags. The document column opens a dialog with the postings and linked files. A failed load shows an error and a retry, not an empty book.
 
-- Document Linking: A file under `documents/` is automatically linked when its date and account path match a posting, or when the file name contains the transaction's unique link token.
+- Document Linking: A file under `documents/` is automatically linked when its date and account path match a posting, or when the file name contains the transaction's link string (the `^link` directive from postings with the caret prefix stripped).
 - Document Repository: The Documents page centrally indexes all receipts and invoices archived within the active accounting period.
 
 ## BQL Query Console

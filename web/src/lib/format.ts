@@ -18,13 +18,15 @@ export function fileLeaf(filename: string): string {
   return filename.split('/').pop() || filename
 }
 
-/** Leaf names are `English-中文`. Show the Chinese segment when it is there. */
+/** `English-中文` leaves, or a full path of them. Skip ASCII-only segments. */
 export function displayAccountName(name: string): string {
-  const hyphen = name.lastIndexOf('-')
-  if (hyphen < 0) return name
-  const tail = name.slice(hyphen + 1)
-  if (tail && /[\u4e00-\u9fff]/.test(tail)) return tail
-  return name
+  const labels = name.split(':').flatMap((segment) => {
+    const hyphen = segment.lastIndexOf('-')
+    if (hyphen < 0) return []
+    const tail = segment.slice(hyphen + 1)
+    return /[\u4e00-\u9fff]/.test(tail) ? [tail] : []
+  })
+  return labels.length > 0 ? labels.join(' · ') : name
 }
 
 /** Flip a Beancount-native figure so income/profit/owed-money reads positive. */
@@ -107,14 +109,17 @@ function finiteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-/** Account paths show the Chinese leaf. Every other cell stays a BQL value. */
+/** Account paths show the Chinese labels. Every other cell stays a BQL value. */
 export function presentQueryCell(cell: unknown, locale: string): string {
   if (typeof cell === 'string' && looksLikeAccount(cell)) return displayAccountName(cell)
   return formatQueryValue(cell, locale)
 }
 
-function looksLikeAccount(value: string): boolean {
-  return /^[A-Za-z][A-Za-z0-9-]*(?::[A-Za-z0-9][A-Za-z0-9-]*)*(?:-[\u4e00-\u9fff].*)?$/.test(value)
+export function looksLikeAccount(value: string): boolean {
+  if (typeof value !== 'string' || !value.includes(':')) return false
+  const parts = value.split(':')
+  if (parts.length < 2) return false
+  return parts.every((part) => /^[A-Z][A-Za-z0-9-]*(?:-[^\s:]+)?$/.test(part))
 }
 
 /** One comparable value for a result column. Null sorts last. */

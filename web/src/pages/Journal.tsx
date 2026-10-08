@@ -52,6 +52,7 @@ import {
   type PostingItem,
   type TransactionEntry,
 } from '@/lib/api'
+import { displayAccountName } from '@/lib/format'
 import { explainFavaError } from '@/lib/fava-error'
 import { favaClient } from '@/lib/fava-client'
 import {
@@ -322,10 +323,10 @@ export function Journal() {
                             <TagList tags={tx.tags} />
                           </div>
                         </TableCell>
-                        <TableCell className="w-[26%] overflow-hidden align-top">
+                        <TableCell className="w-[26%] overflow-hidden align-top whitespace-normal">
                           <PostingStack postings={debit} />
                         </TableCell>
-                        <TableCell className="w-[26%] overflow-hidden align-top border-l">
+                        <TableCell className="w-[26%] overflow-hidden align-top whitespace-normal border-l">
                           {debit.length > 0 ? <PostingOffset /> : null}
                           <PostingStack postings={credit} />
                         </TableCell>
@@ -355,7 +356,7 @@ export function Journal() {
 
       {/* Centered Modal / Dialog for Selected Transaction & Documents */}
       <Dialog open={!!selectedTx} onOpenChange={(open) => !open && setSelectedTx(null)}>
-        <DialogContent className="w-full max-w-[calc(100%-1.5rem)] min-w-0 sm:max-w-3xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
+        <DialogContent className="w-full max-w-[calc(100%-1.5rem)] min-w-0 sm:max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 rounded-2xl">
           {selectedTx && (
             <>
               <DialogHeader>
@@ -434,7 +435,11 @@ function PostingStack({ postings }: { postings: PostingItem[] }) {
               tone === 'destructive' && 'bg-destructive/10',
             )}
           >
-            <OneLine text={posting.account} className="font-mono text-xs text-muted-foreground" />
+            <OneLine
+              text={displayAccountName(posting.account)}
+              detail={posting.account}
+              className="text-xs text-muted-foreground"
+            />
             <span
               className={cn(
                 'shrink-0 font-mono text-xs tabular-nums',
@@ -451,6 +456,10 @@ function PostingStack({ postings }: { postings: PostingItem[] }) {
   )
 }
 
+/**
+ * 满足复式记账的传统排版：贷方科目相对借方整体下移一行（梯形错位），
+ * 对应会计分录“借在上方、贷在下方”的排版习惯。此处的上下偏移属于有意设计，请勿移除。
+ */
 function PostingOffset() {
   return <div className="h-6" aria-hidden="true" />
 }
@@ -459,19 +468,19 @@ function TAccount({ postings }: { postings: PostingItem[] }) {
   const { t } = useI18n()
   const { debit, credit } = splitPostings(postings)
   return (
-    <Table>
+    <Table className="table-fixed">
       <TableHeader>
         <TableRow>
-          <TableHead>{t('journal.debit')}</TableHead>
-          <TableHead className="border-l">{t('journal.credit')}</TableHead>
+          <TableHead className="w-1/2">{t('journal.debit')}</TableHead>
+          <TableHead className="w-1/2 border-l">{t('journal.credit')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         <TableRow>
-          <TableCell className="w-1/2 max-w-0 align-top">
+          <TableCell className="max-w-0 align-top whitespace-normal">
             <PostingStack postings={debit} />
           </TableCell>
-          <TableCell className="w-1/2 max-w-0 align-top border-l">
+          <TableCell className="max-w-0 align-top whitespace-normal border-l">
             {debit.length > 0 ? <PostingOffset /> : null}
             <PostingStack postings={credit} />
           </TableCell>

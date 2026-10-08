@@ -10,7 +10,7 @@ BeanDesk 配合 Beancount 记录企业日常经营收支。所有的交易分录
 进行企业账目记录时，建议遵循以下基本规范：
 
 - **财产独立**：公司账目仅记录对公经营收支，股东个人消费与家庭支出不入账。
-- **垫资与资本分开**：股东或法人向公司垫付周转资金，应记入对公负债科目（如 `Liabilities:Owner:Advance`），与公司的实收资本（`Equity:Capital`）严格区分；公司还款时摘要注明“还股东借款”或“还垫付款”。
+- **垫资与资本分开**：股东或法人向公司垫付周转资金，应记入对公负债科目（如 `Liabilities:Owner-股东往来:Advance-法人垫资借款`），与公司的实收资本（`Equity:Capital-实收资本:PaidIn-股东出资`）严格区分；公司还款时摘要注明“还股东借款”或“还垫付款”。
 - **三流一致**：对外发生收付款业务时，业务合同签约方、发票开具或购买方抬头、银行对公账户主体三者保持一致。
 - **凭证链条完整**：每笔经营收入与支出尽可能归档原始发票、对公电子回单或结算对账单。
 - **月末余额对账**：Beancount 的余额断言（`balance`）在指定日期的零点生效。校验月末公户余额时，日期应填次月首日。
@@ -25,6 +25,7 @@ BeanDesk 配合 Beancount 记录企业日常经营收支。所有的交易分录
 ├── .gitignore
 ├── main.bean
 ├── config/
+│   ├── commodities.bean
 │   └── accounts.bean
 ├── data/
 │   └── YYYY/
@@ -36,8 +37,9 @@ BeanDesk 配合 Beancount 记录企业日常经营收支。所有的交易分录
 ```
 
 - `.beandesk`：标识该工作目录为 BeanDesk 初始化的标准账本。拥有此标记才可在桌面端的“备份”页中配置 Git 自动快照与 restic 加密备份（缺少此标记时，备份操作保持停用）。
-- `main.bean`：账本主入口文件，声明币种并引入配置与数据。文件中必须包含 `option "documents" "documents"`，以开启凭证目录的自动扫描与关联。
-- `config/accounts.bean`：科目字典文件。所有在分录中使用的会计科目，必须先在此文件中声明开立（`open`）。
+- `main.bean`：账本主入口文件，声明币种并引入 `config/commodities.bean`、`config/accounts.bean` 与年度数据。文件中必须包含 `option "documents" "documents"`，以开启凭证目录的自动扫描与关联。
+- `config/commodities.bean`：商品定义。初始化默认写入人民币 `CNY` 与美元 `USD`。
+- `config/accounts.bean`：科目字典文件。初始化默认写入小微企业标准中文科目模板（遵循连字符命名规范：`大写英文前缀-中文名称`）。所有在分录中使用的会计科目，必须先在此文件中声明开立（`open`）。科目名本身须包含中文，行末注释无法在报表中呈现。
 - `data/YYYY/YYYY-MM.bean`：按月份归档的具体交易分录文件。年度索引文件 `data/YYYY/YYYY.bean` 负责汇总引入每个月份。
 - `documents/`：原始凭证归档目录，存放电子发票、银行回单与合同扫描件。
 - `policies/`：可选的记账与合规策略目录。未创建时不影响基础记账。目录内可存放业务指引（Markdown 文件，供 AI 助手过账前阅读特定科目与凭证要求）与机器规则（TOML 文件，每条需指定生效起始日期 `from`，可选指定失效日期 `until`，不含当天）。若配置了 TOML 规则，`check_ledger` 会在确认基础语法与金额平衡后，自动对区间内的分录执行格式与规则核查。本检查仅供格式合规参考，不代替正式税务审计。
@@ -45,20 +47,20 @@ BeanDesk 配合 Beancount 记录企业日常经营收支。所有的交易分录
 
 ## 凭证归档与穿透预览
 
-当公司收到发票或银行电子回单时，将文件存放在 `documents/` 目录下。归档路径与交易科目严格对应，科目层级中的冒号转换为目录分隔符：
+当公司收到发票或银行电子回单时，将文件存放在 `documents/` 目录下。归档路径与交易科目严格对应：将科目层级中的冒号 `:` 转换为目录分隔符 `/`；每个 `大写英文前缀-中文名称` 段落对应一层文件夹，连字符保留在文件夹名中，切勿拆分为两层子目录。
 
 ```
-documents/<科目路径>/YYYY-MM-DD.<说明>.<扩展名>
+documents/<科目层级目录>/YYYY-MM-DD.<业务说明>.<扩展名>
 ```
 
 ### 归档示例
 
-假设开立的银行科目为 `Assets:Bank:Checking`，发生的费用科目为 `Expenses:Operations:Hosting`：
+银行科目 `Assets:Bank-银行存款:Main-XX银行对公户`，费用科目 `Expenses:Operations-主营业务成本:Cloud-云计算与算力`：
 
-- **银行回单**：存入 `documents/Assets/Bank/Checking/2026-02-10.银行回单-云服务扣款.pdf`
-- **采购发票**：存入 `documents/Expenses/Operations/Hosting/2026-02-10.XX云算力服务发票.pdf`
+- **银行回单**：`documents/Assets/Bank-银行存款/Main-XX银行对公户/2026-02-10.银行回单-云服务扣款.pdf`
+- **采购发票**：`documents/Expenses/Operations-主营业务成本/Cloud-云计算与算力/2026-02-10.XX云算力服务发票.pdf`
 
-当凭证文件的日期（`YYYY-MM-DD`）与科目子目录路径均与分录完全匹配（或文件名包含该笔交易的唯一 link 标记）时，BeanDesk 才会自动建立关联。在软件的“日记账”页面中点击凭证列，即可直接弹窗预览原始文件。
+当凭证文件的日期（`YYYY-MM-DD`）与科目子目录路径均与分录完全匹配（或文件名包含该笔交易的 link 字符串，分录中声明的 ^link 提取后不含 ^ 前缀）时，BeanDesk 才会自动建立关联。在软件的“日记账”页面中点击凭证列，即可直接弹窗预览原始文件。
 
 ## 日常记账操作流（实战演练）
 
@@ -68,22 +70,22 @@ documents/<科目路径>/YYYY-MM-DD.<说明>.<扩展名>
 在 `config/accounts.bean` 中确认使用的科目已经 `open`。如果需要开立新科目，货币资金账户需标注 `cash: TRUE`；业务收支科目需标注现金流量表分类（`cashflow: "..."`）：
 
 ```beancount
-2020-01-01 open Assets:Bank:Checking CNY
+2020-01-01 open Assets:Bank-银行存款:Main-XX银行对公户 CNY
   cash: TRUE
-2020-01-01 open Expenses:Operations:Hosting CNY
-  cashflow: "operating-other-out"
+2020-01-01 open Expenses:Operations-主营业务成本:Cloud-云计算与算力 CNY
+  cashflow: "purchases"
 ```
 
 ### 2. 存放凭证文件
 将获取的发票或电子回单按规范保存至 `documents/` 下对应科目的子目录中。
 
 ### 3. 编写交易分录
-在当月数据文件（例如 `data/2026/2026-02.bean`）中录入分录：
+在当月数据文件（例如 `data/2026/2026-02.bean`）中录入分录，并在 `data/2026/2026.bean` 中通过 `include` 引入该月（初始化账本已默认包含当月）：
 
 ```beancount
 2026-02-10 * "XX云网络技术有限公司" "采购年度云服务器及带宽" #cloud #invoice
-  Expenses:Operations:Hosting      1200.00 CNY
-  Assets:Bank:Checking            -1200.00 CNY
+  Expenses:Operations-主营业务成本:Cloud-云计算与算力      1200.00 CNY
+  Assets:Bank-银行存款:Main-XX银行对公户                 -1200.00 CNY
 ```
 
 ### 4. 校验与报表查看

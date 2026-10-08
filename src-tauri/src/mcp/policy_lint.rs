@@ -647,7 +647,7 @@ fn is_account(value: &str) -> bool {
     value.split(':').all(|part| {
         let mut chars = part.chars();
         matches!(chars.next(), Some(first) if first.is_ascii_uppercase())
-            && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+            && chars.all(|ch| ch.is_alphanumeric() || ch == '-')
     })
 }
 
@@ -978,6 +978,52 @@ require_payee = true
         write(
             &root.join("data/2026/2026-01.bean"),
             "2026-01-10 * \"Vendor\" \"Cloud\" #ok\n  Expenses:Operations:Hosting   10.00 CNY\n  Assets:Bank:Checking        -10.00 CNY\n",
+        );
+        assert!(checked(&root).is_empty());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn chinese_account_names_matched_by_rules() {
+        assert!(is_account("Assets:Bank-银行存款:Main-XX银行对公户"));
+        assert!(is_account("Expenses:Payroll-员工薪酬:Salary-研发基本工资"));
+        assert!(account_matches(
+            "Assets:Bank-银行存款:*",
+            "Assets:Bank-银行存款:Main-XX银行对公户"
+        ));
+
+        let root = temp_dir("chinese-accounts");
+        write(
+            &root.join("policies/salary.toml"),
+            r#"
+[[rules]]
+id = "rd-tag"
+description = "研发薪酬必须附带 #rd 标签"
+severity = "error"
+from = "2026-01-01"
+account = "Expenses:Payroll-员工薪酬:Salary-研发基本工资"
+require_tag = "rd"
+"#,
+        );
+        write(
+            &root.join("data/2026/2026-01.bean"),
+            r#"2026-01-15 * "XX公司" "发薪"
+  Expenses:Payroll-员工薪酬:Salary-研发基本工资   8000.00 CNY
+  Assets:Bank-银行存款:Main-XX银行对公户        -8000.00 CNY
+"#,
+        );
+        let violations = checked(&root);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].rule_id, "rd-tag");
+        assert_eq!(violations[0].line, 1);
+
+        // Now with tag #rd, it passes
+        write(
+            &root.join("data/2026/2026-01.bean"),
+            r#"2026-01-15 * "XX公司" "发薪" #rd
+  Expenses:Payroll-员工薪酬:Salary-研发基本工资   8000.00 CNY
+  Assets:Bank-银行存款:Main-XX银行对公户        -8000.00 CNY
+"#,
         );
         assert!(checked(&root).is_empty());
         let _ = fs::remove_dir_all(&root);

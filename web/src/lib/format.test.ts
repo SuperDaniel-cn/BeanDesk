@@ -26,6 +26,17 @@ describe('displayAccountName', () => {
     expect(displayAccountName('Opening-Balances-期初平衡')).toBe('期初平衡')
     expect(displayAccountName('Earnings')).toBe('Earnings')
   })
+
+  test('joins Chinese segments on a hyphenated path and skips English roots', () => {
+    expect(displayAccountName('Assets:Bank-银行存款:Main-企业银行基本户')).toBe(
+      '银行存款 · 企业银行基本户',
+    )
+    expect(displayAccountName('Equity:Capital-实收资本:PaidIn-股东实缴出资')).toBe(
+      '实收资本 · 股东实缴出资',
+    )
+    expect(displayAccountName('Assets:Bank:Checking')).toBe('Assets:Bank:Checking')
+    expect(displayAccountName('Assets:Bank-银行存款:Checking')).toBe('银行存款')
+  })
 })
 
 describe('toDisplay', () => {
@@ -116,8 +127,12 @@ describe('formatQueryValue', () => {
     expect(formatQueryValue({ meta: { filename: 'main.bean' } }, 'en-US')).toBe('—')
   })
 
-  test('shows the Chinese leaf of an account path', () => {
+  test('shows the Chinese labels of an account path', () => {
     expect(presentQueryCell('Assets:Bank:Operating-经营户', 'zh-CN')).toBe('经营户')
+    expect(presentQueryCell('Assets:Bank-银行存款:Main-企业银行基本户', 'zh-CN')).toBe(
+      '银行存款 · 企业银行基本户',
+    )
+    expect(presentQueryCell('Assets:Bank-银行存款:SubAccount', 'zh-CN')).toBe('银行存款')
     expect(presentQueryCell('2026-01-31', 'zh-CN')).toBe('2026-01-31')
     expect(presentQueryCell('合同:项目-软件开发', 'zh-CN')).toBe('合同:项目-软件开发')
   })

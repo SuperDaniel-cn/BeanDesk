@@ -4,21 +4,18 @@ use std::path::Path;
 
 use time::OffsetDateTime;
 
-const SAMPLE_ACCOUNTS: &str = "\
-2020-01-01 open Assets:Bank:Checking CNY
-  cash: TRUE
-2020-01-01 open Liabilities:Owner:Advance CNY
-  cashflow-in: \"borrowings\"
-  cashflow-out: \"debt-principal\"
-2020-01-01 open Equity:Capital CNY
-  cashflow: \"capital\"
-2020-01-01 open Income:Services:Delivery CNY
-  cashflow: \"sales\"
-2020-01-01 open Income:Services:Advice CNY
-  cashflow: \"sales\"
-2020-01-01 open Expenses:Operations:Hosting CNY
-  cashflow: \"operating-other-out\"
+const SAMPLE_COMMODITIES: &str = "\
+1970-01-01 commodity CNY
+  name: \"人民币\"
+  precision: 2
+
+1970-01-01 commodity USD
+  name: \"美元\"
+  precision: 2
 ";
+
+const SAMPLE_ACCOUNTS: &str =
+    include_str!("../../skills/fava-beancount-guide/references/accounts-template.bean");
 
 pub fn init_ledger_tree(directory: &Path) -> Result<(), String> {
     if !directory.is_absolute() || !directory.is_dir() {
@@ -45,12 +42,14 @@ pub fn init_ledger_tree(directory: &Path) -> Result<(), String> {
         "option \"title\" \"Ledger\"\n\
          option \"operating_currency\" \"CNY\"\n\
          option \"documents\" \"documents\"\n\
+         include \"config/commodities.bean\"\n\
          include \"config/accounts.bean\"\n\
          include \"data/{year}/{year}.bean\"\n"
     );
     let year_index = format!("include \"{month_file}\"\n");
 
     write_new(directory.join("main.bean"), &main)?;
+    write_new(directory.join("config/commodities.bean"), SAMPLE_COMMODITIES)?;
     write_new(directory.join("config/accounts.bean"), SAMPLE_ACCOUNTS)?;
     write_new(year_dir.join(format!("{year}.bean")), &year_index)?;
     write_new(year_dir.join(&month_file), "")?;
@@ -92,7 +91,7 @@ id = \"rd-tag\"
 description = \"研发支出必须附带 #rd 标签\"
 severity = \"error\"
 from = \"2026-01-01\"
-account = \"Expenses:Operations:RD\"
+account = \"Expenses:Payroll-员工薪酬:Salary-研发基本工资\"
 require_tag = \"rd\"
 ```
 ";
@@ -148,15 +147,21 @@ mod tests {
         init_ledger_tree(&root).unwrap();
         assert!(root.join("main.bean").is_file());
         assert!(root.join("config/accounts.bean").is_file());
+        assert!(root.join("config/commodities.bean").is_file());
         assert!(root.join("documents").is_dir());
         let policies = fs::read_to_string(root.join("policies/README.md")).unwrap();
         assert!(policies.contains("Bookkeeping policies"));
         assert!(policies.contains("记账策略"));
         let main = fs::read_to_string(root.join("main.bean")).unwrap();
         assert!(main.contains("option \"documents\" \"documents\""));
+        assert!(main.contains("include \"config/commodities.bean\""));
         let ignore = fs::read_to_string(root.join(".gitignore")).unwrap();
         assert!(ignore.contains(".backup_key"));
+        let commodities = fs::read_to_string(root.join("config/commodities.bean")).unwrap();
+        assert!(commodities.contains("commodity CNY"));
+        assert!(commodities.contains("commodity USD"));
         let accounts = fs::read_to_string(root.join("config/accounts.bean")).unwrap();
+        assert!(accounts.contains("Assets:Bank-银行存款:Main-XX银行对公户"));
         assert!(accounts.contains("cash: TRUE"));
         assert!(accounts.contains("cashflow: \"sales\""));
         assert!(app_created_ledger(&root));

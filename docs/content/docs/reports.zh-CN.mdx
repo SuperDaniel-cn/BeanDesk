@@ -24,9 +24,9 @@ description: 试算平衡表、三张法定财务报表、日记账与 BQL 查�
 现金流报表通过 Beancount 科目开户指令（`open`）中的元数据完成科目映射：
 
 ```beancount
-2020-01-01 open Assets:Bank:Checking CNY
+2020-01-01 open Assets:Bank-银行存款:Main-XX银行对公户 CNY
   cash: TRUE
-2020-01-01 open Income:Services:Delivery CNY
+2020-01-01 open Income:Service-主营业务收入:Tech-软件定制开发 CNY
   cashflow: "sales"
 ```
 
@@ -57,7 +57,7 @@ description: 试算平衡表、三张法定财务报表、日记账与 BQL 查�
 
 日记账提供按交易对方、摘要、会计要素及业务标签的多维筛选。点凭证列打开明细弹窗，查看分录和关联的发票、回单。加载失败时显示错误和重试，而不是一本空账。
 
-- 凭证关联机制：当 `documents/` 下文件的日期与科目路径与分录行完全匹配，或文件名包含交易的唯一链接标识时，系统将自动建立关联预览。
+- 凭证关联机制：当 `documents/` 下文件的日期与科目路径与分录行完全匹配，或文件名包含交易的链接字符串（分录中声明的 ^link 提取后不含 ^ 前缀）时，系统将自动建立关联预览。
 - 独立凭证库：在凭证页面中集中索引当前会计期间内的全部已归档文件。
 
 ## BQL 查询控制台
