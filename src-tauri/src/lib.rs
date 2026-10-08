@@ -12,7 +12,11 @@ pub use mcp::{is_mcp_launch, run_mcp};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use engine::{resolve_engine, sidecar_command};
+#[cfg(windows)]
+use engine::engine_args;
+use engine::resolve_engine;
+#[cfg(not(windows))]
+use engine::sidecar_command;
 use ledger_init::init_ledger_tree;
 use supervisor::{HostSnapshot, Supervisor, accepts_local_origin};
 use tauri::webview::PageLoadEvent;
@@ -218,19 +222,31 @@ fn start_saved_fava(app: AppHandle, host: State<'_, FavaHost>) -> Result<(), Str
     if !accepts_local_origin(&saved.origin) {
         return Err("loopback".to_string());
     }
-    let command = if bundled_launch(&saved) {
+    backup::start_if_enabled(&app);
+    if bundled_launch(&saved) {
         let engine = resolve_engine(Some(&app))?;
         if let Err(code) = init_ledger_tree(Path::new(&saved.directory)) {
             if code != "ledger-exists" {
                 return Err(code);
             }
         }
-        sidecar_command(&engine, &saved.origin)?
-    } else {
-        saved.command
-    };
-    backup::start_if_enabled(&app);
-    lock(&host).start(Path::new(&saved.directory), &command)
+        #[cfg(windows)]
+        {
+            return lock(&host).start_program(
+                Path::new(&saved.directory),
+                &engine,
+                &engine_args(&saved.origin)?,
+            );
+        }
+        #[cfg(not(windows))]
+        {
+            return lock(&host).start(
+                Path::new(&saved.directory),
+                &sidecar_command(&engine, &saved.origin)?,
+            );
+        }
+    }
+    lock(&host).start(Path::new(&saved.directory), &saved.command)
 }
 
 /// Stop the process group this window started.

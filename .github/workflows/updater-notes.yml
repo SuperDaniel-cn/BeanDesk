@@ -1,0 +1,44 @@
+name: updater-notes
+
+on:
+  release:
+    types: [published, edited]
+
+concurrency:
+  group: updater-notes-${{ github.event.release.tag_name }}
+  cancel-in-progress: true
+
+jobs:
+  notes:
+    if: contains(github.event.release.assets.*.name, 'latest.json')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ github.event.release.tag_name }}
+      NOTES: ${{ github.event.release.body }}
+    steps:
+      - name: copy the GitHub release body into latest.json notes
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          import subprocess
+
+          tag = os.environ["TAG"]
+          notes = os.environ.get("NOTES", "")
+          subprocess.check_call(["gh", "release", "download", tag, "--pattern", "latest.json"])
+          with open("latest.json", encoding="utf-8") as file:
+              data = json.load(file)
+          if data.get("notes") == notes:
+              print("latest.json notes already match the GitHub release body.")
+              raise SystemExit(0)
+          data["notes"] = notes
+          with open("latest.json", "w", encoding="utf-8") as file:
+              json.dump(data, file, indent=2, ensure_ascii=False)
+              file.write("\n")
+          subprocess.check_call(["gh", "release", "upload", tag, "latest.json", "--clobber"])
+          print("Wrote GitHub release body into latest.json notes.")
+          PY

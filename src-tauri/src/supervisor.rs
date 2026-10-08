@@ -1,5 +1,6 @@
+use std::io::{BufRead, BufReader};
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStderr, ChildStdout, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -72,6 +73,47 @@ impl Supervisor {
             drop(watch.child_read);
             self.parent_hold = Some(watch.parent_hold);
         }
+        self.child = Some(child);
+        self.started_at = Some(SystemTime::now());
+        Ok(())
+    }
+
+    /// Start `program` with `args` and watch that process, not a shell.
+    ///
+    /// The Windows engine is a windowed exe. `cmd /C` returns as soon as that
+    /// process is created, so a shell start would look like an instant exit.
+    pub fn start_program(
+        &mut self,
+        directory: &Path,
+        program: &Path,
+        args: &[String],
+    ) -> Result<(), String> {
+        self.reap();
+        if self.child.is_some() {
+            return Ok(());
+        }
+        if !directory.is_absolute() || !directory.is_dir() {
+            return Err("directory".to_string());
+        }
+
+        let mut cmd = Command::new(program);
+        cmd.args(args)
+            .current_dir(directory)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0200);
+        }
+        let mut child = cmd.spawn().map_err(|error| format!("spawn: {error}"))?;
+        forward_stdio(child.stdout.take(), child.stderr.take());
         self.child = Some(child);
         self.started_at = Some(SystemTime::now());
         Ok(())
@@ -205,6 +247,23 @@ pub fn accepts_local_origin(origin: &str) -> bool {
     matches!(host, "localhost" | "127.0.0.1" | "::1")
 }
 
+fn forward_stdio(stdout: Option<ChildStdout>, stderr: Option<ChildStderr>) {
+    fn pump(stream: impl std::io::Read + Send + 'static) {
+        thread::spawn(move || {
+            for line in BufReader::new(stream).lines() {
+                let Ok(text) = line else { break };
+                log::info!(target: "engine", "{text}");
+            }
+        });
+    }
+    if let Some(out) = stdout {
+        pump(out);
+    }
+    if let Some(err) = stderr {
+        pump(err);
+    }
+}
+
 fn grouped_shell(directory: &Path) -> Command {
     #[cfg(unix)]
     {
@@ -262,6 +321,30 @@ mod snapshot_tests {
         assert!(!snap.running);
         assert!(snap.pid.is_none());
         assert!(snap.started_ms.is_none());
+    }
+
+    #[test]
+    fn start_program_tracks_the_child_until_stop() {
+        let program = if cfg!(windows) {
+            Path::new("C:\\Windows\\System32\\waitfor.exe")
+        } else {
+            Path::new("/bin/sleep")
+        };
+        if !program.is_file() {
+            return;
+        }
+        let args = if cfg!(windows) {
+            vec!["StartProgramTest".into(), "/t".into(), "30".into()]
+        } else {
+            vec!["30".into()]
+        };
+        let mut supervisor = Supervisor::default();
+        supervisor
+            .start_program(&std::env::temp_dir(), program, &args)
+            .unwrap();
+        assert!(supervisor.snapshot().running);
+        supervisor.stop();
+        assert!(!supervisor.snapshot().running);
     }
 }
 

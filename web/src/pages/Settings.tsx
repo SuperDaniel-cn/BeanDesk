@@ -327,6 +327,7 @@ function ConnectionSettings() {
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [logOpen, setLogOpen] = useState(true)
+  const [logFile, setLogFile] = useState<string | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
   const writeLock = useRef(Promise.resolve())
   const connectInFlight = useRef(false)
@@ -361,6 +362,14 @@ function ConnectionSettings() {
     const node = logRef.current
     if (node) node.scrollTop = node.scrollHeight
   }, [desktop.log])
+
+  useEffect(() => {
+    if (!isTauri()) return
+    void import('@tauri-apps/api/path')
+      .then(async ({ appLogDir, join }) => join(await appLogDir(), 'BeanDesk.log'))
+      .then(setLogFile)
+      .catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     if (!copied) return
@@ -740,7 +749,9 @@ function ConnectionSettings() {
                   ))
                 )}
               </div>
-              <p className="pt-2 text-xs text-muted-foreground">{t('settings.logKept')}</p>
+              <p className="pt-2 text-xs text-muted-foreground break-all">
+                {logFile ? t('settings.logKeptPath', { path: logFile }) : t('settings.logKept')}
+              </p>
             </CardContent>
           ) : null}
         </Card>

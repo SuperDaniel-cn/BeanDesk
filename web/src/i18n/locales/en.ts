@@ -415,6 +415,7 @@ export const en = {
     notLocal: 'Configured for external service; local process will not be launched',
     log: 'Connection Log',
     logKept: 'Logs are persisted to local files; clearing only resets screen view',
+    logKeptPath: 'On-disk log: {path}. Clearing only empties this window.',
     logEmpty: 'No log entries',
     logExpand: 'Expand',
     logCollapse: 'Collapse',

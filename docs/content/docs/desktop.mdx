@@ -24,6 +24,8 @@ If a session is active, switching modes requires confirmation and disconnects th
 
 Connection events are recorded to local log files (10 MB cap with rolling eviction). Clear resets only the on-screen log view without affecting disk logs.
 
+The desktop app displays the absolute path to this log file directly below the connection log in Settings (typically `%LOCALAPPDATA%\app.beandesk.desktop\logs\BeanDesk.log` on Windows). Output from the bundled engine is also forwarded to this file for troubleshooting.
+
 ## Handbook Window
 
 Clicking the book icon in the header opens this manual in a dedicated, distraction-free secondary window. The window remains warm in memory; closing it merely hides it for instant re-invocation.

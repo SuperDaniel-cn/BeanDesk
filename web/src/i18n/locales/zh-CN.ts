@@ -405,6 +405,7 @@ export const zhCN = {
     notLocal: '当前配置为外部服务，不会在本地拉起进程',
     log: '连接日志',
     logKept: '日志已持久化存储至本地文件，此处仅清空当前界面显示',
+    logKeptPath: '本机日志文件：{path}。此处清除只清空当前窗口显示。',
     logEmpty: '暂无日志记录',
     logExpand: '展开',
     logCollapse: '收起',

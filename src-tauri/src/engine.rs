@@ -65,11 +65,23 @@ pub fn port_from_origin(origin: &str) -> Result<u16, String> {
     Ok(if https { 443 } else { 80 })
 }
 
-pub fn sidecar_command(engine: &Path, origin: &str) -> Result<String, String> {
+pub fn engine_args(origin: &str) -> Result<Vec<String>, String> {
     let port = port_from_origin(origin)?;
+    Ok(vec![
+        "fava".into(),
+        "--host".into(),
+        "127.0.0.1".into(),
+        "--port".into(),
+        port.to_string(),
+        "main.bean".into(),
+    ])
+}
+
+pub fn sidecar_command(engine: &Path, origin: &str) -> Result<String, String> {
     Ok(format!(
-        "{} fava --host 127.0.0.1 --port {port} main.bean",
-        shell_quote(&engine.to_string_lossy())
+        "{} {}",
+        shell_quote(&engine.to_string_lossy()),
+        engine_args(origin)?.join(" ")
     ))
 }
 
@@ -100,6 +112,14 @@ mod tests {
         assert_eq!(port_from_origin("http://localhost").unwrap(), 80);
         assert_eq!(port_from_origin("https://[::1]").unwrap(), 443);
         assert_eq!(port_from_origin("http://[::1]:5001").unwrap(), 5001);
+    }
+
+    #[test]
+    fn engine_args_are_the_fava_invocation() {
+        assert_eq!(
+            engine_args("http://127.0.0.1:5000").unwrap().join(" "),
+            "fava --host 127.0.0.1 --port 5000 main.bean"
+        );
     }
 
     #[test]

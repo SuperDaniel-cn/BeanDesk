@@ -152,7 +152,6 @@ jobs:
           projectPath: src-tauri
           tagName: v__VERSION__
           releaseName: BeanDesk v__VERSION__
-          releaseBody: Installers for macOS, Windows, and Linux. This version has no mobile build.
           releaseDraft: true
           prerelease: false
           updaterJsonPreferNsis: true
