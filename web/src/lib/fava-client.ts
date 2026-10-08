@@ -5,7 +5,8 @@
  * Fava. The desktop shell sets a direct origin and sends those requests
  * through the Tauri HTTP plugin. The slug comes from `public/config.js` when
  * set. Otherwise the client probes the default slug and then the redirect
- * Fava sends from its root.
+ * Fava sends from its root. A later 404 on a discovered slug drops the cache
+ * and follows that redirect once more; a slug pinned in config.js does not.
  */
 
 import { apiUrl, readLedgerSlug } from './config'
@@ -179,7 +180,7 @@ export class FavaClient {
       )
       const base = root.url || `${this.prefix()}/`
       const location = root.headers.get('location')
-      if (location) discovered = slugFromRedirectUrl(new URL(location, base).href)
+      if (location) discovered = slugFromRedirectUrl(location)
       if (!discovered) discovered = slugFromRedirectUrl(base)
       await root.arrayBuffer().catch(() => undefined)
     } catch {
@@ -201,14 +202,48 @@ export class FavaClient {
     throw new Error(FAVA_SLUG)
   }
 
-  private async fetchJson(url: string, signal?: AbortSignal): Promise<{ data?: unknown; error?: string }> {
+  /**
+   * `path` is the Fava API path after the slug, e.g. `/api/changed`.
+   * A 404 on a discovered slug re-asks `/` once and retries; a slug in config.js does not.
+   */
+  private async fetchJson(
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<{ data?: unknown; error?: string }> {
+    await this.ensureSlug()
+    let got = await this.readJson(`${this.prefix()}/${this.slug}${path}`, signal)
+    if (!got.ok && got.status === 404 && !readLedgerSlug() && (await this.rediscoverSlug())) {
+      got = await this.readJson(`${this.prefix()}/${this.slug}${path}`, signal)
+    }
+    if (!got.ok) throw new Error(got.detail)
+    return got.body
+  }
+
+  private async readJson(
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<{ ok: boolean; status: number; body: { data?: unknown; error?: string }; detail: string }> {
     const res = await this.request(url, { signal })
     const json = (await res.json().catch(() => null)) as { data?: unknown; error?: string } | null
-    if (!res.ok) {
-      const detail = json?.error ? String(json.error) : `${res.status} ${res.statusText}`
-      throw new Error(detail)
+    const body = json ?? {}
+    return {
+      ok: res.ok,
+      status: res.status,
+      body,
+      detail: body.error ? String(body.error) : `${res.status} ${res.statusText}`,
     }
-    return json ?? {}
+  }
+
+  private async rediscoverSlug(): Promise<boolean> {
+    const previous = this.slug
+    this.slug = null
+    this.slugResolved = false
+    try {
+      await this.ensureSlug()
+    } catch {
+      return false
+    }
+    return this.slug !== previous
   }
 
   async getLedgerData(signal?: AbortSignal): Promise<FavaLedgerData> {
@@ -225,51 +260,44 @@ export class FavaClient {
   }
 
   private async loadLedgerData(): Promise<FavaLedgerData> {
-    await this.ensureSlug()
-    const json = await this.fetchJson(`${this.prefix()}/${this.slug}/api/ledger_data`)
+    const json = await this.fetchJson('/api/ledger_data')
     return json.data as FavaLedgerData
   }
 
   async query(bql: string, time?: string, signal?: AbortSignal): Promise<BQLQueryResult> {
-    await this.ensureSlug()
     const params = new URLSearchParams({ query_string: bql })
     if (time) params.set('time', time)
-    const json = await this.fetchJson(
-      `${this.prefix()}/${this.slug}/api/query?${params}`,
-      signal,
-    )
+    const json = await this.fetchJson(`/api/query?${params}`, signal)
     return (json.data ?? { types: [], rows: [] }) as BQLQueryResult
   }
 
-  private reportUrl(endpoint: string, time?: string, conversion?: string): string {
+  private reportPath(endpoint: string, time?: string, conversion?: string): string {
     const params = new URLSearchParams()
     if (time) params.set('time', time)
     if (conversion) params.set('conversion', quoteCommodity(conversion))
     const query = params.toString()
-    return `${this.prefix()}/${this.slug}/api/${endpoint}${query ? `?${query}` : ''}`
+    return `/api/${endpoint}${query ? `?${query}` : ''}`
   }
 
   async ledgerChanged(signal?: AbortSignal): Promise<boolean> {
     await this.ensureSlug()
-    const json = await this.fetchJson(`${this.prefix()}/${this.slug}/api/changed`, signal)
-    return json.data === true
+    const previous = this.slug
+    const json = await this.fetchJson('/api/changed', signal)
+    return this.slug !== previous || json.data === true
   }
 
   async getBalanceSheet(time?: string, conversion?: string, signal?: AbortSignal): Promise<unknown> {
-    await this.ensureSlug()
-    const json = await this.fetchJson(this.reportUrl('balance_sheet', time, conversion), signal)
+    const json = await this.fetchJson(this.reportPath('balance_sheet', time, conversion), signal)
     return json.data
   }
 
   async getIncomeStatement(time?: string, conversion?: string, signal?: AbortSignal): Promise<unknown> {
-    await this.ensureSlug()
-    const json = await this.fetchJson(this.reportUrl('income_statement', time, conversion), signal)
+    const json = await this.fetchJson(this.reportPath('income_statement', time, conversion), signal)
     return json.data
   }
 
   async getTrialBalance(time?: string, conversion?: string, signal?: AbortSignal): Promise<unknown> {
-    await this.ensureSlug()
-    const json = await this.fetchJson(this.reportUrl('trial_balance', time, conversion), signal)
+    const json = await this.fetchJson(this.reportPath('trial_balance', time, conversion), signal)
     return json.data
   }
 
@@ -280,10 +308,11 @@ export class FavaClient {
   /** Bytes for an in-page preview. The desktop shell cannot use the raw URL in an image tag. */
   async readDocument(filename: string, signal?: AbortSignal): Promise<Blob> {
     await this.ensureSlug()
-    const res = await this.request(this.getDocumentUrl(filename), { signal })
-    if (!res.ok) {
-      throw new Error(`${res.status} ${res.statusText}`)
+    let res = await this.request(this.getDocumentUrl(filename), { signal })
+    if (!res.ok && res.status === 404 && !readLedgerSlug() && (await this.rediscoverSlug())) {
+      res = await this.request(this.getDocumentUrl(filename), { signal })
     }
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
     const header = res.headers.get('content-type')
     const bytes = await res.arrayBuffer()
     return new Blob([bytes], { type: documentType(filename, header) })
@@ -295,8 +324,7 @@ export class FavaClient {
   }
 
   async getDocuments(signal?: AbortSignal): Promise<LedgerDocument[]> {
-    await this.ensureSlug()
-    const json = await this.fetchJson(`${this.prefix()}/${this.slug}/api/documents`, signal)
+    const json = await this.fetchJson('/api/documents', signal)
     if (!Array.isArray(json.data)) {
       throw new Error('documents')
     }

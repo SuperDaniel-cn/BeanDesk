@@ -104,3 +104,55 @@ describe('FavaClient.ledgerChanged', () => {
     }
   })
 })
+
+describe('FavaClient slug recovery', () => {
+  function mockLiveSlug(live: () => string, seen: string[]) {
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const href = String(url)
+      seen.push(href)
+      if (href === '/api/fava/') {
+        return new Response(null, {
+          status: 302,
+          headers: { location: `http://127.0.0.1:5000/${live()}/` },
+        })
+      }
+      const match = href.match(/\/api\/fava\/([^/]+)\/api\//)
+      const requestSlug = match?.[1]
+      if (requestSlug !== live()) {
+        return new Response(null, { status: 404, statusText: 'Not Found' })
+      }
+      if (href.includes('/api/ledger_data')) {
+        return new Response(JSON.stringify({ data: { accounts: [] } }), { status: 200 })
+      }
+      if (href.includes('/api/changed')) {
+        return new Response(JSON.stringify({ data: false }), { status: 200 })
+      }
+      return new Response(null, { status: 404, statusText: 'Not Found' })
+    }) as unknown as typeof fetch
+  }
+
+  test('re-discovers after a later 404 and treats it as a change', async () => {
+    let live = 'beancount'
+    const seen: string[] = []
+    mockLiveSlug(() => live, seen)
+    const client = new FavaClient()
+    expect(await client.ensureSlug()).toBe('beancount')
+    live = 'books'
+    expect(await client.ledgerChanged()).toBe(true)
+    expect(client.getSlug()).toBe('books')
+    expect(seen).toContain('/api/fava/')
+    expect(seen.some((href) => href.includes('/books/api/changed'))).toBe(true)
+  })
+
+  test('does not rediscover when config.js pins the slug', async () => {
+    globalThis.window = { __APP_CONFIG__: { slug: 'beancount' } } as Window & typeof globalThis
+    const seen: string[] = []
+    mockLiveSlug(() => 'books', seen)
+    const client = new FavaClient()
+    expect(await client.ensureSlug()).toBe('beancount')
+    await expect(client.ledgerChanged()).rejects.toThrow('404 Not Found')
+    expect(client.getSlug()).toBe('beancount')
+    expect(seen).not.toContain('/api/fava/')
+    expect(seen.every((href) => !href.includes('/books/'))).toBe(true)
+  })
+})

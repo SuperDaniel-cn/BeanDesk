@@ -183,6 +183,8 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
     let cancelled = false
     const tick = async () => {
       if (cancelled || document.hidden) return
+      // A 404 on a stale slug is recovered inside the client and counts as a
+      // change. This catch is only a down origin or a mid-reload blip.
       const changed = await favaClient.ledgerChanged().catch(() => false)
       if (!cancelled && changed) void queryClient.invalidateQueries()
     }

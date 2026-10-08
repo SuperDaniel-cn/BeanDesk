@@ -1,6 +1,6 @@
 [package]
 name = "BeanDesk"
-version = "0.2.3"
+version = "0.2.4"
 description = "BeanDesk desktop shell"
 license = "AGPL-3.0-only"
 repository = "https://github.com/SuperDaniel-cn/BeanDesk"
