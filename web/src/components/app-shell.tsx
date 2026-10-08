@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
 import { isTauri } from '@tauri-apps/api/core'
 import { NavLink, useLocation } from 'react-router'
 import { BookOpenText, CalendarDays, Menu, Settings } from 'lucide-react'
@@ -17,7 +17,6 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import { useTheme } from '@/components/theme-provider'
-import { Hint } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { openHandbookWindow } from '@/lib/handbook-window'
 import { cn } from '@/lib/utils'
@@ -152,20 +151,23 @@ export function AppShell({ children }: { children: ReactNode }) {
 
             <NavLink
               to="/"
-              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap font-heading text-sm font-semibold tracking-tight"
+              className="flex items-center gap-1.5 whitespace-nowrap font-heading text-sm font-semibold tracking-tight"
             >
               <BrandMark />
               <span>{brand}</span>
             </NavLink>
           </div>
 
-          <nav className="hidden md:flex min-w-0 items-center gap-0.5">
+          <nav className="hidden md:flex items-center gap-0.5">
             {REPORT_PAGES.map((page) => {
-              const { path, key, navKey } = page
-              const link = (
+              const label = t(navLabelKey(page))
+              const title = t(page.key)
+              return (
                 <NavLink
-                  to={path}
-                  end={path === '/'}
+                  key={page.path}
+                  to={page.path}
+                  end={page.path === '/'}
+                  title={label === title ? undefined : title}
                   className={({ isActive }) =>
                     cn(
                       buttonVariants({
@@ -174,13 +176,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                     )
                   }
                 >
-                  {t(navLabelKey(page))}
+                  {label}
                 </NavLink>
-              )
-              return (
-                <Fragment key={path}>
-                  {navKey ? <Hint label={t(key)}>{link}</Hint> : link}
-                </Fragment>
               )
             })}
           </nav>

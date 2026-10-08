@@ -8,6 +8,8 @@ English | [简体中文](README.zh-CN.md)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![Sponsor](https://img.shields.io/badge/Sponsor-Payoneer%20%7C%20Crypto-ea4aaa?logo=githubsponsors&logoColor=white)](#sponsorship)
 
+![AI-assisted business analysis](./docs/images/en/hero.png)
+
 ## Minimal Daily Workflow
 
 1. Install desktop app

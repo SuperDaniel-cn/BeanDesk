@@ -423,7 +423,7 @@ export const zhCN = {
 
   documents: {
     title: '凭证与交付证据',
-    nav: '凭证',
+    nav: '凭证与交付证据',
     searchPlaceholder: '搜索文件或科目…',
     date: '日期',
     account: '科目',

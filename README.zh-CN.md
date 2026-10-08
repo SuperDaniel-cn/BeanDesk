@@ -8,6 +8,8 @@ BeanDesk 是一款运行在本地的复式记账桌面软件。不设云端账�
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![赞助](https://img.shields.io/badge/Sponsor-Payoneer%20%7C%20加密货币-ea4aaa?logo=githubsponsors&logoColor=white)](#赞助支持)
 
+![AI 辅助经营分析](./docs/images/zh/hero.png)
+
 ## 极简日常工作流
 
 1. 安装桌面端

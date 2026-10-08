@@ -11,8 +11,7 @@ describe('nav labels', () => {
     expect(navLabelKey(documents!)).toBe('documents.nav')
     expect(en.documents.nav).toBe('Documents')
     expect(en.documents.nav.length).toBeLessThan(en.documents.title.length)
-    expect(zhCN.documents.nav).toBe('凭证')
-    expect(zhCN.documents.nav.length).toBeLessThan(zhCN.documents.title.length)
+    expect(zhCN.documents.nav).toBe(zhCN.documents.title)
   })
 
   test('other report pages keep a single label', () => {

@@ -12,7 +12,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useI18n } from '@/i18n'
-import { updateNotes } from '@/lib/update-notes'
 
 type Phase = 'idle' | 'checking' | 'installing' | 'none' | 'failed'
 
@@ -64,7 +63,7 @@ export function AppUpdate({ children }: { children: ReactNode }) {
     void check(false)
   }, [check])
 
-  const notes = updateNotes(pending?.body)
+  const notes = pending?.body?.trim()
 
   const install = useCallback(async () => {
     const update = pendingRef.current
