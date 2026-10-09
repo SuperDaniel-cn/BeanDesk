@@ -423,8 +423,6 @@ export const zhCN = {
     startExited: '启动进程已退出，目标端口未检测到运行中的账本服务。请检查启动命令。',
     notLocal: '当前配置为外部服务，不会在本地拉起进程',
     log: '连接日志',
-    logKept: '日志已写入本机文件，此处只清空当前窗口的显示',
-    logKeptPath: '本机日志文件：{path}。此处清除只清空当前窗口显示。',
     logEmpty: '暂无日志记录',
     logExpand: '展开',
     logCollapse: '收起',

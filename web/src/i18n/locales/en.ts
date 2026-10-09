@@ -435,8 +435,6 @@ export const en = {
       'Start process exited; no ledger service detected on target port. Please check start command configuration.',
     notLocal: 'Configured for external service; local process will not be launched',
     log: 'Connection Log',
-    logKept: 'Logs are written to a local file; clearing only empties this window.',
-    logKeptPath: 'On-disk log: {path}. Clearing only empties this window.',
     logEmpty: 'No log entries',
     logExpand: 'Expand',
     logCollapse: 'Collapse',
