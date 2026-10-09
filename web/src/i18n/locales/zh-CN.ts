@@ -492,6 +492,29 @@ export const zhCN = {
     },
   },
 
+  policy: {
+    bannerTitle: '需要审查策略',
+    bannerUnseeded:
+      '这台电脑尚未播种策略完整性。请到设置里确认语言包。自定义 TOML 在此批准前不会生效。',
+    bannerUnapproved: '磁盘上的自定义策略与上次批准的副本不一致。当前未按磁盘文件执行。',
+    bannerLocaleMismatch:
+      '.beandesk 中的语言包与 BeanDesk 记录不一致。内置规则仍按 BeanDesk 的语言包执行。请在设置中切换语言包，或恢复上次批准的策略。',
+    bannerStoreCorrupt: 'BeanDesk 中的批准副本无法解析。仍执行内置基线规则，未使用磁盘上的自定义文件。',
+    bannerRestore: '账本刚从备份恢复。请确认策略后再批准或恢复上次批准的副本。',
+    review: '审查',
+    dialogTitle: '策略审查',
+    approve: '批准为新基线',
+    revert: '恢复上次批准的策略',
+    emptyDiff: '自定义策略文件没有差异。',
+    approveFailed: '无法批准。请确认每一份自定义 TOML 都能解析。',
+    revertFailed: '无法恢复策略。',
+    switchLocale: '切换语言包',
+    switchLocaleHint:
+      '将把所选语言包写入 .beandesk，并覆盖或删除 policies/base/rules.toml。已批准的自定义规则会保留。不改 base/ 下的 Markdown。',
+    switchLocaleDone: '已切换语言包',
+    switchLocaleConfirm: '切换',
+  },
+
   update: {
     label: '版本更新',
     check: '检查更新',

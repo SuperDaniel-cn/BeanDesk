@@ -499,6 +499,9 @@ pub async fn backup_restore(
             .status()
             .map_err(|error| error.to_string())?;
         if status.success() {
+            if let Ok(db) = crate::policy_integrity::PolicyDb::standard() {
+                db.mark_restore(Path::new(&output))?;
+            }
             Ok(())
         } else {
             Err("check".to_string())

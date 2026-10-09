@@ -114,34 +114,74 @@ struct Posting {
     sign: Option<PostingSign>,
 }
 
-/// `None` when the work folder has no policy TOML (same as 0.2.1).
+pub(crate) const POLICY_TOML_MAX_BYTES: u64 = MAX_BYTES;
+
+pub(crate) fn is_baseline_toml(id: &str) -> bool {
+    id.starts_with("base/")
+}
+
+/// `None` when the work folder has no custom policy TOML (same as 0.2.1).
+#[cfg(test)]
 pub(crate) fn lint_policies(work_dir: &Path) -> Option<PolicyLint> {
-    let files = match list_toml_files(&work_dir.join("policies")) {
-        Ok(files) if files.is_empty() => return None,
-        Ok(files) => files,
+    let listed = match list_toml_files(&work_dir.join("policies")) {
+        Ok(files) => files
+            .into_iter()
+            .filter(|(id, _)| !is_baseline_toml(id))
+            .collect::<Vec<_>>(),
         Err(error) => return Some(PolicyLint::LoadError(error)),
     };
-    match load_and_apply(work_dir, &files) {
+    if listed.is_empty() {
+        return None;
+    }
+    let mut files = Vec::new();
+    for (id, path) in listed {
+        match fs::read_to_string(&path) {
+            Ok(text) => files.push((id, text)),
+            Err(_) => {
+                return Some(PolicyLint::LoadError(format!(
+                    "{id}: could not read policy file."
+                )));
+            }
+        }
+    }
+    match lint_from_texts(work_dir, &files) {
         Ok(violations) => Some(PolicyLint::Checked(violations)),
         Err(error) => Some(PolicyLint::LoadError(error)),
     }
 }
 
-fn load_and_apply(
+pub(crate) fn lint_from_texts(
     work_dir: &Path,
-    files: &[(String, PathBuf)],
+    files: &[(String, String)],
 ) -> Result<Vec<PolicyViolation>, String> {
+    if files.is_empty() {
+        return Ok(Vec::new());
+    }
     let mut rules = Vec::new();
-    for (id, path) in files {
-        let parsed = load_toml_file(id, path)?;
-        for (index, raw) in parsed.rules.into_iter().enumerate() {
-            rules.push(compile_rule(id, index, raw)?);
-        }
+    for (id, text) in files {
+        rules.extend(compile_policy_text(id, text)?);
     }
     Ok(apply_rules(&rules, &scan_data_dir(work_dir)?))
 }
 
-fn list_toml_files(root: &Path) -> Result<Vec<(String, PathBuf)>, String> {
+pub(crate) fn validate_policy_text(label: &str, text: &str) -> Result<(), String> {
+    compile_policy_text(label, text).map(|_| ())
+}
+
+fn compile_policy_text(label: &str, text: &str) -> Result<Vec<Rule>, String> {
+    if text.len() as u64 > MAX_BYTES {
+        return Err(format!("{label}: Policy file is too large."));
+    }
+    let parsed: PolicyFile = toml::from_str(text).map_err(|error| format!("{label}: {error}"))?;
+    parsed
+        .rules
+        .into_iter()
+        .enumerate()
+        .map(|(index, raw)| compile_rule(label, index, raw))
+        .collect()
+}
+
+pub(crate) fn list_toml_files(root: &Path) -> Result<Vec<(String, PathBuf)>, String> {
     if !root.is_dir() {
         return Ok(Vec::new());
     }
@@ -184,18 +224,6 @@ fn posix_join(prefix: &str, name: &str) -> String {
     } else {
         format!("{prefix}/{name}")
     }
-}
-
-fn load_toml_file(label: &str, path: &Path) -> Result<PolicyFile, String> {
-    let metadata = path
-        .metadata()
-        .map_err(|_| format!("{label}: could not read policy file."))?;
-    if metadata.len() > MAX_BYTES {
-        return Err(format!("{label}: Policy file is too large."));
-    }
-    let text =
-        fs::read_to_string(path).map_err(|_| format!("{label}: could not read policy file."))?;
-    toml::from_str(&text).map_err(|error| format!("{label}: {error}"))
 }
 
 fn compile_rule(file: &str, index: usize, raw: RawRule) -> Result<Rule, String> {
@@ -1054,21 +1082,21 @@ account_pattern = "^Assets:"
     #[test]
     fn zh_cn_preset_pattern_accepts_hyphen_chinese_and_rejects_english() {
         let root = temp_dir("zh-preset");
-        write(
-            &root.join("policies/base/rules.toml"),
-            include_str!("../ledger_presets/zh-CN/policies/base/rules.toml"),
-        );
+        let pack = [(
+            "base/rules.toml".to_string(),
+            include_str!("../ledger_presets/zh-CN/policies/base/rules.toml").to_string(),
+        )];
         write(
             &root.join("data/2026/2026-03.bean"),
             "2026-03-15 * \"Client\" \"Fee\"\n  Assets:Bank-银行存款:Main-XX银行对公户          50000.00 CNY\n  Income:Service-主营业务收入:Tech-软件定制开发  -50000.00 CNY\n",
         );
-        assert!(checked(&root).is_empty());
+        assert!(lint_from_texts(&root, &pack).unwrap().is_empty());
 
         write(
             &root.join("data/2026/2026-03.bean"),
             "2026-03-15 * \"Client\" \"Fee\"\n  Assets:Bank:Checking    50000.00 CNY\n  Income:Sales           -50000.00 CNY\n",
         );
-        let violations = checked(&root);
+        let violations = lint_from_texts(&root, &pack).unwrap();
         assert_eq!(violations.len(), 2);
         assert!(
             violations

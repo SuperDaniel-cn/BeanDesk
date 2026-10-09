@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-policy-approve"
+description = "Enables the policy_approve command without any pre-configured scope."
+commands.allow = ["policy_approve"]
+
+[[permission]]
+identifier = "deny-policy-approve"
+description = "Denies the policy_approve command without any pre-configured scope."
+commands.deny = ["policy_approve"]

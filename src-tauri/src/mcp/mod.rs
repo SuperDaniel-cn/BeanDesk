@@ -3,7 +3,7 @@ mod fava;
 mod fava_tools;
 mod handbook;
 mod policies;
-mod policy_lint;
+pub(crate) mod policy_lint;
 mod store;
 mod tools;
 

@@ -8,6 +8,8 @@ use super::card::Card;
 use super::fava_tools::{DocumentsBody, LedgerBody, QueryBody, ReportBody, get_fava_card};
 use super::handbook::{HandbookInput, get_handbook_card};
 use super::policies::{PolicyInput, get_policy_card, list_policies_card};
+use crate::policy_integrity::Integrity;
+
 use super::policy_lint::{PolicyViolation, Severity};
 use super::tools::{
     CheckBody, InitLedgerInput, UpgradeLedgerInput, fixture_store, get_connection_card,
@@ -106,8 +108,10 @@ fn sample_payloads() -> BTreeMap<&'static str, Vec<Value>> {
             code: 0,
             preview: String::new(),
             directory: "/tmp/ledger".into(),
-            policy_ok: None,
+            policy_ok: Some(true),
             violations: Vec::new(),
+            integrity: Some(Integrity::Ok),
+            baseline_drift: false,
         },
     ));
     let check_hits = json_card(Card::new(
@@ -125,6 +129,8 @@ fn sample_payloads() -> BTreeMap<&'static str, Vec<Value>> {
                 message: "narration must mention the loan".into(),
                 severity: Severity::Error,
             }],
+            integrity: Some(Integrity::Unapproved),
+            baseline_drift: false,
         },
     ));
     let ledger = json_card(Card::new(

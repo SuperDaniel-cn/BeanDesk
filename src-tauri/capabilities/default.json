@@ -37,6 +37,11 @@
     "allow-backup-test-s3",
     "allow-backup-open-workdir",
     "allow-open-url",
+    "allow-policy-status",
+    "allow-policy-approve",
+    "allow-policy-revert",
+    "allow-policy-switch-locale",
+    "allow-policy-follow-workdir",
     {
       "identifier": "http:default",
       "allow": [

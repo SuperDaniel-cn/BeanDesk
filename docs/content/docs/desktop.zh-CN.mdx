@@ -16,8 +16,8 @@ description: 账本连接、服务看管、数据备份与客户端设置。
 ## 设置分组
 
 - 常规设置：界面语言偏好、外观主题（浅色/深色/跟随系统）与本地 MCP 服务集成配置。
-- 账本连接：工作目录选择、连接模式切换与服务看管控制台。
-- 数据备份：本地 Git 快照与 restic 加密备份（初始化、升级或接管为标准账本后可用，详见 [第一本账](/zh-CN/setup/first-book) 与 [已有 Beancount](/zh-CN/setup/existing)）。
+- 账本连接：工作目录选择、连接模式切换、服务看管控制台，以及“切换语言包”（同时写入 `.beandesk` 与 `policies/base/rules.toml`，已批准的自定义规则会保留）。
+- 数据备份：本地 Git 快照与 restic 加密备份（初始化、升级或接管为标准账本后可用，详见 [第一本账](/zh-CN/setup/first-book) 与 [已有 Beancount](/zh-CN/setup/existing)）。从 BeanDesk 恢复账本不会带回本机 `policy.json`，需要在主窗口重新批准或恢复上次批准的策略。
 - 关于：应用名称、版本更新与许可证。
 
 ## 连接日志

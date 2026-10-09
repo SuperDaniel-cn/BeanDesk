@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-policy-follow-workdir"
+description = "Enables the policy_follow_workdir command without any pre-configured scope."
+commands.allow = ["policy_follow_workdir"]
+
+[[permission]]
+identifier = "deny-policy-follow-workdir"
+description = "Denies the policy_follow_workdir command without any pre-configured scope."
+commands.deny = ["policy_follow_workdir"]

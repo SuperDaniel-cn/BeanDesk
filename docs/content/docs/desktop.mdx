@@ -16,8 +16,8 @@ If a session is active, switching modes requires confirmation and disconnects th
 ## Settings Tabs
 
 - General: Language preference, appearance theme (light, dark, or system), and local MCP configuration.
-- Ledger Connection: Working directory picker, connection mode switcher, and supervision controls.
-- Backup: Local Git snapshots and restic encrypted backups (available after Initialize Ledger, Upgrade, or Adopt as standard ledger; see [First book](/setup/first-book) and [Existing Beancount](/setup/existing)).
+- Ledger Connection: Working directory picker, connection mode switcher, supervision controls, and Switch language pack (writes `.beandesk` and `policies/base/rules.toml` together; approved custom rules are kept).
+- Backup: Local Git snapshots and restic encrypted backups (available after Initialize Ledger, Upgrade, or Adopt as standard ledger; see [First book](/setup/first-book) and [Existing Beancount](/setup/existing)). Restoring a ledger does not restore BeanDesk's `policy.json`; review and approve or revert policies in the main window.
 - About: App name, software updates, and license.
 
 ## Connection Logs

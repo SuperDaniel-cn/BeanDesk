@@ -7,10 +7,11 @@ use serde::{Deserialize, Serialize};
 use crate::directory_from_connection;
 use crate::engine::resolve_engine;
 use crate::ledger_init::{SKELETON_VERSION, init_ledger_tree, inspect_ledger, upgrade_ledger_tree};
+use crate::policy_integrity::{Integrity, PolicyDb, PolicyStatus, integrity_sentence};
 use crate::supervisor::accepts_local_origin;
 
 use super::card::Card;
-use super::policy_lint::{PolicyLint, PolicyViolation, Severity, lint_policies};
+use super::policy_lint::{PolicyLint, PolicyViolation, Severity};
 use super::store::{connection_value, load_saved_connection};
 
 pub(crate) const PREVIEW_LINES: usize = 12;
@@ -61,6 +62,9 @@ pub(crate) struct CheckBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy_ok: Option<bool>,
     pub violations: Vec<PolicyViolation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub integrity: Option<Integrity>,
+    pub baseline_drift: bool,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -226,6 +230,7 @@ pub(crate) fn init_ledger_card(
         ));
     }
     init_ledger_tree(&directory, input.locale.trim()).map_err(explain_write)?;
+    PolicyDb::seed_current(&directory, input.locale.trim())?;
     Ok(Card::new(
         "Created the first ledger skeleton in the Settings folder.",
         WriteBody {
@@ -270,6 +275,7 @@ pub(crate) fn upgrade_ledger_card(
         ));
     }
     let report = upgrade_ledger_tree(&directory, locale).map_err(explain_write)?;
+    PolicyDb::seed_current(&directory, locale)?;
     let mut display = if report.written.is_empty() {
         "Ledger skeleton is already current.".to_string()
     } else if report.adopted {
@@ -307,6 +313,15 @@ pub(crate) fn check_ledger_card(
 }
 
 fn assemble_check_card(directory: &Path, outcome: CheckOutcome) -> Card<CheckBody> {
+    let db = PolicyDb::standard().ok();
+    assemble_check_card_with(directory, outcome, db.as_ref())
+}
+
+fn assemble_check_card_with(
+    directory: &Path,
+    outcome: CheckOutcome,
+    db: Option<&PolicyDb>,
+) -> Card<CheckBody> {
     let directory_text = directory.to_string_lossy().into_owned();
     if !outcome.ok {
         return Card::new(
@@ -321,65 +336,102 @@ fn assemble_check_card(directory: &Path, outcome: CheckOutcome) -> Card<CheckBod
                 directory: directory_text,
                 policy_ok: None,
                 violations: Vec::new(),
+                integrity: None,
+                baseline_drift: false,
             },
         );
     }
-    match lint_policies(directory) {
-        None => passed_check_card(directory_text, outcome, None),
-        Some(PolicyLint::LoadError(error)) => {
+    let Some(db) = db else {
+        let status = PolicyStatus {
+            integrity: Integrity::Unseeded,
+            baseline_drift: false,
+            locale: None,
+            review_reason: None,
+            files: Vec::new(),
+        };
+        return check_body_card(
+            directory_text,
+            format!(
+                "bean-check passed on the Settings folder. {}",
+                integrity_sentence(&status)
+            ),
+            1,
+            outcome.preview,
+            false,
+            Vec::new(),
+            &status,
+        );
+    };
+    let (status, lint) = db.review(directory);
+    let sentence = integrity_sentence(&status);
+    match lint {
+        PolicyLint::LoadError(error) => {
             let preview = preview_output(&error);
-            Card::new(
+            check_body_card(
+                directory_text,
                 format!(
-                    "bean-check passed on the Settings folder. Policy rules could not be loaded.\n{preview}"
+                    "bean-check passed on the Settings folder. Policy rules could not be loaded.\n{preview}\n{sentence}"
                 ),
-                CheckBody {
-                    ok: false,
-                    code: 1,
-                    preview,
-                    directory: directory_text,
-                    policy_ok: Some(false),
-                    violations: Vec::new(),
-                },
+                1,
+                preview,
+                false,
+                Vec::new(),
+                &status,
             )
         }
-        Some(PolicyLint::Checked(violations)) => {
-            let policy_ok = !violations
+        PolicyLint::Checked(violations) => {
+            let rule_ok = !violations
                 .iter()
                 .any(|item| item.severity == Severity::Error);
-            if policy_ok && violations.is_empty() {
-                return passed_check_card(directory_text, outcome, Some(true));
+            let policy_ok = rule_ok && status.integrity == Integrity::Ok;
+            let formatted = if violations.is_empty() {
+                None
+            } else {
+                Some(preview_output(&format_violations(&violations)))
+            };
+            let preview = formatted.clone().unwrap_or_else(|| outcome.preview.clone());
+            let mut display = "bean-check passed on the Settings folder.".to_string();
+            if let Some(body) = formatted {
+                let label = if rule_ok { "warnings" } else { "errors" };
+                display = format!("{display} Policy {label}:\n{body}");
             }
-            let preview = preview_output(&format_violations(&violations));
-            let label = if policy_ok { "warnings" } else { "errors" };
-            Card::new(
-                format!("bean-check passed on the Settings folder. Policy {label}:\n{preview}"),
-                CheckBody {
-                    ok: policy_ok,
-                    code: if policy_ok { outcome.code } else { 1 },
-                    preview,
-                    directory: directory_text,
-                    policy_ok: Some(policy_ok),
-                    violations,
-                },
+            if !sentence.is_empty() {
+                display.push(' ');
+                display.push_str(&sentence);
+            }
+            check_body_card(
+                directory_text,
+                display,
+                if policy_ok { outcome.code } else { 1 },
+                preview,
+                policy_ok,
+                violations,
+                &status,
             )
         }
     }
 }
 
-fn passed_check_card(
+fn check_body_card(
     directory: String,
-    outcome: CheckOutcome,
-    policy_ok: Option<bool>,
+    display: String,
+    code: i32,
+    preview: String,
+    policy_ok: bool,
+    violations: Vec<PolicyViolation>,
+    status: &PolicyStatus,
 ) -> Card<CheckBody> {
     Card::new(
-        "bean-check passed on the Settings folder.".to_string(),
+        display.trim().to_string(),
         CheckBody {
-            ok: true,
-            code: outcome.code,
-            preview: outcome.preview,
+            ok: policy_ok,
+            code,
+            preview,
             directory,
-            policy_ok,
-            violations: Vec::new(),
+            policy_ok: Some(policy_ok),
+            violations,
+            integrity: Some(status.integrity),
+            baseline_drift: status.baseline_drift,
         },
     )
 }
@@ -754,18 +806,48 @@ mod tests {
         let root = temp_dir("check-notoml");
         std::fs::create_dir_all(root.join("policies")).unwrap();
         std::fs::write(root.join("policies/README.md"), "# Bookkeeping policies\n").unwrap();
-        let card = assemble_check_card(&root, passed());
+        let db = PolicyDb::at(root.join("policy.json"));
+        crate::ledger_init::write_marker(&root, "en").unwrap();
+        db.seed_if_absent(&root, "en").unwrap();
+        let card = assemble_check_card_with(&root, passed(), Some(&db));
         assert!(card.body.ok);
-        assert!(card.body.policy_ok.is_none());
+        assert_eq!(card.body.policy_ok, Some(true));
+        assert_eq!(card.body.integrity, Some(Integrity::Ok));
         assert!(card.body.violations.is_empty());
         assert_eq!(
             card.display_block,
             "bean-check passed on the Settings folder."
         );
         let json = serde_json::to_value(&card).unwrap();
-        assert!(json.get("policyOk").is_none());
+        assert_eq!(json["integrity"], "ok");
         assert_eq!(json["violations"], serde_json::json!([]));
         assert!(!card.display_block.contains(root.to_str().unwrap()));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn check_ledger_unseeded_fails_without_running_disk_custom() {
+        let root = temp_dir("check-unseeded");
+        std::fs::create_dir_all(root.join("policies")).unwrap();
+        std::fs::write(
+            root.join("policies/repay.toml"),
+            r#"
+[[rules]]
+id = "repay-narration"
+description = "Must not run before seeding."
+severity = "error"
+from = 2026-01-01
+account = "Liabilities:Owner:Advance"
+narration_regex = "还股东借款|还垫付款"
+"#,
+        )
+        .unwrap();
+        let db = PolicyDb::at(root.join("policy.json"));
+        let card = assemble_check_card_with(&root, passed(), Some(&db));
+        assert!(!card.body.ok);
+        assert_eq!(card.body.integrity, Some(Integrity::Unseeded));
+        assert!(card.body.violations.is_empty());
+        assert!(card.display_block.contains("not seeded"));
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -838,9 +920,14 @@ narration_regex = "还股东借款|还垫付款"
             "2026-03-15 * \"Owner\" \"转账\"\n  Liabilities:Owner:Advance    100.00 CNY\n  Assets:Bank:Checking       -100.00 CNY\n",
         )
         .unwrap();
-        let card = assemble_check_card(&root, passed());
+        crate::ledger_init::write_marker(&root, "en").unwrap();
+        let db = PolicyDb::at(root.join("policy.json"));
+        db.seed_if_absent(&root, "en").unwrap();
+        db.approve(&root).unwrap();
+        let card = assemble_check_card_with(&root, passed(), Some(&db));
         assert!(!card.body.ok);
         assert_eq!(card.body.policy_ok, Some(false));
+        assert_eq!(card.body.integrity, Some(Integrity::Ok));
         assert_eq!(card.body.violations.len(), 1);
         assert_eq!(card.body.violations[0].file, "data/2026/2026-03.bean");
         assert!(card.display_block.contains("Policy errors"));

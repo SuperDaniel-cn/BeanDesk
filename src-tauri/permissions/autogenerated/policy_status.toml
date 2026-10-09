@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-policy-status"
+description = "Enables the policy_status command without any pre-configured scope."
+commands.allow = ["policy_status"]
+
+[[permission]]
+identifier = "deny-policy-status"
+description = "Denies the policy_status command without any pre-configured scope."
+commands.deny = ["policy_status"]

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import {
   Archive,
@@ -12,6 +13,7 @@ import {
   FilePlus2,
   FolderInput,
   FolderOpen,
+  Globe,
   Info,
   Link2,
   Plug,
@@ -95,6 +97,7 @@ import {
   stopStartedFava,
 } from '@/lib/desktop'
 import { loadMcpHostConfig, mcpHostConfigText } from '@/lib/mcp-host'
+import { POLICY_STATUS_QUERY } from '@/lib/policy'
 
 type SettingsTab = 'general' | 'simple' | 'backup' | 'about'
 
@@ -327,6 +330,7 @@ function UpdateCheck() {
 function ConnectionSettings() {
   const { t } = useI18n()
   const desktop = useDesktop()
+  const queryClient = useQueryClient()
   const saved = desktop.file
   const blank = emptyConnectionForm()
   const [mode, setMode] = useState<LinkMode>(() => linkModeOf(saved))
@@ -339,7 +343,7 @@ function ConnectionSettings() {
   const [inspect, setInspect] = useState<LedgerInspect | null>(null)
   const [inspectGen, setInspectGen] = useState(0)
   const [ledgerDialog, setLedgerDialog] = useState<{
-    action: 'init' | 'upgrade' | 'adopt'
+    action: 'init' | 'upgrade' | 'adopt' | 'switch'
     connectAfter: boolean
   } | null>(null)
   const [packs, setPacks] = useState<LedgerPack[]>([
@@ -478,7 +482,7 @@ function ConnectionSettings() {
   }
 
   function openLedgerDialog(
-    action: 'init' | 'upgrade' | 'adopt',
+    action: 'init' | 'upgrade' | 'adopt' | 'switch',
     options?: { connectAfter?: boolean },
   ) {
     if (!directory) {
@@ -502,6 +506,9 @@ function ConnectionSettings() {
       if (action === 'init') {
         await invoke('init_ledger', { directory, locale: packLocale })
         desktop.appendLog(t('settings.createFirstLedgerDone'))
+      } else if (action === 'switch') {
+        await invoke('policy_switch_locale', { directory, locale: packLocale })
+        desktop.appendLog(t('policy.switchLocaleDone'))
       } else {
         const report = await invoke<{ warnings: string[] }>('upgrade_ledger', {
           directory,
@@ -514,6 +521,7 @@ function ConnectionSettings() {
           desktop.appendLog(t('settings.upgradeSnapshotWarn'), 'error')
         }
       }
+      await queryClient.invalidateQueries({ queryKey: POLICY_STATUS_QUERY })
       setLedgerDialog(null)
       setInspectGen((gen) => gen + 1)
       if (shouldConnect) {
@@ -537,6 +545,10 @@ function ConnectionSettings() {
       defaultPath: fields.current.directory || undefined,
     })
     if (typeof picked !== 'string') return
+    const previous = fields.current.directory
+    if (previous && previous !== picked) {
+      await invoke('policy_follow_workdir', { old: previous, new: picked }).catch(() => undefined)
+    }
     fields.current.directory = picked
     setDirectory(picked)
     void persistDraft()
@@ -768,6 +780,18 @@ function ConnectionSettings() {
                   {t('settings.adoptLedger')}
                 </Button>
               ) : null}
+              {skeleton === 'current' || skeleton === 'outdated' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => openLedgerDialog('switch')}
+                  disabled={folderLocked || !directory}
+                  className="shrink-0"
+                >
+                  <Globe data-icon="inline-start" />
+                  {t('policy.switchLocale')}
+                </Button>
+              ) : null}
             </span>
           </label>
           {skeleton === 'outdated' || skeleton === 'foreign' ? (
@@ -814,7 +838,9 @@ function ConnectionSettings() {
                   ? 'settings.createFirstLedger'
                   : ledgerAction === 'adopt'
                     ? 'settings.adoptLedger'
-                    : 'settings.upgradeLedger',
+                    : ledgerAction === 'switch'
+                      ? 'policy.switchLocale'
+                      : 'settings.upgradeLedger',
               )}
             </DialogTitle>
             <DialogDescription>
@@ -823,7 +849,9 @@ function ConnectionSettings() {
                   ? 'settings.createFirstLedgerHint'
                   : ledgerAction === 'adopt'
                     ? 'settings.adoptLedgerHint'
-                    : 'settings.upgradeLedgerHint',
+                    : ledgerAction === 'switch'
+                      ? 'policy.switchLocaleHint'
+                      : 'settings.upgradeLedgerHint',
               )}
             </DialogDescription>
           </DialogHeader>
@@ -871,7 +899,9 @@ function ConnectionSettings() {
                   ? 'settings.createFirstLedger'
                   : ledgerAction === 'adopt'
                     ? 'settings.adoptLedgerConfirm'
-                    : 'settings.upgradeLedgerConfirm',
+                    : ledgerAction === 'switch'
+                      ? 'policy.switchLocaleConfirm'
+                      : 'settings.upgradeLedgerConfirm',
               )}
             </Button>
           </DialogFooter>

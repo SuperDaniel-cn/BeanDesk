@@ -30,6 +30,11 @@ fn main() {
             "backup_test_s3",
             "backup_open_workdir",
             "open_url",
+            "policy_status",
+            "policy_approve",
+            "policy_revert",
+            "policy_switch_locale",
+            "policy_follow_workdir",
         ]),
     ))
     .expect("failed to run build script");

@@ -4,6 +4,7 @@ mod engine;
 mod ledger_init;
 mod ledger_preset;
 mod mcp;
+mod policy_integrity;
 mod supervisor;
 #[cfg(desktop)]
 mod tray;
@@ -121,7 +122,12 @@ pub fn run() {
             backup::backup_snapshots,
             backup::backup_test_s3,
             backup::backup_open_workdir,
-            open_url
+            open_url,
+            policy_status,
+            policy_approve,
+            policy_revert,
+            policy_switch_locale,
+            policy_follow_workdir
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -289,6 +295,7 @@ fn fava_host(host: State<'_, FavaHost>) -> HostSnapshot {
 async fn init_ledger(app: AppHandle, directory: String, locale: String) -> Result<(), String> {
     spawn_heavy(move || {
         init_ledger_tree(Path::new(&directory), &locale)?;
+        policy_integrity::PolicyDb::seed_current(Path::new(&directory), &locale)?;
         backup::start_if_enabled(&app);
         Ok(())
     })
@@ -308,8 +315,55 @@ async fn upgrade_ledger(
 ) -> Result<ledger_init::UpgradeReport, String> {
     spawn_heavy(move || {
         let report = upgrade_ledger_tree(Path::new(&directory), &locale)?;
+        policy_integrity::PolicyDb::seed_current(Path::new(&directory), &locale)?;
         backup::start_if_enabled(&app);
         Ok(report)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn policy_status(app: AppHandle) -> Result<policy_integrity::PolicyStatus, String> {
+    spawn_heavy(move || {
+        let directory = crate::saved_workdir(&app)?;
+        Ok(policy_integrity::PolicyDb::standard()?.inspect(&directory))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn policy_approve(app: AppHandle) -> Result<policy_integrity::PolicyStatus, String> {
+    spawn_heavy(move || {
+        let directory = crate::saved_workdir(&app)?;
+        policy_integrity::PolicyDb::standard()?.approve(&directory)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn policy_revert(app: AppHandle) -> Result<policy_integrity::PolicyStatus, String> {
+    spawn_heavy(move || {
+        let directory = crate::saved_workdir(&app)?;
+        policy_integrity::PolicyDb::standard()?.revert(&directory)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn policy_switch_locale(
+    directory: String,
+    locale: String,
+) -> Result<policy_integrity::PolicyStatus, String> {
+    spawn_heavy(move || {
+        policy_integrity::PolicyDb::standard()?.switch_locale(Path::new(&directory), &locale)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn policy_follow_workdir(old: String, new: String) -> Result<bool, String> {
+    spawn_heavy(move || {
+        policy_integrity::PolicyDb::standard()?.follow_workdir(Path::new(&old), Path::new(&new))
     })
     .await
 }

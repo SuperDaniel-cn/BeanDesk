@@ -343,7 +343,18 @@ fn parse_marker(text: &str) -> Option<LedgerMarker> {
     serde_json::from_str(trimmed).ok()
 }
 
-fn write_marker(directory: &Path, locale: &str) -> Result<(), String> {
+pub(crate) fn read_marker_locale(directory: &Path) -> Option<String> {
+    read_marker(directory).and_then(|marker| {
+        let id = marker.locale.trim();
+        if id.is_empty() {
+            None
+        } else {
+            Some(id.to_string())
+        }
+    })
+}
+
+pub(crate) fn write_marker(directory: &Path, locale: &str) -> Result<(), String> {
     let marker = LedgerMarker {
         version: SKELETON_VERSION,
         locale: locale.to_string(),

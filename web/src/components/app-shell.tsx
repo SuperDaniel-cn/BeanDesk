@@ -6,6 +6,7 @@ import { BookOpenText, CalendarDays, Menu, Settings } from 'lucide-react'
 import { REPORT_PAGES, navLabelKey } from '@/app-pages'
 import { BrandMark } from '@/components/brand-mark'
 import { LedgerErrors } from '@/components/ledger-errors'
+import { PolicyBanner } from '@/components/policy-banner'
 import { StartupLoading, useStartupScreen } from '@/components/startup-loading'
 import { TimeFilterSelector } from '@/components/time-filter-selector'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -217,6 +218,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         }
       >
         {hideLedgerErrors ? null : <LedgerErrors />}
+        <PolicyBanner />
         {children}
       </main>
     </div>

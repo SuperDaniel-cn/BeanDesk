@@ -54,5 +54,5 @@ description: 引导用户在其指定的工作目录管理 Beancount 企业账�
 5. 编写交易分录：按 base/chart-of-accounts.md 在当月 data/YYYY/YYYY-MM.bean 中录入分录，并在 data/YYYY/YYYY.bean 中显式 include 该月文件。
 6. 语法与规则核查：
    - 命令行运行 bean-check main.bean 验证底层语法与金额平衡（合计归零）。
-   - 通过 MCP 调用 check_ledger：先执行 bean-check；若 policies/ 下配置了 TOML 规则，再按生效区间核验（error 报错拦截，warning 仅提示）。
+   - 通过 MCP 调用 check_ledger：先执行 bean-check；机器规则来自随包装语言包与桌面上次批准的自定义 TOML，不信任磁盘上未批准的文件。未播种时调用 upgrade_ledger（显式 locale 与 confirmWrite）播种；自定义仍须在 BeanDesk 桌面批准。error 报错拦截，warning 仅提示。
 7. 报表与关联确认：在 BeanDesk 中查看报表，核对凭证已建立穿透预览。

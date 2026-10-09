@@ -504,6 +504,31 @@ export const en = {
     },
   },
 
+  policy: {
+    bannerTitle: 'Policy review needed',
+    bannerUnseeded:
+      'This computer has not seeded policy integrity. Confirm the language pack in Settings. Custom TOML is not applied until approved here.',
+    bannerUnapproved:
+      'Custom policy files on disk differ from the last approved copies. Disk files are not being applied.',
+    bannerLocaleMismatch:
+      'The .beandesk locale does not match BeanDesk. Built-in rules still follow the BeanDesk language pack. Switch the pack in Settings, or revert.',
+    bannerStoreCorrupt:
+      'Approved policy copies could not be parsed. Built-in baseline rules still run. Custom disk files were not used.',
+    bannerRestore: 'This ledger was just restored. Review and approve or revert policies.',
+    review: 'Review',
+    dialogTitle: 'Policy review',
+    approve: 'Approve as new baseline',
+    revert: 'Revert to last approved',
+    emptyDiff: 'No custom policy file differences.',
+    approveFailed: 'Could not approve. Every custom TOML file must parse.',
+    revertFailed: 'Could not revert policies.',
+    switchLocale: 'Switch language pack',
+    switchLocaleHint:
+      'Writes the chosen pack into .beandesk and policies/base/rules.toml. Approved custom rules are kept. Markdown under base/ is not rewritten.',
+    switchLocaleDone: 'Language pack switched',
+    switchLocaleConfirm: 'Switch',
+  },
+
   update: {
     label: 'Software Update',
     check: 'Check for updates',
