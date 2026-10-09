@@ -2,6 +2,8 @@
 
 BeanDesk 是一款运行在本地的复式记账桌面软件。不设云端账号，无需自建数据库，账目与原始凭证完全由自己保管。可结合 AI 协助日常录账与合规核查，即时生成规范的对公财务报表，并提供本地与远端加密备份。
 
+> **项目定位**：一个本地化的 AI 财税副手——帮不懂财税的中小企业把经营账目做规范、把该用的合规口径用足，减少因不懂而造成的错报、误报和损失。
+
 [English](README.md) | 简体中文
 
 [![Release](https://img.shields.io/github/v/release/SuperDaniel-cn/BeanDesk?color=blue)](https://github.com/SuperDaniel-cn/BeanDesk/releases)

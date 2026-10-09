@@ -2,6 +2,8 @@
 
 BeanDesk is a local-first double-entry bookkeeping desktop application. It requires no cloud accounts or external databases—your ledger and supporting documents stay entirely on your own machine. Powered by AI agents for automated recording and compliance checks, it generates standardized financial statements with multi-destination encrypted backups.
 
+> **Project positioning**: A local AI tax and accounting copilot — helping small businesses without tax expertise keep their books in order, apply the compliant treatments they are entitled to, and reduce misstatements, filing errors, and the resulting losses.
+
 English | [简体中文](README.zh-CN.md)
 
 [![Release](https://img.shields.io/github/v/release/SuperDaniel-cn/BeanDesk?color=blue)](https://github.com/SuperDaniel-cn/BeanDesk/releases)
