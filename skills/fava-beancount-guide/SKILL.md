@@ -9,7 +9,7 @@ description: 引导用户在其指定的工作目录管理 Beancount 企业账�
 
 ## 执行前置原则
 
-1. 确认工作目录：仅读写用户明确指定的账本目录。已有账本以 config/accounts.bean 内已开立的科目为准；新账本可在指定空目录按标准骨架建立。空目录优先在 BeanDesk 设置中点击“初始化账本”（弹出语言包与记账币种，默认 zh-CN / CNY），或通过 MCP init_ledger（必须确认写入，防止未经确认写入空目录）。对空目录点“连接”也会打开同一弹窗，不会静默写骨架。桌面与 MCP 都必须显式传 locale：zh-CN 或 en，不能省略；币种随语言包带入。已有 main.bean 但没有 .beandesk 时，用设置页“收养为标准账本”或 MCP upgrade_ledger（同样必须确认写入并显式传 locale）；旧版 .beandesk 用“升级账本骨架”。桌面升级/收养使用同一弹窗。两者都只补缺失的 policies/base，不改 data/ 分录。
+1. 确认工作目录：仅读写用户明确指定的账本目录。已有账本以 config/accounts.bean 内已开立的科目为准；新账本可在指定空目录按标准骨架建立。空目录优先在 BeanDesk 设置中点击“初始化账本”（弹出语言包与记账币种，默认 zh-CN / CNY），或通过 MCP init_ledger（必须确认写入，防止未经确认写入空目录）。对空目录点“连接”也会打开同一弹窗，不会静默写骨架。桌面与 MCP 都必须显式传 locale：zh-CN 或 en，不能省略；币种随语言包带入。已有 main.bean 但没有 .beandesk 时，用设置页“接管为标准账本”或 MCP upgrade_ledger（同样必须确认写入并显式传 locale）；旧版 .beandesk 用“升级账本骨架”。桌面升级/接管使用同一弹窗。两者都只补缺失的 policies/base，不改 data/ 分录。
 2. 服务连接与运行边界：优先使用 BeanDesk 桌面端内置引擎连接账本。MCP 直接读取设置中保存的工作目录与 Fava 地址，不会在后台自动拉起未运行的 Fava 服务；服务未通时工具会返回未就绪。无需为记账去启动本仓库的前端开发服务器（make dev）。若自行启动 Fava，在用户账本目录下执行（如 fava --host 127.0.0.1 -p 5000 main.bean）。
 3. 架构模式：采用主控路由与按需参考。执行具体任务时，根据需要查阅 references/ 下的专项目录（科目连字符命名规范 references/naming-convention.md、凭证归档规范 references/document-filing.md、合规规则编写 references/policy-rules.md、排错指南 references/troubleshooting.md）。在已初始化的账本中，以工作目录 policies/base/ 为准（list_policies / get_policy）。
 4. 单一服务接入：桌面端直连单个 Fava 服务。多套账本通过同一个 Fava 进程指定多个入口文件（如 fava a.bean b.bean）并通过 slug 切换，无需另起第二个服务。

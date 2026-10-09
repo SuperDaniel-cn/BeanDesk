@@ -24,4 +24,4 @@ Desktop init, upgrade, and adopt write the pack chosen in the Settings dialog. C
 4. 在 `ledger_preset.rs` 增加 `include_str!` 与 match 分支。
 5. 执行 `make test`。
 
-桌面端初始化、升级与收养写入设置弹窗里选定的语言包。连接空目录不会写入。MCP 不根据操作系统语言猜测。
+桌面端初始化、升级与接管写入设置弹窗里选定的语言包。连接空目录不会写入。MCP 不根据操作系统语言猜测。

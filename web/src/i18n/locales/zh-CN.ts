@@ -389,12 +389,12 @@ export const zhCN = {
     upgradeLedgerHint:
       '当前目录是旧版 BeanDesk 账本。升级会补齐缺失的 policies/base 并刷新标记，不会改动 data/ 中的分录。',
     upgradeLedgerConfirm: '升级',
-    adoptLedger: '收养为标准账本',
-    adoptLedgerDone: '已收养为标准账本',
+    adoptLedger: '接管为标准账本',
+    adoptLedgerDone: '已接管为标准账本',
     adoptLedgerHint:
-      '当前目录是未带 BeanDesk 标记的既有 Beancount 账本。收养会写入标记、补齐缺失的 policies/base，并打开备份。不会改动 data/ 中的分录。',
-    adoptLedgerConfirm: '收养',
-    upgradeNeedsMainBean: '当前目录缺少 main.bean，无法升级或收养',
+      '当前目录是未带 BeanDesk 标记的既有 Beancount 账本。接管会写入标记、补齐缺失的 policies/base，并打开备份。不会改动 data/ 中的分录。',
+    adoptLedgerConfirm: '接管',
+    upgradeNeedsMainBean: '当前目录缺少 main.bean，无法升级或接管',
     command: '启动命令',
     commandPlaceholder: 'fava --host 127.0.0.1 --port 5000 main.bean',
     origin: '服务地址',
