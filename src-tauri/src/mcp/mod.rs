@@ -25,8 +25,8 @@ use fava_tools::{
 use handbook::{HandbookBody, HandbookInput, get_handbook_card};
 use policies::{PoliciesBody, PolicyBody, PolicyInput, get_policy_card, list_policies_card};
 use tools::{
-    CheckBody, ConnectionBody, EmptyInput, InitLedgerInput, WriteBody, check_ledger_card,
-    get_connection_card, init_ledger_card,
+    CheckBody, ConnectionBody, EmptyInput, InitLedgerInput, UpgradeBody, UpgradeLedgerInput,
+    WriteBody, check_ledger_card, get_connection_card, init_ledger_card, upgrade_ledger_card,
 };
 
 fn args_request_mcp(args: impl IntoIterator<Item = impl AsRef<str>>) -> bool {
@@ -86,6 +86,17 @@ impl LedgerTools {
         Parameters(input): Parameters<InitLedgerInput>,
     ) -> Result<Json<Card<WriteBody>>, String> {
         Ok(Json(init_ledger_card(None, input)?))
+    }
+
+    #[tool(
+        description = include_str!("prompts/upgrade_ledger.txt"),
+        annotations(read_only_hint = false)
+    )]
+    fn upgrade_ledger(
+        &self,
+        Parameters(input): Parameters<UpgradeLedgerInput>,
+    ) -> Result<Json<Card<UpgradeBody>>, String> {
+        Ok(Json(upgrade_ledger_card(None, input)?))
     }
 
     #[tool(
@@ -242,7 +253,7 @@ const SERVER_DESCRIPTION: &str =
 
 const SERVER_INSTRUCTIONS: &str = concat!(
     include_str!("prompts/server_description.txt"),
-    include_str!("prompts/server_report.txt"),
+    include_str!("prompts/output_format.txt"),
 );
 
 #[tool_handler(name = "BeanDesk")]
@@ -299,6 +310,7 @@ mod tests {
         let descriptions = [
             include_str!("prompts/get_connection.txt"),
             include_str!("prompts/init_ledger.txt"),
+            include_str!("prompts/upgrade_ledger.txt"),
             include_str!("prompts/check_ledger.txt"),
             include_str!("prompts/get_fava.txt"),
             include_str!("prompts/get_ledger.txt"),
@@ -322,6 +334,7 @@ mod tests {
         }
         assert!(!SERVER_INSTRUCTIONS.contains("get_connection"));
         assert!(!SERVER_INSTRUCTIONS.contains("init_ledger"));
+        assert!(!SERVER_INSTRUCTIONS.contains("upgrade_ledger"));
         assert!(!SERVER_INSTRUCTIONS.contains("run_bql"));
         assert!(!SERVER_INSTRUCTIONS.contains("confirmWrite"));
         assert!(!SERVER_INSTRUCTIONS.contains("list_policies"));

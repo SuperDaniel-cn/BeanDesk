@@ -10,7 +10,7 @@
 4. Wire `include_str!` and a match arm in `ledger_preset.rs`.
 5. Run `make test`.
 
-Desktop Initialize Ledger always writes `zh-CN`. MCP never guesses from the OS language.
+Desktop init, upgrade, and adopt write the pack chosen in the Settings dialog. Connecting an empty folder does not write. MCP never guesses from the OS language.
 
 # 账本语言包
 
@@ -24,4 +24,4 @@ Desktop Initialize Ledger always writes `zh-CN`. MCP never guesses from the OS l
 4. 在 `ledger_preset.rs` 增加 `include_str!` 与 match 分支。
 5. 执行 `make test`。
 
-桌面端“初始化账本”固定写入 `zh-CN`。MCP 不根据操作系统语言猜测。
+桌面端初始化、升级与收养写入设置弹窗里选定的语言包。连接空目录不会写入。MCP 不根据操作系统语言猜测。

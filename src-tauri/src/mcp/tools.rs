@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::directory_from_connection;
 use crate::engine::resolve_engine;
-use crate::ledger_init::{app_created_ledger, write_ledger_tree};
+use crate::ledger_init::{SKELETON_VERSION, init_ledger_tree, inspect_ledger, upgrade_ledger_tree};
 use crate::supervisor::accepts_local_origin;
 
 use super::card::Card;
-use super::policy_lint::{lint_policies, PolicyLint, PolicyViolation, Severity};
+use super::policy_lint::{PolicyLint, PolicyViolation, Severity, lint_policies};
 use super::store::{connection_value, load_saved_connection};
 
 pub(crate) const PREVIEW_LINES: usize = 12;
@@ -23,6 +23,9 @@ pub(crate) struct ConnectionBody {
     pub has_local_directory: bool,
     pub has_main_bean: bool,
     pub app_ledger: bool,
+    pub skeleton: String,
+    pub skeleton_version: Option<u32>,
+    pub locale: Option<String>,
     pub origin_kind: String,
     pub launch: String,
     pub directory: String,
@@ -34,6 +37,17 @@ pub(crate) struct ConnectionBody {
 pub(crate) struct WriteBody {
     pub written: bool,
     pub directory: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct UpgradeBody {
+    pub written: bool,
+    pub adopted: bool,
+    pub directory: String,
+    pub files: Vec<String>,
+    pub version: u32,
+    pub locale: String,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -56,6 +70,16 @@ pub(crate) struct EmptyInput {}
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct InitLedgerInput {
     /// Set true after the user agrees to write the first ledger skeleton. False returns a pending card and writes nothing.
+    #[serde(default)]
+    pub confirm_write: bool,
+    /// Required. Ready packs: zh-CN, en.
+    pub locale: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct UpgradeLedgerInput {
+    /// Set true after the user agrees to adopt or upgrade the Settings folder ledger. False returns a pending card and writes nothing.
     #[serde(default)]
     pub confirm_write: bool,
     /// Required. Ready packs: zh-CN, en.
@@ -120,12 +144,9 @@ pub(crate) fn get_connection_card(
         _ if directory.is_some() => "shell",
         _ => "none",
     };
-    let has_main = directory
+    let inspect = directory
         .as_ref()
-        .is_some_and(|path| path.join("main.bean").is_file());
-    let app_ledger = directory
-        .as_ref()
-        .is_some_and(|path| app_created_ledger(path));
+        .and_then(|path| inspect_ledger(path).ok());
     let has_policies_dir = directory
         .as_ref()
         .is_some_and(|path| path.join("policies").is_dir());
@@ -141,8 +162,14 @@ pub(crate) fn get_connection_card(
             "none".into()
         },
         has_local_directory: directory.is_some(),
-        has_main_bean: has_main,
-        app_ledger,
+        has_main_bean: inspect.as_ref().is_some_and(|item| item.has_main_bean),
+        app_ledger: inspect.as_ref().is_some_and(|item| item.app_ledger),
+        skeleton: inspect
+            .as_ref()
+            .map(|item| item.kind.clone())
+            .unwrap_or_else(|| "none".into()),
+        skeleton_version: inspect.as_ref().and_then(|item| item.version),
+        locale: inspect.as_ref().and_then(|item| item.locale.clone()),
         origin_kind: origin_kind.into(),
         launch: launch.into(),
         directory: directory
@@ -160,17 +187,12 @@ pub(crate) fn get_connection_card(
             } else {
                 "Settings has no local folder."
             },
-            if body.has_main_bean {
-                "main.bean is present."
-            } else {
-                "main.bean is missing."
-            },
-            if body.app_ledger {
-                "This is a BeanDesk-created ledger."
-            } else if body.has_main_bean {
-                "This folder already had a ledger."
-            } else {
-                ""
+            match body.skeleton.as_str() {
+                "outdated" => "The ledger skeleton is outdated.",
+                "foreign" => "This folder already had a ledger.",
+                "current" => "This is a BeanDesk-created ledger.",
+                _ if body.has_local_directory => "main.bean is missing.",
+                _ => "",
             },
             if body.has_policies_dir {
                 "A policies folder is present."
@@ -192,8 +214,8 @@ pub(crate) fn init_ledger_card(
 ) -> Result<Card<WriteBody>, String> {
     let connection = resolve_connection(store).map_err(explain_store)?;
     let directory = directory_from_connection(connection.value()).map_err(explain_store)?;
-    let pack = crate::ledger_preset::preset(input.locale.trim()).map_err(explain_write)?;
     if !input.confirm_write {
+        crate::ledger_preset::preset(input.locale.trim()).map_err(explain_write)?;
         return Ok(Card::new(
             "Not written. Call again with confirmWrite true after the user agrees to create the first ledger in the Settings folder.",
             WriteBody {
@@ -202,12 +224,66 @@ pub(crate) fn init_ledger_card(
             },
         ));
     }
-    write_ledger_tree(&directory, pack).map_err(explain_write)?;
+    init_ledger_tree(&directory, input.locale.trim()).map_err(explain_write)?;
     Ok(Card::new(
         "Created the first ledger skeleton in the Settings folder.",
         WriteBody {
             written: true,
             directory: directory.to_string_lossy().into_owned(),
+        },
+    ))
+}
+
+pub(crate) fn upgrade_ledger_card(
+    store: Option<&serde_json::Value>,
+    input: UpgradeLedgerInput,
+) -> Result<Card<UpgradeBody>, String> {
+    let connection = resolve_connection(store).map_err(explain_store)?;
+    let directory = directory_from_connection(connection.value()).map_err(explain_store)?;
+    let locale = input.locale.trim();
+    if !input.confirm_write {
+        crate::ledger_preset::preset(locale).map_err(explain_write)?;
+        let inspect = inspect_ledger(&directory).map_err(explain_write)?;
+        if matches!(inspect.kind.as_str(), "empty" | "occupied") {
+            return Err(explain_write("main-bean".into()));
+        }
+        let intent = match inspect.kind.as_str() {
+            "foreign" => "adopt the existing Beancount folder",
+            "outdated" => "upgrade the ledger skeleton",
+            "current" => "upgrade (already current)",
+            other => other,
+        };
+        return Ok(Card::new(
+            format!(
+                "Not written. Call again with confirmWrite true after the user agrees to {intent} in the Settings folder. locale={locale}. Does not change data/ entries."
+            ),
+            UpgradeBody {
+                written: false,
+                adopted: false,
+                directory: directory.to_string_lossy().into_owned(),
+                files: Vec::new(),
+                version: SKELETON_VERSION,
+                locale: locale.to_string(),
+            },
+        ));
+    }
+    let report = upgrade_ledger_tree(&directory, locale).map_err(explain_write)?;
+    let display = if report.written.is_empty() {
+        "Ledger skeleton is already current.".to_string()
+    } else if report.adopted {
+        "Adopted the Settings folder as a BeanDesk ledger. Missing baseline files were added. data/ entries were not changed.".to_string()
+    } else {
+        "Upgraded the Settings folder ledger skeleton. Missing baseline files were added. data/ entries were not changed.".to_string()
+    };
+    Ok(Card::new(
+        display,
+        UpgradeBody {
+            written: !report.written.is_empty(),
+            adopted: report.adopted,
+            directory: directory.to_string_lossy().into_owned(),
+            files: report.written,
+            version: report.version,
+            locale: report.locale,
         },
     ))
 }
@@ -409,6 +485,7 @@ fn explain_write(code: String) -> String {
             "That ledger pack is reserved but not merged yet. Use zh-CN or en.".into()
         }
         "unsupported-locale" => "Unknown ledger locale. Use zh-CN or en.".into(),
+        "main-bean" => "main.bean is missing in the Settings folder.".into(),
         other => other.into(),
     }
 }
@@ -502,9 +579,14 @@ mod tests {
         assert!(!written.display_block.contains(root.to_str().unwrap()));
         let connected = get_connection_card(Some(&store)).unwrap();
         assert!(connected.body.has_policies_dir);
-        assert!(connected
-            .display_block
-            .contains("A policies folder is present."));
+        assert_eq!(connected.body.skeleton, "current");
+        assert_eq!(connected.body.skeleton_version, Some(SKELETON_VERSION));
+        assert_eq!(connected.body.locale.as_deref(), Some("zh-CN"));
+        assert!(
+            connected
+                .display_block
+                .contains("A policies folder is present.")
+        );
         assert!(!connected.display_block.contains(root.to_str().unwrap()));
 
         let again = init_ledger_card(
@@ -564,6 +646,64 @@ mod tests {
         .unwrap();
         assert!(reserved.contains("reserved but not merged"));
         assert!(!root.join("main.bean").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn upgrade_ledger_adopts_after_confirm() {
+        let root = temp_dir("upgrade-adopt");
+        std::fs::write(root.join("main.bean"), "option \"title\" \"Old\"\n").unwrap();
+        std::fs::create_dir_all(root.join("data")).unwrap();
+        std::fs::write(root.join("data/keep.bean"), "keep-entry\n").unwrap();
+        let store = fixture_store(&root, "local");
+        let pending = upgrade_ledger_card(
+            Some(&store),
+            UpgradeLedgerInput {
+                confirm_write: false,
+                locale: "en".into(),
+            },
+        )
+        .unwrap();
+        assert!(!pending.body.written);
+        assert!(pending.display_block.contains("adopt"));
+        assert!(!root.join(APP_MARKER).exists());
+
+        let written = upgrade_ledger_card(
+            Some(&store),
+            UpgradeLedgerInput {
+                confirm_write: true,
+                locale: "en".into(),
+            },
+        )
+        .unwrap();
+        assert!(written.body.written);
+        assert!(written.body.adopted);
+        assert!(root.join(APP_MARKER).is_file());
+        assert!(root.join("policies/base/chart-of-accounts.md").is_file());
+        assert_eq!(
+            std::fs::read_to_string(root.join("data/keep.bean")).unwrap(),
+            "keep-entry\n"
+        );
+        assert!(!written.display_block.contains(root.to_str().unwrap()));
+        let connected = get_connection_card(Some(&store)).unwrap();
+        assert_eq!(connected.body.skeleton, "current");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn upgrade_ledger_requires_main_bean() {
+        let root = temp_dir("upgrade-empty");
+        let store = fixture_store(&root, "local");
+        let err = upgrade_ledger_card(
+            Some(&store),
+            UpgradeLedgerInput {
+                confirm_write: false,
+                locale: "zh-CN".into(),
+            },
+        )
+        .err()
+        .unwrap();
+        assert!(err.contains("main.bean is missing"));
         let _ = std::fs::remove_dir_all(&root);
     }
 

@@ -148,6 +148,10 @@ pub fn start_if_enabled(app: &AppHandle) {
     sync_watch(app, &directory, &settings);
 }
 
+pub(crate) fn git_snapshot(directory: &Path) -> Result<Option<String>, String> {
+    git::snapshot(directory)
+}
+
 fn sync_watch(app: &AppHandle, directory: &Path, settings: &BackupSettings) {
     let Some(host) = app.try_state::<BackupHost>() else {
         return;

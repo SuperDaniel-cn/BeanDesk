@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-inspect-ledger"
+description = "Enables the inspect_ledger command without any pre-configured scope."
+commands.allow = ["inspect_ledger"]
+
+[[permission]]
+identifier = "deny-inspect-ledger"
+description = "Denies the inspect_ledger command without any pre-configured scope."
+commands.deny = ["inspect_ledger"]

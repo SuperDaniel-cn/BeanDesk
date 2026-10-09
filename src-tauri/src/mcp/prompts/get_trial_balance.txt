@@ -1,1 +1,1 @@
-Read the trial balance tree from the Settings Fava.
+Read the trial balance from the configured Fava.

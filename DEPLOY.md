@@ -1,6 +1,6 @@
 # 部署：只在本机监听，用 Cloudflare Tunnel 开门
 
-Fava 的 `/<slug>/api/query` 可以执行任意 BQL，`/<slug>/document/` 会返回凭证文件，`ledger_data` 的 `options.filename` 会带出服务器上的账本路径。本仓库不提供登录。访问控制放在隧道外面。
+Fava 的 `/<slug>/api/query` 可以执行任意 BQL，`/<slug>/document/` 会返回凭证文件，`ledger_data` 的 `options.filename` 会带出服务器上的账本路径。本仓库不提供登录。访问控制由 Cloudflare Access 或私有网络（如 Tailscale）承担。
 
 下面是 Cloudflare Tunnel 的操作顺序。Tailscale 是另一种可接受的做法：VPS 和你的电脑、手机进同一个 tailnet，只通过 tailnet 地址访问下面这个本机端口，不要把该端口写进云厂商的入站规则。
 

@@ -1,1 +1,1 @@
-List Markdown policy files under the Settings work folder policies directory, including policies/base after init_ledger. Does not need Fava. Empty when that folder is missing.
+List Markdown policy files under the configured work folder policies directory, including policies/base after init_ledger. Does not need Fava. Returns an empty list when the folder does not exist.

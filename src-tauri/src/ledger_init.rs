@@ -1,16 +1,49 @@
 use std::fs;
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::ledger_preset::{preset, LedgerPreset};
+use crate::ledger_preset::{LedgerPreset, preset};
 
-pub fn init_ledger_tree(directory: &Path, locale: &str) -> Result<(), String> {
-    write_ledger_tree(directory, preset(locale)?)
+pub const SKELETON_VERSION: u32 = 2;
+pub const APP_MARKER: &str = ".beandesk";
+pub const BACKUP_GITIGNORE: &str = "\
+.backup_key
+.env
+backups/
+.DS_Store
+";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LedgerMarker {
+    version: u32,
+    #[serde(default)]
+    locale: String,
 }
 
-pub(crate) fn write_ledger_tree(directory: &Path, pack: &LedgerPreset) -> Result<(), String> {
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LedgerInspect {
+    pub kind: String,
+    pub version: Option<u32>,
+    pub locale: Option<String>,
+    pub has_main_bean: bool,
+    pub app_ledger: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpgradeReport {
+    pub adopted: bool,
+    pub written: Vec<String>,
+    pub version: u32,
+    pub locale: String,
+}
+
+pub fn init_ledger_tree(directory: &Path, locale: &str) -> Result<(), String> {
+    let pack = preset(locale)?;
     if !directory.is_absolute() || !directory.is_dir() {
         return Err("directory".to_string());
     }
@@ -48,55 +81,219 @@ pub(crate) fn write_ledger_tree(directory: &Path, pack: &LedgerPreset) -> Result
     write_new(year_dir.join(format!("{year}.bean")), &year_index)?;
     write_new(year_dir.join(&month_file), "")?;
     write_new(directory.join(".gitignore"), BACKUP_GITIGNORE)?;
-    write_new(directory.join("policies/README.md"), pack.policies_readme)?;
-    write_new(
-        directory.join("policies/base/chart-of-accounts.md"),
-        pack.chart_of_accounts,
-    )?;
-    write_new(
-        directory.join("policies/base/document-filing.md"),
-        pack.document_filing,
-    )?;
-    write_new(
-        directory.join("policies/base/bookkeeping-guide.md"),
-        pack.bookkeeping_guide,
-    )?;
-    if let Some(rules) = pack.rules {
-        write_new(directory.join("policies/base/rules.toml"), rules)?;
+    for (rel, contents) in baseline_files(pack) {
+        write_new(directory.join(rel), contents)?;
     }
-    write_new(directory.join(APP_MARKER), "beandesk\n")?;
+    write_marker(directory, locale.trim())?;
     Ok(())
 }
 
-pub const APP_MARKER: &str = ".beandesk";
+pub fn inspect_ledger(directory: &Path) -> Result<LedgerInspect, String> {
+    if !directory.is_absolute() || !directory.is_dir() {
+        return Err("directory".to_string());
+    }
+    let has_main_bean = directory.join("main.bean").is_file();
+    let app_ledger = app_created_ledger(directory);
+    let marker = read_marker(directory);
+    let version = marker.as_ref().map(|marker| marker.version);
+    let locale = marker.as_ref().and_then(|marker| {
+        let id = marker.locale.trim();
+        if id.is_empty() {
+            None
+        } else {
+            Some(id.to_string())
+        }
+    });
+    let kind = if !has_main_bean {
+        if effectively_empty(directory)? {
+            "empty"
+        } else {
+            "occupied"
+        }
+    } else if !app_ledger {
+        "foreign"
+    } else if needs_upgrade(directory, version, locale.as_deref()) {
+        "outdated"
+    } else {
+        "current"
+    };
+    Ok(LedgerInspect {
+        kind: kind.into(),
+        version,
+        locale,
+        has_main_bean,
+        app_ledger,
+    })
+}
+
+pub fn upgrade_ledger_tree(directory: &Path, locale: &str) -> Result<UpgradeReport, String> {
+    if !directory.is_absolute() || !directory.is_dir() {
+        return Err("directory".to_string());
+    }
+    if !directory.join("main.bean").is_file() {
+        return Err("main-bean".to_string());
+    }
+    let pack = preset(locale)?;
+    let inspect = inspect_ledger(directory)?;
+    if inspect.kind == "current" {
+        return Ok(UpgradeReport {
+            adopted: false,
+            written: Vec::new(),
+            version: SKELETON_VERSION,
+            locale: inspect.locale.unwrap_or_else(|| locale.to_string()),
+        });
+    }
+    let adopted = inspect.kind == "foreign";
+    let _ = crate::backup::git_snapshot(directory);
+    let mut written = write_missing_baseline(directory, pack)?;
+    write_marker(directory, locale)?;
+    written.push(APP_MARKER.to_string());
+    let _ = crate::backup::git_snapshot(directory);
+    Ok(UpgradeReport {
+        adopted,
+        written,
+        version: SKELETON_VERSION,
+        locale: locale.to_string(),
+    })
+}
 
 pub fn app_created_ledger(directory: &Path) -> bool {
     directory.join(APP_MARKER).is_file()
 }
 
-pub const BACKUP_GITIGNORE: &str = "\
-.backup_key
-.env
-backups/
-.DS_Store
-";
-
-pub fn ensure_backup_gitignore(directory: &Path) -> Result<(), String> {
+pub fn ensure_backup_gitignore(directory: &Path) -> Result<bool, String> {
     let path = directory.join(".gitignore");
-    if path.is_file() {
-        let current = fs::read_to_string(&path).map_err(|error| error.to_string())?;
-        if current.contains(".backup_key") && current.contains("backups/") {
-            return Ok(());
-        }
-        let mut next = current;
-        if !next.ends_with('\n') && !next.is_empty() {
-            next.push('\n');
-        }
-        next.push_str(BACKUP_GITIGNORE);
-        fs::write(&path, next).map_err(|error| error.to_string())?;
-        return Ok(());
+    let current = if path.is_file() {
+        fs::read_to_string(&path).map_err(|error| error.to_string())?
+    } else {
+        write_new(path, BACKUP_GITIGNORE)?;
+        return Ok(true);
+    };
+    if gitignore_covers(&current) {
+        return Ok(false);
     }
-    write_new(path, BACKUP_GITIGNORE)
+    let mut next = current;
+    if !next.ends_with('\n') && !next.is_empty() {
+        next.push('\n');
+    }
+    next.push_str(BACKUP_GITIGNORE);
+    fs::write(&path, next).map_err(|error| error.to_string())?;
+    Ok(true)
+}
+
+fn needs_upgrade(directory: &Path, version: Option<u32>, locale: Option<&str>) -> bool {
+    if version.unwrap_or(1) < SKELETON_VERSION {
+        return true;
+    }
+    let Some(id) = locale else {
+        return true;
+    };
+    match preset(id) {
+        Ok(pack) => baseline_missing(directory, pack),
+        Err(_) => true,
+    }
+}
+
+fn baseline_files(pack: &LedgerPreset) -> Vec<(&'static str, &'static str)> {
+    let mut files = vec![
+        ("policies/README.md", pack.policies_readme),
+        ("policies/base/chart-of-accounts.md", pack.chart_of_accounts),
+        ("policies/base/document-filing.md", pack.document_filing),
+        ("policies/base/bookkeeping-guide.md", pack.bookkeeping_guide),
+    ];
+    if let Some(rules) = pack.rules {
+        files.push(("policies/base/rules.toml", rules));
+    }
+    files
+}
+
+fn baseline_missing(directory: &Path, pack: &LedgerPreset) -> bool {
+    baseline_files(pack)
+        .into_iter()
+        .any(|(rel, _)| !directory.join(rel).is_file())
+        || gitignore_needs_update(directory)
+        || !directory.join("documents").is_dir()
+}
+
+fn write_missing_baseline(directory: &Path, pack: &LedgerPreset) -> Result<Vec<String>, String> {
+    let mut written = Vec::new();
+    let documents = directory.join("documents");
+    if !documents.is_dir() {
+        fs::create_dir_all(&documents).map_err(|error| error.to_string())?;
+        written.push("documents".into());
+    }
+    if ensure_backup_gitignore(directory)? {
+        written.push(".gitignore".into());
+    }
+    fs::create_dir_all(directory.join("policies/base")).map_err(|error| error.to_string())?;
+    for (rel, contents) in baseline_files(pack) {
+        if write_missing(&directory.join(rel), contents)? {
+            written.push(rel.to_string());
+        }
+    }
+    Ok(written)
+}
+
+fn gitignore_needs_update(directory: &Path) -> bool {
+    !fs::read_to_string(directory.join(".gitignore"))
+        .is_ok_and(|current| gitignore_covers(&current))
+}
+
+fn gitignore_covers(text: &str) -> bool {
+    text.contains(".backup_key") && text.contains("backups/")
+}
+
+fn read_marker(directory: &Path) -> Option<LedgerMarker> {
+    let text = fs::read_to_string(directory.join(APP_MARKER)).ok()?;
+    parse_marker(&text)
+}
+
+fn parse_marker(text: &str) -> Option<LedgerMarker> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.eq_ignore_ascii_case("beandesk") {
+        return Some(LedgerMarker {
+            version: 1,
+            locale: String::new(),
+        });
+    }
+    serde_json::from_str(trimmed).ok()
+}
+
+fn write_marker(directory: &Path, locale: &str) -> Result<(), String> {
+    let marker = LedgerMarker {
+        version: SKELETON_VERSION,
+        locale: locale.to_string(),
+    };
+    let body = serde_json::to_string(&marker).map_err(|error| error.to_string())?;
+    fs::write(directory.join(APP_MARKER), format!("{body}\n")).map_err(|error| error.to_string())
+}
+
+fn write_new(path: impl AsRef<Path>, contents: &str) -> Result<(), String> {
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path.as_ref())
+        .and_then(|mut file| file.write_all(contents.as_bytes()))
+        .map_err(|error| error.to_string())
+}
+
+fn write_missing(path: &Path, contents: &str) -> Result<bool, String> {
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+    {
+        Ok(mut file) => {
+            file.write_all(contents.as_bytes())
+                .map_err(|error| error.to_string())?;
+            Ok(true)
+        }
+        Err(error) if error.kind() == ErrorKind::AlreadyExists => Ok(false),
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 fn effectively_empty(directory: &Path) -> Result<bool, String> {
@@ -109,15 +306,6 @@ fn effectively_empty(directory: &Path) -> Result<bool, String> {
         return Ok(false);
     }
     Ok(true)
-}
-
-fn write_new(path: impl AsRef<Path>, contents: &str) -> Result<(), String> {
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path.as_ref())
-        .and_then(|mut file| file.write_all(contents.as_bytes()))
-        .map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
@@ -136,6 +324,16 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    fn write_v1_ledger(root: &Path) {
+        fs::create_dir_all(root.join("config")).unwrap();
+        fs::create_dir_all(root.join("data/2026")).unwrap();
+        fs::create_dir_all(root.join("documents")).unwrap();
+        fs::write(root.join("main.bean"), "option \"title\" \"Ledger\"\n").unwrap();
+        fs::write(root.join("config/accounts.bean"), "keep-accounts\n").unwrap();
+        fs::write(root.join("data/2026/2026-03.bean"), "keep-posting\n").unwrap();
+        fs::write(root.join(APP_MARKER), "beandesk\n").unwrap();
     }
 
     #[test]
@@ -165,6 +363,11 @@ mod tests {
         assert!(!accounts.contains("软件定制开发"));
         assert!(!accounts.contains("云计算与算力"));
         assert!(app_created_ledger(&root));
+        let marker: LedgerMarker =
+            serde_json::from_str(&fs::read_to_string(root.join(APP_MARKER)).unwrap()).unwrap();
+        assert_eq!(marker.version, SKELETON_VERSION);
+        assert_eq!(marker.locale, "zh-CN");
+        assert_eq!(inspect_ledger(&root).unwrap().kind, "current");
         assert_eq!(
             init_ledger_tree(&root, "zh-CN").err().as_deref(),
             Some("ledger-exists")
@@ -183,6 +386,9 @@ mod tests {
         assert!(accounts.contains("Equity:Capital:PaidIn"));
         assert!(!accounts.contains("银行存款"));
         assert!(!root.join("policies/base/rules.toml").exists());
+        let marker: LedgerMarker =
+            serde_json::from_str(&fs::read_to_string(root.join(APP_MARKER)).unwrap()).unwrap();
+        assert_eq!(marker.locale, "en");
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -214,6 +420,122 @@ mod tests {
         fs::write(root.join(".DS_Store"), "").unwrap();
         init_ledger_tree(&root, "zh-CN").unwrap();
         assert!(root.join("main.bean").is_file());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reads_a_bare_beandesk_marker_as_version_one() {
+        let marker = parse_marker("beandesk\n").unwrap();
+        assert_eq!(marker.version, 1);
+        assert!(marker.locale.is_empty());
+    }
+
+    #[test]
+    fn inspects_v1_and_foreign_ledgers() {
+        let v1 = scratch("inspect-v1");
+        write_v1_ledger(&v1);
+        let inspect = inspect_ledger(&v1).unwrap();
+        assert_eq!(inspect.kind, "outdated");
+        assert_eq!(inspect.version, Some(1));
+        assert!(inspect.app_ledger);
+        let _ = fs::remove_dir_all(&v1);
+
+        let foreign = scratch("inspect-foreign");
+        fs::write(foreign.join("main.bean"), "option \"title\" \"Old\"\n").unwrap();
+        let inspect = inspect_ledger(&foreign).unwrap();
+        assert_eq!(inspect.kind, "foreign");
+        assert!(!inspect.app_ledger);
+        let _ = fs::remove_dir_all(&foreign);
+    }
+
+    #[test]
+    fn upgrades_a_v1_ledger_without_touching_data() {
+        let root = scratch("upgrade-v1");
+        write_v1_ledger(&root);
+        fs::create_dir_all(root.join("policies/base")).unwrap();
+        fs::write(root.join("policies/README.md"), "keep-readme\n").unwrap();
+        let report = upgrade_ledger_tree(&root, "zh-CN").unwrap();
+        assert!(!report.adopted);
+        assert!(
+            report
+                .written
+                .contains(&"policies/base/chart-of-accounts.md".into())
+        );
+        assert!(
+            !report
+                .written
+                .iter()
+                .any(|path| path == "policies/README.md")
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("data/2026/2026-03.bean")).unwrap(),
+            "keep-posting\n"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("config/accounts.bean")).unwrap(),
+            "keep-accounts\n"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("policies/README.md")).unwrap(),
+            "keep-readme\n"
+        );
+        assert!(root.join("policies/base/rules.toml").is_file());
+        let marker: LedgerMarker =
+            serde_json::from_str(&fs::read_to_string(root.join(APP_MARKER)).unwrap()).unwrap();
+        assert_eq!(marker.version, 2);
+        assert_eq!(marker.locale, "zh-CN");
+        assert_eq!(inspect_ledger(&root).unwrap().kind, "current");
+        assert!(
+            upgrade_ledger_tree(&root, "zh-CN")
+                .unwrap()
+                .written
+                .is_empty()
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn adopts_an_unmarked_beancount_folder() {
+        let root = scratch("adopt");
+        fs::write(root.join("main.bean"), "option \"title\" \"Mine\"\n").unwrap();
+        fs::create_dir_all(root.join("data")).unwrap();
+        fs::write(root.join("data/keep.bean"), "keep-entry\n").unwrap();
+        let report = upgrade_ledger_tree(&root, "en").unwrap();
+        assert!(report.adopted);
+        assert!(app_created_ledger(&root));
+        assert!(root.join("policies/base/chart-of-accounts.md").is_file());
+        assert!(!root.join("policies/base/rules.toml").exists());
+        assert_eq!(
+            fs::read_to_string(root.join("data/keep.bean")).unwrap(),
+            "keep-entry\n"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("main.bean")).unwrap(),
+            "option \"title\" \"Mine\"\n"
+        );
+        assert_eq!(inspect_ledger(&root).unwrap().kind, "current");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn inspects_a_v2_marker_without_locale_as_outdated() {
+        let root = scratch("v2-no-locale");
+        fs::write(root.join("main.bean"), "option \"title\" \"Ledger\"\n").unwrap();
+        fs::write(root.join(APP_MARKER), "{\"version\":2}\n").unwrap();
+        let inspect = inspect_ledger(&root).unwrap();
+        assert_eq!(inspect.kind, "outdated");
+        assert_eq!(inspect.version, Some(2));
+        assert!(inspect.locale.is_none());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn upgrade_without_main_bean_is_rejected() {
+        let root = scratch("no-main");
+        assert_eq!(
+            upgrade_ledger_tree(&root, "zh-CN").err().as_deref(),
+            Some("main-bean")
+        );
         let _ = fs::remove_dir_all(&root);
     }
 }

@@ -8,7 +8,9 @@ import {
   Copy,
   Cpu,
   ExternalLink,
+  ArrowUpFromLine,
   FilePlus2,
+  FolderInput,
   FolderOpen,
   Info,
   Link2,
@@ -38,6 +40,13 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { formTitleClass } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import {
   Sidebar,
@@ -65,6 +74,8 @@ import {
   localWorkdir,
   normalizeOrigin,
   type ConnectionFile,
+  type LedgerInspect,
+  type LedgerPack,
   type LinkMode,
 } from '@/lib/connection'
 import {
@@ -325,6 +336,17 @@ function ConnectionSettings() {
   const [localOrigin, setLocalOrigin] = useState(saved?.local?.origin ?? blank.localOrigin)
   const [remoteOrigin, setRemoteOrigin] = useState(saved?.remote?.origin ?? blank.remoteOrigin)
   const [busy, setBusy] = useState(false)
+  const [inspect, setInspect] = useState<LedgerInspect | null>(null)
+  const [inspectGen, setInspectGen] = useState(0)
+  const [ledgerDialog, setLedgerDialog] = useState<{
+    action: 'init' | 'upgrade' | 'adopt'
+    connectAfter: boolean
+  } | null>(null)
+  const [packs, setPacks] = useState<LedgerPack[]>([
+    { id: 'zh-CN', currency: 'CNY', label: '' },
+    { id: 'en', currency: 'USD', label: '' },
+  ])
+  const [packLocale, setPackLocale] = useState('zh-CN')
   const [copied, setCopied] = useState(false)
   const [logOpen, setLogOpen] = useState(true)
   const [logFile, setLogFile] = useState<string | null>(null)
@@ -377,6 +399,32 @@ function ConnectionSettings() {
     return () => window.clearTimeout(id)
   }, [copied])
 
+  useEffect(() => {
+    if (!isTauri() || !directory) {
+      setInspect(null)
+      return
+    }
+    let cancelled = false
+    setInspect(null)
+    void invoke<LedgerInspect>('inspect_ledger', { directory })
+      .then((next) => {
+        if (!cancelled) setInspect(next)
+      })
+      .catch(() => {
+        if (!cancelled) setInspect(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [directory, inspectGen])
+
+  useEffect(() => {
+    if (!isTauri()) return
+    void invoke<LedgerPack[]>('list_ledger_packs')
+      .then(setPacks)
+      .catch(() => undefined)
+  }, [])
+
   function enqueue(task: () => Promise<void>) {
     const run = writeLock.current.then(task, task)
     writeLock.current = run.then(
@@ -427,16 +475,55 @@ function ConnectionSettings() {
     commitMode(next)
   }
 
-  async function createFirstLedger() {
+  function packName(id: string, fallback: string) {
+    if (id === 'zh-CN') return t('settings.packZhCN')
+    if (id === 'en') return t('settings.packEn')
+    return fallback || id
+  }
+
+  function chooseCurrency(code: string) {
+    const pack = packs.find((item) => item.currency === code)
+    if (pack) setPackLocale(pack.id)
+  }
+
+  function openLedgerDialog(
+    action: 'init' | 'upgrade' | 'adopt',
+    options?: { connectAfter?: boolean },
+  ) {
     if (!directory) {
       fail(t('settings.missingWorkDirectory'))
       return
     }
+    const pack =
+      (action !== 'init' ? packs.find((item) => item.id === inspect?.locale) : undefined) ??
+      packs[0]
+    if (pack) setPackLocale(pack.id)
+    setLedgerDialog({ action, connectAfter: options?.connectAfter === true })
+  }
+
+  async function confirmLedgerAction() {
+    if (!directory || !ledgerDialog) return
+    const { action, connectAfter } = ledgerDialog
+    const shouldConnect = connectAfter && action === 'init'
     setBusy(true)
     try {
       await persistDraft()
-      await invoke('init_ledger', { directory })
-      desktop.appendLog(t('settings.createFirstLedgerDone'))
+      if (action === 'init') {
+        await invoke('init_ledger', { directory, locale: packLocale })
+        desktop.appendLog(t('settings.createFirstLedgerDone'))
+      } else {
+        await invoke('upgrade_ledger', { directory, locale: packLocale })
+        desktop.appendLog(
+          t(action === 'adopt' ? 'settings.adoptLedgerDone' : 'settings.upgradeLedgerDone'),
+        )
+      }
+      setLedgerDialog(null)
+      setInspectGen((gen) => gen + 1)
+      if (shouldConnect) {
+        await openSaved(
+          fileForLinkMode(mode, directory, command, localOrigin, remoteOrigin, fields.current.saved),
+        )
+      }
     } catch (caught) {
       fail(explainConnectionError(caught, t))
     } finally {
@@ -481,6 +568,14 @@ function ConnectionSettings() {
       }
       if (mode === 'shell' && !command.trim()) {
         fail(t('settings.missingCommand'))
+        return
+      }
+      if (mode === 'engine' && inspect?.kind === 'empty') {
+        openLedgerDialog('init', { connectAfter: true })
+        return
+      }
+      if (mode === 'engine' && inspect?.kind === 'occupied') {
+        fail(t('settings.createFirstLedgerNotEmpty'))
         return
       }
       const local = localWorkdir(directory, localOrigin, command, mode === 'shell' ? 'shell' : 'engine')
@@ -571,6 +666,10 @@ function ConnectionSettings() {
   }
 
   const folderLocked = busy || switchNeedsConfirm(desktop.status)
+  const skeleton = inspect?.kind
+  const ledgerAction = ledgerDialog?.action
+  const packCurrency = packs.find((item) => item.id === packLocale)?.currency ?? ''
+  const showInit = mode === 'engine' && skeleton === 'empty'
   const engineLabel = t(linkModeMessage('engine'))
   const shellLabel = t(linkModeMessage('shell'))
   const directLabel = t(linkModeMessage('direct'))
@@ -636,11 +735,11 @@ function ConnectionSettings() {
                 <FolderOpen data-icon="inline-start" />
                 {t('settings.browse')}
               </Button>
-              {mode === 'engine' ? (
+              {showInit ? (
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => void createFirstLedger()}
+                  onClick={() => openLedgerDialog('init')}
                   disabled={folderLocked || !directory}
                   className="shrink-0"
                 >
@@ -648,8 +747,39 @@ function ConnectionSettings() {
                   {t('settings.createFirstLedger')}
                 </Button>
               ) : null}
+              {skeleton === 'outdated' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => openLedgerDialog('upgrade')}
+                  disabled={folderLocked || !directory}
+                  className="shrink-0"
+                >
+                  <ArrowUpFromLine data-icon="inline-start" />
+                  {t('settings.upgradeLedger')}
+                </Button>
+              ) : null}
+              {skeleton === 'foreign' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => openLedgerDialog('adopt')}
+                  disabled={folderLocked || !directory}
+                  className="shrink-0"
+                >
+                  <FolderInput data-icon="inline-start" />
+                  {t('settings.adoptLedger')}
+                </Button>
+              ) : null}
             </span>
           </label>
+          {skeleton === 'outdated' || skeleton === 'foreign' ? (
+            <Alert>
+              <AlertDescription>
+                {t(skeleton === 'foreign' ? 'settings.adoptLedgerHint' : 'settings.upgradeLedgerHint')}
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {mode === 'shell' ? (
             <label className="flex w-full flex-col items-start gap-1.5">
               <span className={formTitleClass}>{t('settings.command')}</span>
@@ -672,6 +802,84 @@ function ConnectionSettings() {
           />
         </>
       )}
+
+      <Dialog
+        open={ledgerDialog !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) setLedgerDialog(null)
+        }}
+      >
+        <DialogContent className="min-w-0 overflow-hidden sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {t(
+                ledgerAction === 'init'
+                  ? 'settings.createFirstLedger'
+                  : ledgerAction === 'adopt'
+                    ? 'settings.adoptLedger'
+                    : 'settings.upgradeLedger',
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {t(
+                ledgerAction === 'init'
+                  ? 'settings.createFirstLedgerHint'
+                  : ledgerAction === 'adopt'
+                    ? 'settings.adoptLedgerHint'
+                    : 'settings.upgradeLedgerHint',
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <label className="flex w-full flex-col items-start gap-1.5">
+              <span className={formTitleClass}>{t('settings.ledgerPackLanguage')}</span>
+              <Select value={packLocale} onValueChange={setPackLocale} disabled={busy}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {packs.map((pack) => (
+                    <SelectItem key={pack.id} value={pack.id}>
+                      {packName(pack.id, pack.label)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <label className="flex w-full flex-col items-start gap-1.5">
+              <span className={formTitleClass}>{t('settings.ledgerPackCurrency')}</span>
+              <Select value={packCurrency} onValueChange={chooseCurrency} disabled={busy}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {packs.map((pack) => (
+                    <SelectItem key={pack.currency} value={pack.currency}>
+                      {pack.currency}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <p className="text-xs text-muted-foreground">{t('settings.ledgerPackHint')}</p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => setLedgerDialog(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="button" disabled={busy || !packLocale} onClick={() => void confirmLedgerAction()}>
+              {busy ? <Spinner data-icon="inline-start" /> : null}
+              {t(
+                ledgerAction === 'init'
+                  ? 'settings.createFirstLedger'
+                  : ledgerAction === 'adopt'
+                    ? 'settings.adoptLedgerConfirm'
+                    : 'settings.upgradeLedgerConfirm',
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={pendingMode !== null}

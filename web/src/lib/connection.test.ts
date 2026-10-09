@@ -192,6 +192,8 @@ describe('readConnectionFile', () => {
     expect(explainConnectionError('missing-engine', t)).toBe('settings.missingEngine')
     expect(explainConnectionError('ledger-exists', t)).toBe('settings.createFirstLedgerExists')
     expect(explainConnectionError('not-empty', t)).toBe('settings.createFirstLedgerNotEmpty')
+    expect(explainConnectionError('missing-ledger', t)).toBe('settings.missingLedger')
+    expect(explainConnectionError('main-bean', t)).toBe('settings.upgradeNeedsMainBean')
     expect(explainConnectionError('airplay', t)).toBe('settings.airplayPort')
   })
 

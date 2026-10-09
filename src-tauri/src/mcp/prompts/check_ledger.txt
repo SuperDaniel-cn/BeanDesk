@@ -1,1 +1,1 @@
-Run bean-check on the Settings work folder. If the policies directory contains TOML rules, apply automated compliance checks to postings within their effective date window. Rule errors fail the check; warnings do not.
+Run bean-check on the configured work folder. If the policies directory contains TOML rules, apply automated compliance checks to postings within their effective date window. Errors fail the check; warnings are reported only.

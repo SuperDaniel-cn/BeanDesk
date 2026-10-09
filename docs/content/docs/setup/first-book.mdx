@@ -9,13 +9,13 @@ In Settings → Ledger Connection, choose an empty directory. To prevent overwri
 
 ## 2. Initialize Ledger
 
-Click Initialize Ledger. BeanDesk generates the standard Beancount directory structure (`main.bean`, `config/`, `data/`, `documents/`, and `policies/base/`) alongside a `.beandesk` marker. The desktop button always uses the zh-CN preset: a minimal chart (checking + paid-in capital) plus `policies/base`, with CNY as the operating currency. MCP `init_ledger` requires an explicit `locale` (`zh-CN` or `en`); omitting it is rejected.
+Click Initialize Ledger. A dialog asks for the locale pack and operating currency (default Simplified Chinese / CNY). After confirm, BeanDesk writes the standard Beancount directory structure (`main.bean`, `config/`, `data/`, `documents/`, and `policies/base/`) alongside a versioned `.beandesk` marker. This matches MCP `init_ledger`: `locale` must be explicit (`zh-CN` or `en`); currency comes with the pack. An older BeanDesk folder with a v1 marker is offered Upgrade ledger skeleton on this page, with the same dialog; that only fills missing `policies/base` files and never rewrites `data/` entries.
 
 Subsequent bookkeeping is performed by editing monthly `.bean` files under `data/` in your preferred text editor. BeanDesk provides read-only financial reporting.
 
 ## 3. Connect Service
 
-In Ledger Connection, click Connect. The default mode uses the bundled engine. You can also switch to an external command or connect directly to an existing service origin. If a session is currently active, switching modes disconnects the active session first.
+In Ledger Connection, click Connect. The default mode uses the bundled engine. If the folder is still empty, Connect opens the same locale dialog instead of writing a default pack. You can also switch to an external command or connect directly to an existing service origin. If a session is currently active, switching modes disconnects the active session first.
 
 ## 4. Configure Backups
 

@@ -9,16 +9,18 @@ In Settings → Ledger Connection, select your existing ledger directory and cli
 
 ## Backup Protection
 
-To protect existing external backup workflows and file hierarchies, ledgers not initialized by BeanDesk (lacking a `.beandesk` marker in the working directory) disable the backup and restore panel. Additionally, initializing over an existing `main.bean` is prohibited.
+To protect existing files, BeanDesk will not run Initialize Ledger over a folder that already has `main.bean`. Without a `.beandesk` marker, the backup panel stays off.
+
+If you want BeanDesk backups and `policies/base` on that existing book, choose Adopt as standard ledger on the connection page and pick the locale pack and currency in the dialog (same explicit `locale` as MCP). That writes `.beandesk`, adds only missing `policies/base` files and backup gitignore lines, and leaves `data/` entries unchanged. MCP `upgrade_ledger` does the same after an explicit write confirmation and `locale`.
 
 ## Available Features
 
-Once connected, the following are available (backup stays disabled without `.beandesk`):
+Once connected, the following are available. Backup stays disabled until the folder has `.beandesk` (from Initialize or Adopt):
 
 - Financial statements: Trial Balance, Balance Sheet, Income Statement, and Cash Flow Statement.
 - Journal drilldown: Transaction inspection and linked source document previews.
 - BQL query console: Native Beancount Query Language execution.
 - Calendar: one local `.ics` import or one HTTPS subscription.
-- Local MCP server: Ledger queries, syntax validation (check_ledger), policy inspection, and handbook lookup tools for AI coding assistants.
+- Local MCP server: Ledger queries, syntax validation (check_ledger), policy inspection, and handbook lookup tools for local AI assistants.
 
 Next: [Settings](/desktop) and [Reports](/reports).

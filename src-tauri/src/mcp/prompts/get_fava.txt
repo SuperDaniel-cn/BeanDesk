@@ -1,1 +1,1 @@
-See whether the Settings Fava is answering and which ledger slug it uses.
+See whether the configured Fava is answering and which ledger slug it uses.

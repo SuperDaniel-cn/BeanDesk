@@ -1,1 +1,1 @@
-Read the income statement tree from the Settings Fava.
+Read the income statement from the configured Fava.

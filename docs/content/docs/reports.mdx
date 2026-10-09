@@ -3,7 +3,7 @@ title: Reports
 description: Trial Balance, financial statements, journal entries, and BQL queries.
 ---
 
-Financial statements are computed by BeanDesk in real time directly from the active ledger. The Accounting Period filter in the header acts as a global slice, coordinating all reports, journal postings, and query scopes. On the trial balance, balance sheet, and income statement, an account row opens the journal for that account.
+Financial statements are computed by BeanDesk in real time directly from the active ledger. The Accounting Period filter in the header applies to all reports, journal postings, and queries. On the trial balance, balance sheet, and income statement, an account row opens the journal for that account.
 
 ## Trial Balance
 
@@ -19,7 +19,7 @@ Categorizes operating revenues, costs, and expenses to calculate period net prof
 
 ## Cash Flow Statement
 
-Computed via the direct method in pure functions, separating net cash flows across operating, investing, and financing activities with year-over-year comparative data (omitted when All time is selected). Non-cash accrual entries are excluded automatically.
+Computed by the direct method, separating net cash flows across operating, investing, and financing activities with year-over-year comparative data (omitted when All time is selected). Non-cash accrual entries are excluded automatically.
 
 Cash flow mappings rely on metadata on Beancount account opening directives (`open`):
 
@@ -30,7 +30,7 @@ Cash flow mappings rely on metadata on Beancount account opening directives (`op
   cashflow: "sales"
 ```
 
-- `cash: TRUE`: Designates the account as a cash or bank asset. If no account is marked, the page says “No cash accounts configured” instead of three zero totals.
+- `cash: TRUE`: Designates the account as a cash or bank asset. If no account is marked, the page says “No cash accounts configured” instead of three zero amounts.
 - `cashflow: "<line>"`: Maps the counter-account to a standard cash flow line. Postings without a line mapping are grouped into Unclassified Items.
 - `cashflow-in` / `cashflow-out`: Separates line mappings for inflows and outflows on the same account.
 
@@ -55,9 +55,9 @@ Standard ledgers initialized by BeanDesk include baseline cash metadata for chec
 
 ## Journal & Document Drilldown
 
-The journal offers multi-dimensional filtering across counterparty, narration, accounting element, and tags. The document column opens a dialog with the postings and linked files. A failed load shows an error and a retry, not an empty book.
+The journal offers multi-dimensional filtering across counterparty, narration, accounting element, and tags. The document column opens a dialog with the postings and linked files. A failed load shows an error and a Retry button, not a blank statement.
 
-- Document Linking: A file under `documents/` is automatically linked when its date and account path match a posting, or when the file name contains the transaction's link string (the `^link` directive from postings with the caret prefix stripped).
+- Document Linking: A file under `documents/` is automatically linked when its date and account path match a posting, or when the file name contains the transaction's link tag.
 - Document Repository: The Documents page centrally indexes all receipts and invoices archived within the active accounting period.
 
 ## BQL Query Console
@@ -66,4 +66,4 @@ Provides an interactive console for native Beancount Query Language (BQL) statem
 
 - Includes built-in presets for monthly income and expenses, large transactions, and cash account balances.
 - Supports execution shortcuts: Cmd + Enter on macOS and Ctrl + Enter on Windows / Linux.
-- Supports column sorting and CSV export. The statement is sent unchanged. A result longer than 50,000 rows keeps the first 50,000 and says how many came back.
+- Supports column sorting and CSV export. The statement is sent unchanged. A result longer than 50,000 rows keeps the first 50,000 rows and reports the total row count.

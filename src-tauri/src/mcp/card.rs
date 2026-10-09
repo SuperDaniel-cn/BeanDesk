@@ -11,7 +11,7 @@ pub(crate) const fn without_trailing_newline(text: &str) -> &str {
 }
 
 pub(crate) const REPLY_CONTRACT: &str =
-    without_trailing_newline(include_str!("prompts/server_report.txt"));
+    without_trailing_newline(include_str!("prompts/output_format.txt"));
 
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]

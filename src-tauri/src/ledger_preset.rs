@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub struct LedgerPreset {
     pub operating_currency: &'static str,
@@ -53,6 +53,30 @@ enum PackStatus {
 struct LocalePack {
     id: String,
     status: PackStatus,
+    #[serde(default)]
+    currency: String,
+    #[serde(default)]
+    label: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadyPack {
+    pub id: String,
+    pub currency: String,
+    pub label: String,
+}
+
+pub fn ready_packs() -> Vec<ReadyPack> {
+    catalog()
+        .iter()
+        .filter(|row| row.status == PackStatus::Ready)
+        .map(|row| ReadyPack {
+            id: row.id.clone(),
+            currency: row.currency.clone(),
+            label: row.label.clone(),
+        })
+        .collect()
 }
 
 fn catalog() -> &'static [LocalePack] {
@@ -106,6 +130,14 @@ mod tests {
         assert!(catalog().len() > 100);
         assert_eq!(preset("zh-CN").unwrap().operating_currency, "CNY");
         assert_eq!(preset("en").unwrap().operating_currency, "USD");
+        let listed = ready_packs();
+        assert_eq!(
+            listed
+                .iter()
+                .map(|row| (row.id.as_str(), row.currency.as_str()))
+                .collect::<Vec<_>>(),
+            [("zh-CN", "CNY"), ("en", "USD")]
+        );
     }
 
     #[test]

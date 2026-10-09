@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-upgrade-ledger"
+description = "Enables the upgrade_ledger command without any pre-configured scope."
+commands.allow = ["upgrade_ledger"]
+
+[[permission]]
+identifier = "deny-upgrade-ledger"
+description = "Denies the upgrade_ledger command without any pre-configured scope."
+commands.deny = ["upgrade_ledger"]

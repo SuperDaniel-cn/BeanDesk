@@ -7,7 +7,7 @@ description: Ledger connection, service supervision, backups, and app preference
 
 Settings provides three mutually exclusive connection modes, sharing a unified activity log:
 
-- Bundled Engine: Specify your ledger working directory to launch via the bundled standalone engine, requiring no Python environment or manual commands. Empty folders can be initialized here directly. The local address defaults to `http://127.0.0.1:5000`; you can change the loopback port.
+- Bundled Engine: Specify your ledger working directory to launch via the bundled standalone engine, requiring no Python environment or manual commands. Empty folders are initialized through the language and currency dialog (Initialize Ledger, or Connect on an empty folder). Connecting never writes a pack on its own. The local address defaults to `http://127.0.0.1:5000`; you can change the loopback port.
 - External Command: Specify a directory, start command, and local origin. Probes the port first, attaching directly if a local Fava service is already running; otherwise spawns the command in an isolated process group.
 - Direct Address: Provide an existing Fava service URL (local or remote) without managing background processes.
 
@@ -17,18 +17,18 @@ If a session is active, switching modes requires confirmation and disconnects th
 
 - General: Language preference, appearance theme (light, dark, or system), and local MCP configuration.
 - Ledger Connection: Working directory picker, connection mode switcher, and supervision controls.
-- Backup: Local Git snapshots and restic encrypted backups (available for BeanDesk-initialized ledgers; see [First book](/setup/first-book)).
+- Backup: Local Git snapshots and restic encrypted backups (available after Initialize Ledger or Adopt as standard ledger; see [First book](/setup/first-book) and [Existing Beancount](/setup/existing)).
 - About: App name, software updates, and license.
 
 ## Connection Logs
 
-Connection events are recorded to local log files (10 MB cap with rolling eviction). Clear resets only the on-screen log view without affecting disk logs.
+Connection events are recorded to local log files (10 MB cap; oldest lines are dropped from the start of the file). Clear resets only the on-screen log view without affecting disk logs.
 
 The desktop app displays the absolute path to this log file directly below the connection log in Settings (typically `%LOCALAPPDATA%\app.beandesk.desktop\logs\BeanDesk.log` on Windows). Output from the bundled engine is also forwarded to this file for troubleshooting.
 
 ## Handbook Window
 
-Clicking the book icon in the header opens this manual in a dedicated, distraction-free secondary window. The window remains warm in memory; closing it merely hides it for instant re-invocation.
+Clicking the book icon in the header opens this manual in a dedicated secondary window. The handbook window stays available; closing it only hides it, and opening it again shows it immediately.
 
 ## System Tray and Background Presence
 

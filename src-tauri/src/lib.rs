@@ -18,7 +18,7 @@ use engine::engine_args;
 use engine::resolve_engine;
 #[cfg(not(windows))]
 use engine::sidecar_command;
-use ledger_init::init_ledger_tree;
+use ledger_init::{init_ledger_tree, upgrade_ledger_tree};
 use supervisor::{HostSnapshot, Supervisor, accepts_local_origin};
 use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WebviewWindow, WindowEvent};
@@ -43,6 +43,14 @@ struct SavedLocal {
     /// advanced-page shell line. Missing on files written before this field.
     #[serde(default)]
     launch: String,
+}
+
+fn require_main_bean(directory: &str) -> Result<(), String> {
+    if Path::new(directory).join("main.bean").is_file() {
+        Ok(())
+    } else {
+        Err("missing-ledger".to_string())
+    }
 }
 
 fn bundled_launch(saved: &SavedLocal) -> bool {
@@ -97,6 +105,9 @@ pub fn run() {
             stop_saved_fava,
             fava_host,
             init_ledger,
+            inspect_ledger,
+            upgrade_ledger,
+            list_ledger_packs,
             start_if_enabled,
             read_user_text_file,
             mcp::mcp_host_config,
@@ -226,11 +237,7 @@ fn start_saved_fava(app: AppHandle, host: State<'_, FavaHost>) -> Result<(), Str
     backup::start_if_enabled(&app);
     if bundled_launch(&saved) {
         let engine = resolve_engine(Some(&app))?;
-        if let Err(code) = init_ledger_tree(Path::new(&saved.directory), "zh-CN") {
-            if code != "ledger-exists" {
-                return Err(code);
-            }
-        }
+        require_main_bean(&saved.directory)?;
         #[cfg(windows)]
         {
             return lock(&host).start_program(
@@ -262,10 +269,31 @@ fn fava_host(host: State<'_, FavaHost>) -> HostSnapshot {
 }
 
 #[tauri::command]
-fn init_ledger(app: AppHandle, directory: String) -> Result<(), String> {
-    init_ledger_tree(Path::new(&directory), "zh-CN")?;
+fn init_ledger(app: AppHandle, directory: String, locale: String) -> Result<(), String> {
+    init_ledger_tree(Path::new(&directory), &locale)?;
     backup::start_if_enabled(&app);
     Ok(())
+}
+
+#[tauri::command]
+fn inspect_ledger(directory: String) -> Result<ledger_init::LedgerInspect, String> {
+    ledger_init::inspect_ledger(Path::new(&directory))
+}
+
+#[tauri::command]
+fn upgrade_ledger(
+    app: AppHandle,
+    directory: String,
+    locale: String,
+) -> Result<ledger_init::UpgradeReport, String> {
+    let report = upgrade_ledger_tree(Path::new(&directory), &locale)?;
+    backup::start_if_enabled(&app);
+    Ok(report)
+}
+
+#[tauri::command]
+fn list_ledger_packs() -> Vec<ledger_preset::ReadyPack> {
+    ledger_preset::ready_packs()
 }
 
 #[tauri::command]
@@ -341,7 +369,7 @@ fn open_external_url(url: &str) -> Result<(), String> {
 mod tests {
     use super::{
         bundled_launch, directory_from_connection, local_project, open_external_url,
-        read_user_text_file_at,
+        read_user_text_file_at, require_main_bean,
     };
 
     #[test]
@@ -463,6 +491,21 @@ mod tests {
                 .as_deref(),
             Some("path")
         );
+    }
+
+    #[test]
+    fn bundled_engine_needs_a_main_bean() {
+        let root =
+            std::env::temp_dir().join(format!("beandesk-missing-ledger-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        assert_eq!(
+            require_main_bean(root.to_str().unwrap()).err().as_deref(),
+            Some("missing-ledger")
+        );
+        std::fs::write(root.join("main.bean"), "").unwrap();
+        assert!(require_main_bean(root.to_str().unwrap()).is_ok());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

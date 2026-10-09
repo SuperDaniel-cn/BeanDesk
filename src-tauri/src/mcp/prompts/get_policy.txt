@@ -1,1 +1,1 @@
-Read one Markdown policy file from the Settings work folder policies directory. name is a relative path from list_policies, such as README.md or base/chart-of-accounts.md. Read policies/base before posting and run check_ledger after writing. Does not need Fava.
+Read one Markdown policy file from the configured work folder policies directory. `name` is a relative path from list_policies, such as README.md or base/chart-of-accounts.md. Read policies/base before posting and run check_ledger after writing. Does not need Fava.

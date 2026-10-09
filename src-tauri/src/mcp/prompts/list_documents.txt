@@ -1,1 +1,1 @@
-List documents the Settings Fava has indexed.
+List documents the configured Fava has indexed.

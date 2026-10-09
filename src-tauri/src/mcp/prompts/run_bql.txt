@@ -1,1 +1,1 @@
-Run a native BQL query on the Settings Fava.
+Run a native BQL query on the configured Fava.

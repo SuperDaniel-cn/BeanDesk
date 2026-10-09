@@ -34,6 +34,17 @@ export type RemoteSource = RemoteDraft & { kind: 'remote' }
 
 export type LedgerConnection = LocalProject | RemoteSource
 
+export type LedgerInspect = {
+  kind: 'empty' | 'occupied' | 'foreign' | 'outdated' | 'current'
+  locale: string | null
+}
+
+export type LedgerPack = {
+  id: string
+  currency: string
+  label: string
+}
+
 export type ConnectionFile = {
   active: LedgerConnection['kind']
   local: LocalDraft | null
@@ -245,6 +256,8 @@ export function explainConnectionError(
   if (code === 'missing-engine') return t('settings.missingEngine')
   if (code === 'ledger-exists') return t('settings.createFirstLedgerExists')
   if (code === 'not-empty') return t('settings.createFirstLedgerNotEmpty')
+  if (code === 'missing-ledger') return t('settings.missingLedger')
+  if (code === 'main-bean') return t('settings.upgradeNeedsMainBean')
   if (code === 'loopback') return t('settings.loopback')
   if (code === 'not-local' || code === 'missing') return t('settings.notLocal')
   if (code.startsWith('spawn:')) {

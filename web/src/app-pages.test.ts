@@ -5,13 +5,14 @@ import { en } from '@/i18n/locales/en'
 import { zhCN } from '@/i18n/locales/zh-CN'
 
 describe('nav labels', () => {
-  test('Documents uses a short nav label and keeps the long page title', () => {
+  test('Documents uses the same nav label and page title', () => {
     const documents = REPORT_PAGES.find((page) => page.path === '/documents')
     expect(documents?.navKey).toBe('documents.nav')
     expect(navLabelKey(documents!)).toBe('documents.nav')
     expect(en.documents.nav).toBe('Documents')
-    expect(en.documents.nav.length).toBeLessThan(en.documents.title.length)
-    expect(zhCN.documents.nav).toBe(zhCN.documents.title)
+    expect(en.documents.title).toBe('Documents')
+    expect(zhCN.documents.nav).toBe('凭证')
+    expect(zhCN.documents.title).toBe('凭证')
   })
 
   test('other report pages keep a single label', () => {

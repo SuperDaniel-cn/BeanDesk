@@ -20,10 +20,9 @@ export const en = {
   },
 
   fava: {
-    unreachable:
-      'Unable to connect to Fava service. Ensure it is running on 127.0.0.1:5000 or configure apiBaseUrl in config.js',
-    slug: 'Unable to determine ledger slug. Configure slug in config.js',
-    slugInvalid: 'Invalid ledger slug in config.js',
+    unreachable: 'Unable to reach Fava. Check the ledger connection in Settings.',
+    slug: 'Unable to determine the ledger slug. Check that the ledger service is ready.',
+    slugInvalid: 'The ledger slug is invalid.',
   },
 
   ledger: {
@@ -82,7 +81,7 @@ export const en = {
     file: 'Local file',
     url: 'HTTPS subscription',
     urlPlaceholder: 'https://…',
-    desktopOnly: 'Local import and subscription are available in the desktop app.',
+    desktopOnly: 'Local file import and subscription are available only in the desktop app.',
     browseIcs: 'Select .ics file',
     clear: 'Clear',
     upcoming: 'Upcoming Events (12 months)',
@@ -216,7 +215,7 @@ export const en = {
     errorFallback: 'Query execution failed. Please check syntax.',
     resultsTitle: 'Query Results',
     resultsSummary: '{columns} columns · {rows} rows',
-    truncated: 'The query returned {total} rows. Showing the first {count}. The statement was not changed.',
+    truncated: 'The query returned {total} rows. Showing the first {count}.',
     resetSort: 'Reset sort',
     emptyTitle: 'No Matching Records',
     emptyDescription: 'No data returned for this query',
@@ -297,11 +296,12 @@ export const en = {
     backupDestRemove: 'Remove',
     backupDestRemoved: 'Backup destination removed',
     backupDestRemoveTitle: 'Remove this backup destination?',
-    backupDestRemoveBody: 'Existing historical snapshots remain intact.',
+    backupDestRemoveBody:
+      'Existing snapshots remain intact; no new snapshots will be written to it.',
     backupDestPath: 'Path',
     backupDestStatus: 'Status',
     backupDestReady: 'Ready',
-    backupDestMissing: 'Directory does not exist',
+    backupDestMissing: 'Path is missing or unreachable',
     backupDestCheckPending: 'Check pending',
     backupDestIncomplete: 'Not ready',
     backupDestLast: 'Last snapshot',
@@ -368,7 +368,7 @@ export const en = {
     switchModeStop:
       'This stops the service this window started and switches to "{mode}". Connect again afterward.',
     switchModeDetach:
-      'This disconnects the current session. The other service keeps running, then it switches to "{mode}". Connect again afterward.',
+      'This disconnects the current session. The external service keeps running, then it switches to "{mode}". Connect again afterward.',
     switchModeInterrupt:
       'This interrupts the connection in progress and switches to "{mode}". Connect again afterward.',
     switchModeConfirm: 'Disconnect and switch',
@@ -379,6 +379,27 @@ export const en = {
     createFirstLedgerExists: 'Ledger already exists in directory (main.bean)',
     createFirstLedgerNotEmpty:
       'Directory is not empty. Select an empty folder or connect an existing ledger',
+    missingLedger:
+      'Initialize the ledger first and choose a locale pack in the dialog',
+    createFirstLedgerHint:
+      'Writes the ledger skeleton into an empty folder. The locale pack must be chosen explicitly, the same as MCP. Operating currency comes with the pack.',
+    ledgerPackLanguage: 'Ledger language',
+    ledgerPackCurrency: 'Operating currency',
+    ledgerPackHint:
+      'Changing language fills that pack\'s currency. Changing currency switches to the matching pack.',
+    packZhCN: 'Simplified Chinese',
+    packEn: 'English',
+    upgradeLedger: 'Upgrade ledger skeleton',
+    upgradeLedgerDone: 'Ledger skeleton upgraded',
+    upgradeLedgerHint:
+      'This folder is an older BeanDesk ledger. Upgrade adds missing policies/base files and refreshes the marker. It does not change data/ entries.',
+    upgradeLedgerConfirm: 'Upgrade',
+    adoptLedger: 'Adopt as standard ledger',
+    adoptLedgerDone: 'Ledger adopted',
+    adoptLedgerHint:
+      'This folder is an existing Beancount ledger without a BeanDesk marker. Adopt writes the marker, adds missing policies/base files, and turns backups on. It does not change data/ entries.',
+    adoptLedgerConfirm: 'Adopt',
+    upgradeNeedsMainBean: 'This folder has no main.bean, so it cannot be upgraded or adopted',
     command: 'Start Command',
     commandPlaceholder: 'fava --host 127.0.0.1 --port 5000 main.bean',
     origin: 'Service URL',
@@ -414,7 +435,7 @@ export const en = {
       'Start process exited; no ledger service detected on target port. Please check start command configuration.',
     notLocal: 'Configured for external service; local process will not be launched',
     log: 'Connection Log',
-    logKept: 'Logs are persisted to local files; clearing only resets screen view',
+    logKept: 'Logs are written to a local file; clearing only empties this window.',
     logKeptPath: 'On-disk log: {path}. Clearing only empties this window.',
     logEmpty: 'No log entries',
     logExpand: 'Expand',
@@ -433,7 +454,7 @@ export const en = {
   },
 
   documents: {
-    title: 'Documents & Evidentiary Records',
+    title: 'Documents',
     nav: 'Documents',
     searchPlaceholder: 'Search file or account…',
     date: 'Date',

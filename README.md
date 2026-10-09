@@ -45,7 +45,7 @@ Filter, inspect, and export transaction data to CSV. Use built-in financial quer
 ### Zero Configuration & Data Security
 - Ready out of the box: Self-contained runtime requiring no external dependencies; reports refresh automatically as your ledger updates.
 - Data sovereignty: No centralized servers; your ledger files and receipts remain strictly on your local machine.
-- Dual local and remote backups: Automatic local version snapshots, plus encrypted incremental backups to local drives or S3-compatible cloud storage.
+- Local snapshots and encrypted incremental backups: Automatic local version snapshots, plus encrypted incremental backups to local drives or S3-compatible storage.
 - Due date reminders: Import or subscribe to calendar feeds to receive desktop notifications before critical tax or payment deadlines.
 
 ![Desktop Settings & Backup Management](./docs/images/en/settings.png)

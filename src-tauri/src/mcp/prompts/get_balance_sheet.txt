@@ -1,1 +1,1 @@
-Read the balance sheet tree from the Settings Fava.
+Read the balance sheet from the configured Fava.

@@ -32,7 +32,7 @@ When a standard ledger is initialized, the workspace contains the following hier
         └── bookkeeping-guide.md
 ```
 
-- .beandesk: Marks the workspace as a BeanDesk-initialized standard ledger, unlocking automated Git snapshots and restic encrypted backups on the desktop Backup page.
+- .beandesk: Versioned marker (`version` and `locale`) that marks a standard BeanDesk ledger and unlocks Git snapshots and restic backups on the desktop Backup page. A bare `beandesk` file from older builds is version 1 and can be upgraded in Settings.
 - main.bean: Main ledger entrypoint declaring operating currencies and importing configuration and annual indices. It must declare option "documents" "documents" to enable automated document scanning and linkage.
 - config/commodities.bean: Currency definitions. The zh-CN preset defaults to CNY and USD; the en preset defaults to USD and CNY.
 - config/accounts.bean: Declared chart of accounts. Initialization creates only the minimal universal accounts (checking and paid-in capital); operating accounts are opened on demand following policies/base/chart-of-accounts.md.
@@ -43,7 +43,7 @@ When a standard ledger is initialized, the workspace contains the following hier
 
 ## How account names appear on reports
 
-To bridge Beancount parser constraints with localized human reporting, BeanDesk uses structured account paths.
+To reconcile Beancount parser constraints with localized reporting, BeanDesk uses structured account paths.
 
 ### Naming formats
 
@@ -106,11 +106,11 @@ Enter postings in the monthly file (e.g. data/2026/2026-03.bean), ensuring the a
 Run bean-check main.bean on the command line or invoke check_ledger via desktop MCP:
 - bean-check verifies syntax, balances, and zero-sum postings.
 - check_ledger evaluates dated TOML rules under policies/ when present (such as localized naming patterns in zh-CN ledgers, or custom tag constraints configured by the user).
-Once ledger files are saved, BeanDesk displays updated financial statements when Fava reloads; journal entries automatically show preview icons when matching archived documents are found. `check_ledger` validates syntax, balance, and policy rules; it does not scan document files or push window updates.
+Once ledger files are saved, BeanDesk displays updated financial statements when Fava reloads; journal entries automatically show preview icons when matching archived documents are found. `check_ledger` checks ledger files only; it does not verify that documents are filed.
 
 ## Cash flow statement mapping and troubleshooting
 
-BeanDesk implements pure-function cash flow statement calculation based on open directive metadata:
+BeanDesk prepares the three-activity cash flow statement by the direct method, using metadata on account `open` directives:
 
 1. Cash accounts: Mark cash, bank, or online payment accounts with cash: TRUE.
 2. Flow classifications:

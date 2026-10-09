@@ -1,17 +1,18 @@
 use std::collections::BTreeMap;
 
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
+use super::LedgerTools;
 use super::card::Card;
-use super::fava_tools::{get_fava_card, DocumentsBody, LedgerBody, QueryBody, ReportBody};
-use super::handbook::{get_handbook_card, HandbookInput};
-use super::policies::{get_policy_card, list_policies_card, PolicyInput};
+use super::fava_tools::{DocumentsBody, LedgerBody, QueryBody, ReportBody, get_fava_card};
+use super::handbook::{HandbookInput, get_handbook_card};
+use super::policies::{PolicyInput, get_policy_card, list_policies_card};
 use super::policy_lint::{PolicyViolation, Severity};
 use super::tools::{
-    fixture_store, get_connection_card, init_ledger_card, temp_dir, CheckBody, InitLedgerInput,
+    CheckBody, InitLedgerInput, UpgradeLedgerInput, fixture_store, get_connection_card,
+    init_ledger_card, temp_dir, upgrade_ledger_card,
 };
-use super::LedgerTools;
 
 #[test]
 fn structured_content_keeps_output_schema_required_fields() {
@@ -65,6 +66,18 @@ fn sample_payloads() -> BTreeMap<&'static str, Vec<Value>> {
         )
         .unwrap(),
     );
+    std::fs::write(root.join("main.bean"), "option \"title\" \"Ledger\"\n").unwrap();
+    let upgrade_pending = json_card(
+        upgrade_ledger_card(
+            Some(&store),
+            UpgradeLedgerInput {
+                confirm_write: false,
+                locale: "zh-CN".into(),
+            },
+        )
+        .unwrap(),
+    );
+    let _ = std::fs::remove_file(root.join("main.bean"));
     let fava = json_card(get_fava_card(Some(&down)).unwrap());
     let handbook_catalog = json_card(get_handbook_card(HandbookInput::default()).unwrap());
     let handbook_page = json_card(
@@ -159,6 +172,7 @@ fn sample_payloads() -> BTreeMap<&'static str, Vec<Value>> {
     BTreeMap::from([
         ("get_connection", vec![connection]),
         ("init_ledger", vec![pending]),
+        ("upgrade_ledger", vec![upgrade_pending]),
         ("check_ledger", vec![check_empty, check_hits]),
         ("get_fava", vec![fava]),
         ("get_ledger", vec![ledger]),
