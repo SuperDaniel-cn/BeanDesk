@@ -4,9 +4,13 @@ use std::path::Path;
 
 use time::OffsetDateTime;
 
-use crate::ledger_preset::preset;
+use crate::ledger_preset::{preset, LedgerPreset};
 
 pub fn init_ledger_tree(directory: &Path, locale: &str) -> Result<(), String> {
+    write_ledger_tree(directory, preset(locale)?)
+}
+
+pub(crate) fn write_ledger_tree(directory: &Path, pack: &LedgerPreset) -> Result<(), String> {
     if !directory.is_absolute() || !directory.is_dir() {
         return Err("directory".to_string());
     }
@@ -16,7 +20,6 @@ pub fn init_ledger_tree(directory: &Path, locale: &str) -> Result<(), String> {
     if !effectively_empty(directory)? {
         return Err("not-empty".to_string());
     }
-    let pack = preset(locale)?;
 
     let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
     let year = now.year();
@@ -138,7 +141,7 @@ mod tests {
     #[test]
     fn writes_a_zh_cn_ledger_and_refuses_to_overwrite() {
         let root = scratch("zh");
-        init_ledger_tree(&root, "").unwrap();
+        init_ledger_tree(&root, "zh-CN").unwrap();
         assert!(root.join("main.bean").is_file());
         assert!(root.join("config/accounts.bean").is_file());
         assert!(root.join("config/commodities.bean").is_file());
@@ -163,7 +166,7 @@ mod tests {
         assert!(!accounts.contains("云计算与算力"));
         assert!(app_created_ledger(&root));
         assert_eq!(
-            init_ledger_tree(&root, "").err().as_deref(),
+            init_ledger_tree(&root, "zh-CN").err().as_deref(),
             Some("ledger-exists")
         );
         let _ = fs::remove_dir_all(&root);
@@ -184,21 +187,11 @@ mod tests {
     }
 
     #[test]
-    fn unknown_locale_writes_nothing() {
-        let root = scratch("ar");
-        assert_eq!(
-            init_ledger_tree(&root, "ar").err().as_deref(),
-            Some("unsupported-locale")
-        );
-        assert!(!root.join("main.bean").exists());
-        assert!(!root.join(".beandesk").exists());
-        let _ = fs::remove_dir_all(&root);
-    }
-
-    #[test]
     fn rejects_a_relative_directory() {
         assert_eq!(
-            init_ledger_tree(Path::new("relative"), "").err().as_deref(),
+            init_ledger_tree(Path::new("relative"), "zh-CN")
+                .err()
+                .as_deref(),
             Some("directory")
         );
     }
@@ -208,7 +201,7 @@ mod tests {
         let root = scratch("not-empty");
         fs::write(root.join("notes.txt"), "keep").unwrap();
         assert_eq!(
-            init_ledger_tree(&root, "").err().as_deref(),
+            init_ledger_tree(&root, "zh-CN").err().as_deref(),
             Some("not-empty")
         );
         assert!(!root.join("main.bean").exists());
@@ -219,7 +212,7 @@ mod tests {
     fn treats_finder_metadata_as_empty() {
         let root = scratch("dsstore");
         fs::write(root.join(".DS_Store"), "").unwrap();
-        init_ledger_tree(&root, "").unwrap();
+        init_ledger_tree(&root, "zh-CN").unwrap();
         assert!(root.join("main.bean").is_file());
         let _ = fs::remove_dir_all(&root);
     }

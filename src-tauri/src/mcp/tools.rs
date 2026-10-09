@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::directory_from_connection;
 use crate::engine::resolve_engine;
-use crate::ledger_init::{app_created_ledger, init_ledger_tree};
+use crate::ledger_init::{app_created_ledger, write_ledger_tree};
 use crate::supervisor::accepts_local_origin;
 
 use super::card::Card;
-use super::policy_lint::{PolicyLint, PolicyViolation, Severity, lint_policies};
+use super::policy_lint::{lint_policies, PolicyLint, PolicyViolation, Severity};
 use super::store::{connection_value, load_saved_connection};
 
 pub(crate) const PREVIEW_LINES: usize = 12;
@@ -52,15 +52,14 @@ pub(crate) struct CheckBody {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct EmptyInput {}
 
-#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct InitLedgerInput {
     /// Set true after the user agrees to write the first ledger skeleton. False returns a pending card and writes nothing.
     #[serde(default)]
     pub confirm_write: bool,
-    /// Regional preset: omit or empty for zh-CN; pass en for a USD English skeleton.
-    #[serde(default)]
-    pub locale: Option<String>,
+    /// Required. Ready packs: zh-CN, en.
+    pub locale: String,
 }
 
 pub(crate) enum ResolvedConnection<'a> {
@@ -193,6 +192,7 @@ pub(crate) fn init_ledger_card(
 ) -> Result<Card<WriteBody>, String> {
     let connection = resolve_connection(store).map_err(explain_store)?;
     let directory = directory_from_connection(connection.value()).map_err(explain_store)?;
+    let pack = crate::ledger_preset::preset(input.locale.trim()).map_err(explain_write)?;
     if !input.confirm_write {
         return Ok(Card::new(
             "Not written. Call again with confirmWrite true after the user agrees to create the first ledger in the Settings folder.",
@@ -202,7 +202,7 @@ pub(crate) fn init_ledger_card(
             },
         ));
     }
-    init_ledger_tree(&directory, input.locale.as_deref().unwrap_or("")).map_err(explain_write)?;
+    write_ledger_tree(&directory, pack).map_err(explain_write)?;
     Ok(Card::new(
         "Created the first ledger skeleton in the Settings folder.",
         WriteBody {
@@ -404,7 +404,11 @@ fn explain_write(code: String) -> String {
         "directory" => explain_store("directory"),
         "ledger-exists" => "A ledger (main.bean) already exists in the Settings folder.".into(),
         "not-empty" => "The Settings folder is not empty.".into(),
-        "unsupported-locale" => "Unknown ledger locale. Use zh-CN (default) or en.".into(),
+        "missing-locale" => "locale is required. Use zh-CN or en.".into(),
+        "missing-pack" => {
+            "That ledger pack is reserved but not merged yet. Use zh-CN or en.".into()
+        }
+        "unsupported-locale" => "Unknown ledger locale. Use zh-CN or en.".into(),
         other => other.into(),
     }
 }
@@ -469,7 +473,14 @@ mod tests {
     fn init_ledger_writes_nothing_until_confirmed() {
         let root = temp_dir("pending");
         let store = fixture_store(&root, "local");
-        let pending = init_ledger_card(Some(&store), InitLedgerInput::default()).unwrap();
+        let pending = init_ledger_card(
+            Some(&store),
+            InitLedgerInput {
+                confirm_write: false,
+                locale: "zh-CN".into(),
+            },
+        )
+        .unwrap();
         assert!(!pending.body.written);
         assert!(pending.display_block.contains("Not written"));
         assert!(!pending.display_block.contains(root.to_str().unwrap()));
@@ -479,7 +490,7 @@ mod tests {
             Some(&store),
             InitLedgerInput {
                 confirm_write: true,
-                ..Default::default()
+                locale: "zh-CN".into(),
             },
         )
         .unwrap();
@@ -491,18 +502,16 @@ mod tests {
         assert!(!written.display_block.contains(root.to_str().unwrap()));
         let connected = get_connection_card(Some(&store)).unwrap();
         assert!(connected.body.has_policies_dir);
-        assert!(
-            connected
-                .display_block
-                .contains("A policies folder is present.")
-        );
+        assert!(connected
+            .display_block
+            .contains("A policies folder is present."));
         assert!(!connected.display_block.contains(root.to_str().unwrap()));
 
         let again = init_ledger_card(
             Some(&store),
             InitLedgerInput {
                 confirm_write: true,
-                ..Default::default()
+                locale: "zh-CN".into(),
             },
         )
         .err()
@@ -520,12 +529,40 @@ mod tests {
             Some(&store),
             InitLedgerInput {
                 confirm_write: true,
-                locale: Some("ar".into()),
+                locale: "ar".into(),
             },
         )
         .err()
         .unwrap();
         assert!(err.contains("Unknown ledger locale"));
+        assert!(!root.join("main.bean").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn init_ledger_requires_an_explicit_locale() {
+        let root = temp_dir("init-locale");
+        let store = fixture_store(&root, "local");
+        let missing = init_ledger_card(
+            Some(&store),
+            InitLedgerInput {
+                confirm_write: true,
+                locale: String::new(),
+            },
+        )
+        .err()
+        .unwrap();
+        assert!(missing.contains("locale is required"));
+        let reserved = init_ledger_card(
+            Some(&store),
+            InitLedgerInput {
+                confirm_write: false,
+                locale: "JP".into(),
+            },
+        )
+        .err()
+        .unwrap();
+        assert!(reserved.contains("reserved but not merged"));
         assert!(!root.join("main.bean").exists());
         let _ = std::fs::remove_dir_all(&root);
     }

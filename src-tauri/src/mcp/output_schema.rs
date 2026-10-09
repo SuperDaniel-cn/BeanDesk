@@ -1,17 +1,17 @@
 use std::collections::BTreeMap;
 
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::LedgerTools;
 use super::card::Card;
-use super::fava_tools::{DocumentsBody, LedgerBody, QueryBody, ReportBody, get_fava_card};
-use super::handbook::{HandbookInput, get_handbook_card};
-use super::policies::{PolicyInput, get_policy_card, list_policies_card};
+use super::fava_tools::{get_fava_card, DocumentsBody, LedgerBody, QueryBody, ReportBody};
+use super::handbook::{get_handbook_card, HandbookInput};
+use super::policies::{get_policy_card, list_policies_card, PolicyInput};
 use super::policy_lint::{PolicyViolation, Severity};
 use super::tools::{
-    CheckBody, InitLedgerInput, fixture_store, get_connection_card, init_ledger_card, temp_dir,
+    fixture_store, get_connection_card, init_ledger_card, temp_dir, CheckBody, InitLedgerInput,
 };
+use super::LedgerTools;
 
 #[test]
 fn structured_content_keeps_output_schema_required_fields() {
@@ -55,7 +55,16 @@ fn sample_payloads() -> BTreeMap<&'static str, Vec<Value>> {
     down["connection"]["local"]["origin"] = json!("http://127.0.0.1:1");
 
     let connection = json_card(get_connection_card(Some(&store)).unwrap());
-    let pending = json_card(init_ledger_card(Some(&store), InitLedgerInput::default()).unwrap());
+    let pending = json_card(
+        init_ledger_card(
+            Some(&store),
+            InitLedgerInput {
+                confirm_write: false,
+                locale: "zh-CN".into(),
+            },
+        )
+        .unwrap(),
+    );
     let fava = json_card(get_fava_card(Some(&down)).unwrap());
     let handbook_catalog = json_card(get_handbook_card(HandbookInput::default()).unwrap());
     let handbook_page = json_card(

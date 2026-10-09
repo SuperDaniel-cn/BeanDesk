@@ -1,0 +1,998 @@
+# MCP init_ledger.locale must be an id from this table. No default, no aliases.
+# id is also the folder name under ledger_presets/.
+# status = ready (wired in ledger_preset.rs) | reserved (add the folder, then mark ready).
+# China and the United States are the zh-CN and en packs; do not add CN or US rows.
+
+[[pack]]
+id = "zh-CN"
+status = "ready"
+iso3166 = "CN"
+currency = "CNY"
+label = "China, Simplified Chinese"
+
+[[pack]]
+id = "en"
+status = "ready"
+iso3166 = "US"
+currency = "USD"
+label = "United States, English"
+
+[[pack]]
+id = "AD"
+status = "reserved"
+label = "Andorra"
+
+[[pack]]
+id = "AE"
+status = "reserved"
+label = "United Arab Emirates"
+
+[[pack]]
+id = "AF"
+status = "reserved"
+label = "Afghanistan"
+
+[[pack]]
+id = "AG"
+status = "reserved"
+label = "Antigua and Barbuda"
+
+[[pack]]
+id = "AL"
+status = "reserved"
+label = "Albania"
+
+[[pack]]
+id = "AM"
+status = "reserved"
+label = "Armenia"
+
+[[pack]]
+id = "AO"
+status = "reserved"
+label = "Angola"
+
+[[pack]]
+id = "AR"
+status = "reserved"
+label = "Argentina"
+
+[[pack]]
+id = "AT"
+status = "reserved"
+label = "Austria"
+
+[[pack]]
+id = "AU"
+status = "reserved"
+label = "Australia"
+
+[[pack]]
+id = "AZ"
+status = "reserved"
+label = "Azerbaijan"
+
+[[pack]]
+id = "BA"
+status = "reserved"
+label = "Bosnia and Herzegovina"
+
+[[pack]]
+id = "BB"
+status = "reserved"
+label = "Barbados"
+
+[[pack]]
+id = "BD"
+status = "reserved"
+label = "Bangladesh"
+
+[[pack]]
+id = "BE"
+status = "reserved"
+label = "Belgium"
+
+[[pack]]
+id = "BF"
+status = "reserved"
+label = "Burkina Faso"
+
+[[pack]]
+id = "BG"
+status = "reserved"
+label = "Bulgaria"
+
+[[pack]]
+id = "BH"
+status = "reserved"
+label = "Bahrain"
+
+[[pack]]
+id = "BI"
+status = "reserved"
+label = "Burundi"
+
+[[pack]]
+id = "BJ"
+status = "reserved"
+label = "Benin"
+
+[[pack]]
+id = "BN"
+status = "reserved"
+label = "Brunei"
+
+[[pack]]
+id = "BO"
+status = "reserved"
+label = "Bolivia"
+
+[[pack]]
+id = "BR"
+status = "reserved"
+label = "Brazil"
+
+[[pack]]
+id = "BS"
+status = "reserved"
+label = "Bahamas"
+
+[[pack]]
+id = "BT"
+status = "reserved"
+label = "Bhutan"
+
+[[pack]]
+id = "BW"
+status = "reserved"
+label = "Botswana"
+
+[[pack]]
+id = "BY"
+status = "reserved"
+label = "Belarus"
+
+[[pack]]
+id = "BZ"
+status = "reserved"
+label = "Belize"
+
+[[pack]]
+id = "CA"
+status = "reserved"
+label = "Canada"
+
+[[pack]]
+id = "CD"
+status = "reserved"
+label = "Congo-Kinshasa"
+
+[[pack]]
+id = "CF"
+status = "reserved"
+label = "Central African Republic"
+
+[[pack]]
+id = "CG"
+status = "reserved"
+label = "Congo-Brazzaville"
+
+[[pack]]
+id = "CH"
+status = "reserved"
+label = "Switzerland"
+
+[[pack]]
+id = "CI"
+status = "reserved"
+label = "Côte d'Ivoire"
+
+[[pack]]
+id = "CL"
+status = "reserved"
+label = "Chile"
+
+[[pack]]
+id = "CM"
+status = "reserved"
+label = "Cameroon"
+
+[[pack]]
+id = "CO"
+status = "reserved"
+label = "Colombia"
+
+[[pack]]
+id = "CR"
+status = "reserved"
+label = "Costa Rica"
+
+[[pack]]
+id = "CU"
+status = "reserved"
+label = "Cuba"
+
+[[pack]]
+id = "CV"
+status = "reserved"
+label = "Cabo Verde"
+
+[[pack]]
+id = "CY"
+status = "reserved"
+label = "Cyprus"
+
+[[pack]]
+id = "CZ"
+status = "reserved"
+label = "Czechia"
+
+[[pack]]
+id = "DE"
+status = "reserved"
+label = "Germany"
+
+[[pack]]
+id = "DJ"
+status = "reserved"
+label = "Djibouti"
+
+[[pack]]
+id = "DK"
+status = "reserved"
+label = "Denmark"
+
+[[pack]]
+id = "DM"
+status = "reserved"
+label = "Dominica"
+
+[[pack]]
+id = "DO"
+status = "reserved"
+label = "Dominican Republic"
+
+[[pack]]
+id = "DZ"
+status = "reserved"
+label = "Algeria"
+
+[[pack]]
+id = "EC"
+status = "reserved"
+label = "Ecuador"
+
+[[pack]]
+id = "EE"
+status = "reserved"
+label = "Estonia"
+
+[[pack]]
+id = "EG"
+status = "reserved"
+label = "Egypt"
+
+[[pack]]
+id = "ER"
+status = "reserved"
+label = "Eritrea"
+
+[[pack]]
+id = "ES"
+status = "reserved"
+label = "Spain"
+
+[[pack]]
+id = "ET"
+status = "reserved"
+label = "Ethiopia"
+
+[[pack]]
+id = "FI"
+status = "reserved"
+label = "Finland"
+
+[[pack]]
+id = "FJ"
+status = "reserved"
+label = "Fiji"
+
+[[pack]]
+id = "FM"
+status = "reserved"
+label = "Micronesia"
+
+[[pack]]
+id = "FR"
+status = "reserved"
+label = "France"
+
+[[pack]]
+id = "GA"
+status = "reserved"
+label = "Gabon"
+
+[[pack]]
+id = "GB"
+status = "reserved"
+label = "United Kingdom"
+
+[[pack]]
+id = "GD"
+status = "reserved"
+label = "Grenada"
+
+[[pack]]
+id = "GE"
+status = "reserved"
+label = "Georgia"
+
+[[pack]]
+id = "GH"
+status = "reserved"
+label = "Ghana"
+
+[[pack]]
+id = "GM"
+status = "reserved"
+label = "Gambia"
+
+[[pack]]
+id = "GN"
+status = "reserved"
+label = "Guinea"
+
+[[pack]]
+id = "GQ"
+status = "reserved"
+label = "Equatorial Guinea"
+
+[[pack]]
+id = "GR"
+status = "reserved"
+label = "Greece"
+
+[[pack]]
+id = "GT"
+status = "reserved"
+label = "Guatemala"
+
+[[pack]]
+id = "GW"
+status = "reserved"
+label = "Guinea-Bissau"
+
+[[pack]]
+id = "GY"
+status = "reserved"
+label = "Guyana"
+
+[[pack]]
+id = "HK"
+status = "reserved"
+label = "Hong Kong"
+
+[[pack]]
+id = "HN"
+status = "reserved"
+label = "Honduras"
+
+[[pack]]
+id = "HR"
+status = "reserved"
+label = "Croatia"
+
+[[pack]]
+id = "HT"
+status = "reserved"
+label = "Haiti"
+
+[[pack]]
+id = "HU"
+status = "reserved"
+label = "Hungary"
+
+[[pack]]
+id = "ID"
+status = "reserved"
+label = "Indonesia"
+
+[[pack]]
+id = "IE"
+status = "reserved"
+label = "Ireland"
+
+[[pack]]
+id = "IL"
+status = "reserved"
+label = "Israel"
+
+[[pack]]
+id = "IN"
+status = "reserved"
+label = "India"
+
+[[pack]]
+id = "IQ"
+status = "reserved"
+label = "Iraq"
+
+[[pack]]
+id = "IR"
+status = "reserved"
+label = "Iran"
+
+[[pack]]
+id = "IS"
+status = "reserved"
+label = "Iceland"
+
+[[pack]]
+id = "IT"
+status = "reserved"
+label = "Italy"
+
+[[pack]]
+id = "JM"
+status = "reserved"
+label = "Jamaica"
+
+[[pack]]
+id = "JO"
+status = "reserved"
+label = "Jordan"
+
+[[pack]]
+id = "JP"
+status = "reserved"
+label = "Japan"
+
+[[pack]]
+id = "KE"
+status = "reserved"
+label = "Kenya"
+
+[[pack]]
+id = "KG"
+status = "reserved"
+label = "Kyrgyzstan"
+
+[[pack]]
+id = "KH"
+status = "reserved"
+label = "Cambodia"
+
+[[pack]]
+id = "KI"
+status = "reserved"
+label = "Kiribati"
+
+[[pack]]
+id = "KM"
+status = "reserved"
+label = "Comoros"
+
+[[pack]]
+id = "KN"
+status = "reserved"
+label = "Saint Kitts and Nevis"
+
+[[pack]]
+id = "KP"
+status = "reserved"
+label = "North Korea"
+
+[[pack]]
+id = "KR"
+status = "reserved"
+label = "South Korea"
+
+[[pack]]
+id = "KW"
+status = "reserved"
+label = "Kuwait"
+
+[[pack]]
+id = "KZ"
+status = "reserved"
+label = "Kazakhstan"
+
+[[pack]]
+id = "LA"
+status = "reserved"
+label = "Laos"
+
+[[pack]]
+id = "LB"
+status = "reserved"
+label = "Lebanon"
+
+[[pack]]
+id = "LC"
+status = "reserved"
+label = "Saint Lucia"
+
+[[pack]]
+id = "LI"
+status = "reserved"
+label = "Liechtenstein"
+
+[[pack]]
+id = "LK"
+status = "reserved"
+label = "Sri Lanka"
+
+[[pack]]
+id = "LR"
+status = "reserved"
+label = "Liberia"
+
+[[pack]]
+id = "LS"
+status = "reserved"
+label = "Lesotho"
+
+[[pack]]
+id = "LT"
+status = "reserved"
+label = "Lithuania"
+
+[[pack]]
+id = "LU"
+status = "reserved"
+label = "Luxembourg"
+
+[[pack]]
+id = "LV"
+status = "reserved"
+label = "Latvia"
+
+[[pack]]
+id = "LY"
+status = "reserved"
+label = "Libya"
+
+[[pack]]
+id = "MA"
+status = "reserved"
+label = "Morocco"
+
+[[pack]]
+id = "MC"
+status = "reserved"
+label = "Monaco"
+
+[[pack]]
+id = "MD"
+status = "reserved"
+label = "Moldova"
+
+[[pack]]
+id = "ME"
+status = "reserved"
+label = "Montenegro"
+
+[[pack]]
+id = "MG"
+status = "reserved"
+label = "Madagascar"
+
+[[pack]]
+id = "MH"
+status = "reserved"
+label = "Marshall Islands"
+
+[[pack]]
+id = "MK"
+status = "reserved"
+label = "North Macedonia"
+
+[[pack]]
+id = "ML"
+status = "reserved"
+label = "Mali"
+
+[[pack]]
+id = "MM"
+status = "reserved"
+label = "Myanmar"
+
+[[pack]]
+id = "MN"
+status = "reserved"
+label = "Mongolia"
+
+[[pack]]
+id = "MO"
+status = "reserved"
+label = "Macao"
+
+[[pack]]
+id = "MR"
+status = "reserved"
+label = "Mauritania"
+
+[[pack]]
+id = "MT"
+status = "reserved"
+label = "Malta"
+
+[[pack]]
+id = "MU"
+status = "reserved"
+label = "Mauritius"
+
+[[pack]]
+id = "MV"
+status = "reserved"
+label = "Maldives"
+
+[[pack]]
+id = "MW"
+status = "reserved"
+label = "Malawi"
+
+[[pack]]
+id = "MX"
+status = "reserved"
+label = "Mexico"
+
+[[pack]]
+id = "MY"
+status = "reserved"
+label = "Malaysia"
+
+[[pack]]
+id = "MZ"
+status = "reserved"
+label = "Mozambique"
+
+[[pack]]
+id = "NA"
+status = "reserved"
+label = "Namibia"
+
+[[pack]]
+id = "NE"
+status = "reserved"
+label = "Niger"
+
+[[pack]]
+id = "NG"
+status = "reserved"
+label = "Nigeria"
+
+[[pack]]
+id = "NI"
+status = "reserved"
+label = "Nicaragua"
+
+[[pack]]
+id = "NL"
+status = "reserved"
+label = "Netherlands"
+
+[[pack]]
+id = "NO"
+status = "reserved"
+label = "Norway"
+
+[[pack]]
+id = "NP"
+status = "reserved"
+label = "Nepal"
+
+[[pack]]
+id = "NR"
+status = "reserved"
+label = "Nauru"
+
+[[pack]]
+id = "NZ"
+status = "reserved"
+label = "New Zealand"
+
+[[pack]]
+id = "OM"
+status = "reserved"
+label = "Oman"
+
+[[pack]]
+id = "PA"
+status = "reserved"
+label = "Panama"
+
+[[pack]]
+id = "PE"
+status = "reserved"
+label = "Peru"
+
+[[pack]]
+id = "PG"
+status = "reserved"
+label = "Papua New Guinea"
+
+[[pack]]
+id = "PH"
+status = "reserved"
+label = "Philippines"
+
+[[pack]]
+id = "PK"
+status = "reserved"
+label = "Pakistan"
+
+[[pack]]
+id = "PL"
+status = "reserved"
+label = "Poland"
+
+[[pack]]
+id = "PT"
+status = "reserved"
+label = "Portugal"
+
+[[pack]]
+id = "PW"
+status = "reserved"
+label = "Palau"
+
+[[pack]]
+id = "PY"
+status = "reserved"
+label = "Paraguay"
+
+[[pack]]
+id = "QA"
+status = "reserved"
+label = "Qatar"
+
+[[pack]]
+id = "RO"
+status = "reserved"
+label = "Romania"
+
+[[pack]]
+id = "RS"
+status = "reserved"
+label = "Serbia"
+
+[[pack]]
+id = "RU"
+status = "reserved"
+label = "Russia"
+
+[[pack]]
+id = "RW"
+status = "reserved"
+label = "Rwanda"
+
+[[pack]]
+id = "SA"
+status = "reserved"
+label = "Saudi Arabia"
+
+[[pack]]
+id = "SB"
+status = "reserved"
+label = "Solomon Islands"
+
+[[pack]]
+id = "SC"
+status = "reserved"
+label = "Seychelles"
+
+[[pack]]
+id = "SD"
+status = "reserved"
+label = "Sudan"
+
+[[pack]]
+id = "SE"
+status = "reserved"
+label = "Sweden"
+
+[[pack]]
+id = "SG"
+status = "reserved"
+label = "Singapore"
+
+[[pack]]
+id = "SI"
+status = "reserved"
+label = "Slovenia"
+
+[[pack]]
+id = "SK"
+status = "reserved"
+label = "Slovakia"
+
+[[pack]]
+id = "SL"
+status = "reserved"
+label = "Sierra Leone"
+
+[[pack]]
+id = "SM"
+status = "reserved"
+label = "San Marino"
+
+[[pack]]
+id = "SN"
+status = "reserved"
+label = "Senegal"
+
+[[pack]]
+id = "SO"
+status = "reserved"
+label = "Somalia"
+
+[[pack]]
+id = "SR"
+status = "reserved"
+label = "Suriname"
+
+[[pack]]
+id = "SS"
+status = "reserved"
+label = "South Sudan"
+
+[[pack]]
+id = "ST"
+status = "reserved"
+label = "Sao Tome and Principe"
+
+[[pack]]
+id = "SV"
+status = "reserved"
+label = "El Salvador"
+
+[[pack]]
+id = "SY"
+status = "reserved"
+label = "Syria"
+
+[[pack]]
+id = "SZ"
+status = "reserved"
+label = "Eswatini"
+
+[[pack]]
+id = "TD"
+status = "reserved"
+label = "Chad"
+
+[[pack]]
+id = "TG"
+status = "reserved"
+label = "Togo"
+
+[[pack]]
+id = "TH"
+status = "reserved"
+label = "Thailand"
+
+[[pack]]
+id = "TJ"
+status = "reserved"
+label = "Tajikistan"
+
+[[pack]]
+id = "TL"
+status = "reserved"
+label = "Timor-Leste"
+
+[[pack]]
+id = "TM"
+status = "reserved"
+label = "Turkmenistan"
+
+[[pack]]
+id = "TN"
+status = "reserved"
+label = "Tunisia"
+
+[[pack]]
+id = "TO"
+status = "reserved"
+label = "Tonga"
+
+[[pack]]
+id = "TR"
+status = "reserved"
+label = "Türkiye"
+
+[[pack]]
+id = "TT"
+status = "reserved"
+label = "Trinidad and Tobago"
+
+[[pack]]
+id = "TV"
+status = "reserved"
+label = "Tuvalu"
+
+[[pack]]
+id = "TW"
+status = "reserved"
+label = "Taiwan"
+
+[[pack]]
+id = "TZ"
+status = "reserved"
+label = "Tanzania"
+
+[[pack]]
+id = "UA"
+status = "reserved"
+label = "Ukraine"
+
+[[pack]]
+id = "UG"
+status = "reserved"
+label = "Uganda"
+
+[[pack]]
+id = "UY"
+status = "reserved"
+label = "Uruguay"
+
+[[pack]]
+id = "UZ"
+status = "reserved"
+label = "Uzbekistan"
+
+[[pack]]
+id = "VA"
+status = "reserved"
+label = "Vatican City"
+
+[[pack]]
+id = "VC"
+status = "reserved"
+label = "Saint Vincent and the Grenadines"
+
+[[pack]]
+id = "VE"
+status = "reserved"
+label = "Venezuela"
+
+[[pack]]
+id = "VN"
+status = "reserved"
+label = "Vietnam"
+
+[[pack]]
+id = "VU"
+status = "reserved"
+label = "Vanuatu"
+
+[[pack]]
+id = "WS"
+status = "reserved"
+label = "Samoa"
+
+[[pack]]
+id = "XK"
+status = "reserved"
+label = "Kosovo"
+
+[[pack]]
+id = "YE"
+status = "reserved"
+label = "Yemen"
+
+[[pack]]
+id = "ZA"
+status = "reserved"
+label = "South Africa"
+
+[[pack]]
+id = "ZM"
+status = "reserved"
+label = "Zambia"
+
+[[pack]]
+id = "ZW"
+status = "reserved"
+label = "Zimbabwe"

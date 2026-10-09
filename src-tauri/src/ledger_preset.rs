@@ -1,3 +1,7 @@
+use std::sync::OnceLock;
+
+use serde::Deserialize;
+
 pub struct LedgerPreset {
     pub operating_currency: &'static str,
     pub commodities: &'static str,
@@ -33,48 +37,88 @@ const EN: LedgerPreset = LedgerPreset {
     rules: None,
 };
 
-pub fn resolve_locale(locale: &str) -> Result<&'static str, String> {
-    let trimmed = locale.trim();
-    if trimmed.is_empty() {
-        return Ok("zh-CN");
-    }
-    match trimmed {
-        "zh-CN" | "zh" | "zh-Hans" | "zh_CN" | "zh-hans" => Ok("zh-CN"),
-        "en" | "en-US" | "en_US" | "en-us" => Ok("en"),
-        _ => Err("unsupported-locale".to_string()),
-    }
+#[derive(Deserialize)]
+struct LocaleFile {
+    pack: Vec<LocalePack>,
+}
+
+#[derive(Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum PackStatus {
+    Ready,
+    Reserved,
+}
+
+#[derive(Deserialize)]
+struct LocalePack {
+    id: String,
+    status: PackStatus,
+}
+
+fn catalog() -> &'static [LocalePack] {
+    static TABLE: OnceLock<Vec<LocalePack>> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        let parsed: LocaleFile = toml::from_str(include_str!("ledger_presets/locales.toml"))
+            .expect("ledger_presets/locales.toml");
+        parsed.pack
+    })
 }
 
 pub fn preset(locale: &str) -> Result<&'static LedgerPreset, String> {
-    match resolve_locale(locale)? {
-        "en" => Ok(&EN),
-        "zh-CN" => Ok(&ZH_CN),
-        _ => Err("unsupported-locale".to_string()),
+    let id = locale.trim();
+    if id.is_empty() {
+        return Err("missing-locale".to_string());
+    }
+    let Some(row) = catalog().iter().find(|row| row.id == id) else {
+        return Err("unsupported-locale".to_string());
+    };
+    match row.status {
+        PackStatus::Reserved => Err("missing-pack".to_string()),
+        PackStatus::Ready => match id {
+            "en" => Ok(&EN),
+            "zh-CN" => Ok(&ZH_CN),
+            _ => Err("unsupported-locale".to_string()),
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
-    fn empty_and_chinese_aliases_resolve_to_zh_cn() {
-        assert_eq!(resolve_locale("").unwrap(), "zh-CN");
-        assert_eq!(resolve_locale(" zh ").unwrap(), "zh-CN");
-        assert_eq!(resolve_locale("zh-Hans").unwrap(), "zh-CN");
-        assert_eq!(preset("").unwrap().operating_currency, "CNY");
-    }
-
-    #[test]
-    fn english_aliases_resolve_to_en() {
-        assert_eq!(resolve_locale("en").unwrap(), "en");
-        assert_eq!(resolve_locale("en-US").unwrap(), "en");
+    fn catalog_ids_are_unique_and_only_zh_cn_and_en_are_ready() {
+        let mut seen = HashSet::new();
+        let mut ready = Vec::new();
+        for row in catalog() {
+            assert!(
+                seen.insert(row.id.as_str()),
+                "duplicate locale id {}",
+                row.id
+            );
+            if row.status == PackStatus::Ready {
+                ready.push(row.id.as_str());
+            }
+        }
+        ready.sort_unstable();
+        assert_eq!(ready, ["en", "zh-CN"]);
+        assert!(catalog().len() > 100);
+        assert_eq!(preset("zh-CN").unwrap().operating_currency, "CNY");
         assert_eq!(preset("en").unwrap().operating_currency, "USD");
     }
 
     #[test]
-    fn unknown_locales_are_rejected() {
-        assert_eq!(resolve_locale("ar").unwrap_err(), "unsupported-locale");
-        assert_eq!(resolve_locale("zh-TW").unwrap_err(), "unsupported-locale");
+    fn locale_must_be_an_exact_ready_id() {
+        assert_eq!(preset("").err().as_deref(), Some("missing-locale"));
+        assert_eq!(preset("   ").err().as_deref(), Some("missing-locale"));
+        assert_eq!(preset("zh").err().as_deref(), Some("unsupported-locale"));
+        assert_eq!(
+            preset("zh-Hans").err().as_deref(),
+            Some("unsupported-locale")
+        );
+        assert_eq!(preset("en-US").err().as_deref(), Some("unsupported-locale"));
+        assert_eq!(preset("ar").err().as_deref(), Some("unsupported-locale"));
+        assert_eq!(preset("JP").err().as_deref(), Some("missing-pack"));
     }
 }
