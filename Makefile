@@ -9,7 +9,7 @@ help:
 	@echo "  make dev      - Start the browser app on http://127.0.0.1:$(PORT)"
 	@echo "  make desktop  - Start the Tauri window (Bun starts Vite; not npm run tauri dev)"
 	@echo "  make build    - Build static production bundle"
-	@echo "  make test     - Lint, typecheck tests, and run frontend and desktop tests"
+	@echo "  make test     - Lint, typecheck app and tests, and run frontend and desktop tests"
 	@echo "  make engine   - Freeze the bundled Fava engine directory for this machine"
 	@echo "  make restic   - Fetch the pinned restic binary for this machine"
 	@echo "  make clean    - Remove node_modules and dist artifacts"
@@ -32,6 +32,7 @@ build:
 
 test:
 	cd web && bun run lint
+	cd web && bunx tsc -b
 	cd web && bunx tsc -p tsconfig.test.json --noEmit
 	cd web && bun test
 	cargo test --manifest-path src-tauri/Cargo.toml

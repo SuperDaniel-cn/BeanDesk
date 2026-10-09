@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Navigate, useLocation } from 'react-router'
 import { invoke, isTauri } from '@tauri-apps/api/core'
@@ -18,6 +18,7 @@ import {
 import {
   finishBoot,
   hostFromSnapshot,
+  hostSnapshotEqual,
   idleHost,
   sessionLost,
   shouldProbeOrigin,
@@ -81,7 +82,6 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
   const hostRef = useRef(host)
   const attachedMisses = useRef(0)
   stateRef.current = state
-  hostRef.current = host
 
   const appendLog = useCallback((message: string, tone: ConnectionLogTone = 'info') => {
     const time = new Date().toLocaleTimeString(undefined, { hourCycle: 'h23' })
@@ -217,7 +217,7 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
         }
       }
       if (cancelled) return
-      const next = hostFromSnapshot(snap, probe, origin, Date.now())
+      const next = hostFromSnapshot(snap, probe, origin)
       const previous = hostRef.current
       if (next.owned || next.probe.kind === 'fava' || next.probe.kind === 'idle') {
         attachedMisses.current = 0
@@ -225,7 +225,7 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
         attachedMisses.current += 1
       }
       hostRef.current = next
-      setHost(next)
+      if (!hostSnapshotEqual(previous, next)) setHost(next)
       if (sessionLost(previous, next, current.status, attachedMisses.current)) {
         appendLog(tRef.current('settings.hostDown'), 'error')
         release()
@@ -239,11 +239,12 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
     }
   }, [appendLog, release])
 
-  return (
-    <DesktopContext.Provider value={{ ...state, host, log, appendLog, clearLog, remember, markConnected, release }}>
-      {children}
-    </DesktopContext.Provider>
+  const value = useMemo(
+    () => ({ ...state, host, log, appendLog, clearLog, remember, markConnected, release }),
+    [state, host, log, appendLog, clearLog, remember, markConnected, release],
   )
+
+  return <DesktopContext.Provider value={value}>{children}</DesktopContext.Provider>
 }
 
 export function DesktopGuard({ children }: { children: ReactNode }) {

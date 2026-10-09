@@ -962,26 +962,37 @@ function ConnectionSettings() {
   )
 }
 
+function HostUptimeText({ startedAt }: { startedAt: number }) {
+  const { t } = useI18n()
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1_000)
+    return () => window.clearInterval(id)
+  }, [])
+  const elapsed = hostUptime(startedAt, now)
+  return elapsed.unit === 'minutes'
+    ? t('settings.hostUptimeMinutes', { count: elapsed.count })
+    : t('settings.hostUptimeSeconds', { count: elapsed.count })
+}
+
 function HostStatus({ action }: { action?: ReactNode }) {
   const { t } = useI18n()
   const desktop = useDesktop()
   const { host, status } = desktop
   const session = sessionLook(status)
-  const elapsed =
-    host.startedAt == null || host.observedAt == null
-      ? null
-      : hostUptime(host.startedAt, host.observedAt)
-  const uptime =
-    elapsed == null
-      ? null
-      : elapsed.unit === 'minutes'
-        ? t('settings.hostUptimeMinutes', { count: elapsed.count })
-        : t('settings.hostUptimeSeconds', { count: elapsed.count })
+  const startedAt = host.startedAt
   const probeKey = hostProbeCopyKey(host.probe)
 
   let detail: ReactNode = null
   if (status === 'ready' && host.owned) {
-    detail = uptime ? `${t('settings.hostOwned')} · ${uptime}` : t('settings.hostOwned')
+    detail =
+      startedAt == null ? (
+        t('settings.hostOwned')
+      ) : (
+        <>
+          {t('settings.hostOwned')} · <HostUptimeText key={startedAt} startedAt={startedAt} />
+        </>
+      )
   } else if (status === 'ready') {
     detail = t('settings.hostAttached')
   } else if (status === 'setup') {

@@ -61,7 +61,7 @@ BeanDesk 前端与桌面端工程规范。
 
 ## 7. 质量校验与交付标准
 
-代码提交前在仓库根执行并通过 `make test`。它会跑 oxlint、测试文件的类型检查、`bun test` 和 `cargo test`。`make build` 会类型检查页面代码和测试，再构建前端。推送到 `main` 的检查与此相同。
+代码提交前在仓库根执行并通过 `make test`。它会跑 oxlint、应用源码与测试文件的类型检查、`bun test` 和 `cargo test`。`make build` 会类型检查页面代码和测试，再构建前端。推送到 `main` 的检查与此相同。
 
 ## 8. 用户手册
 

@@ -692,8 +692,8 @@ mod tests {
         }
     }
 
-    fn have_restic() -> bool {
-        resolve_restic(None).is_ok()
+    fn require_restic() {
+        resolve_restic(None).expect("missing restic; run `make restic`");
     }
 
     #[test]
@@ -707,9 +707,7 @@ mod tests {
 
     #[test]
     fn backup_and_restore_round_trip() {
-        if !have_restic() {
-            return;
-        }
+        require_restic();
         let (root, dest) = scratch("round");
         let settings = dest_settings(&dest);
         let written = backup_dests(None, &root, &settings);
@@ -745,9 +743,7 @@ mod tests {
 
     #[test]
     fn backup_stops_without_a_key() {
-        if !have_restic() {
-            return;
-        }
+        require_restic();
         let (root, dest) = scratch("nokey");
         fs::remove_file(key_path(&root)).unwrap();
         let settings = dest_settings(&dest);
@@ -761,9 +757,7 @@ mod tests {
 
     #[test]
     fn backup_refuses_the_ledger_tree() {
-        if !have_restic() {
-            return;
-        }
+        require_restic();
         let (root, dest) = scratch("nested");
         let settings = dest_settings(&root);
         assert_eq!(
@@ -788,9 +782,7 @@ mod tests {
 
     #[test]
     fn a_new_passphrase_replaces_the_repository_key() {
-        if !have_restic() {
-            return;
-        }
+        require_restic();
         let (root, dest) = scratch("rekey");
         let settings = dest_settings(&dest);
         assert!(backup_dests(None, &root, &settings).error.is_none());

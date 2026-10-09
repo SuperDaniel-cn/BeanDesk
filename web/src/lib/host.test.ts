@@ -5,6 +5,7 @@ import {
   finishBoot,
   hostFromSnapshot,
   hostProbeCopyKey,
+  hostSnapshotEqual,
   hostUptime,
   idleHost,
   sessionLost,
@@ -18,7 +19,6 @@ const owned = hostFromSnapshot(
   { running: true, pid: 42, startedMs: 1_000 },
   { kind: 'fava' },
   'http://127.0.0.1:5000',
-  1_000,
 )
 
 const attached = hostFromSnapshot(
@@ -103,5 +103,24 @@ describe('hostUptime', () => {
   test('uses seconds under a minute and minutes after that', () => {
     expect(hostUptime(0, 12_000)).toEqual({ unit: 'seconds', count: 12 })
     expect(hostUptime(0, 120_000)).toEqual({ unit: 'minutes', count: 2 })
+  })
+})
+
+describe('hostSnapshotEqual', () => {
+  test('compares the live snapshot and treats a copy as the same host', () => {
+    expect(hostSnapshotEqual(owned, { ...owned })).toBe(true)
+    const otherPid = hostFromSnapshot(
+      { running: true, pid: 43, startedMs: 1_000 },
+      { kind: 'fava' },
+      'http://127.0.0.1:5000',
+    )
+    expect(hostSnapshotEqual(owned, otherPid)).toBe(false)
+    expect(hostSnapshotEqual(owned, attached)).toBe(false)
+    expect(
+      hostSnapshotEqual(
+        { ...attached, probe: { kind: 'occupied', server: 'nginx' } },
+        { ...attached, probe: { kind: 'occupied', server: 'caddy' } },
+      ),
+    ).toBe(false)
   })
 })

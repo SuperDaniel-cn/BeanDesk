@@ -52,7 +52,7 @@ if [ -n "$CHECK_ARCH" ] && [ -z "${PYTHON:-}" ]; then
     require_arch "$VENV_PYTHON"
 fi
 
-"$VENV_PYTHON" -m pip install -q -r "$ROOT/engine/requirements.txt"
+"$VENV_PYTHON" -m pip install -q --require-hashes -r "$ROOT/engine/requirements.lock"
 mkdir -p "$ROOT/src-tauri/binaries"
 (
     cd "$ROOT/engine"

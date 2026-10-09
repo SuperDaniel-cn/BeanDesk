@@ -14,7 +14,6 @@ export type HostView = {
   owned: boolean
   pid: number | null
   startedAt: number | null
-  observedAt: number | null
   probe: HostProbe
   origin: string | null
 }
@@ -26,7 +25,6 @@ export function idleHost(): HostView {
     owned: false,
     pid: null,
     startedAt: null,
-    observedAt: null,
     probe: { kind: 'idle' },
     origin: null,
   }
@@ -36,13 +34,11 @@ export function hostFromSnapshot(
   snap: HostSnapshot,
   probe: HostProbe,
   origin: string | null,
-  now = 0,
 ): HostView {
   return {
     owned: snap.running,
     pid: snap.pid,
     startedAt: snap.startedMs,
-    observedAt: snap.startedMs == null ? null : now,
     probe,
     origin,
   }
@@ -50,6 +46,22 @@ export function hostFromSnapshot(
 
 export function emptyHostSnapshot(): HostSnapshot {
   return { running: false, pid: null, startedMs: null }
+}
+
+function probeEqual(left: HostProbe, right: HostProbe): boolean {
+  if (left.kind !== right.kind) return false
+  if (left.kind === 'occupied' && right.kind === 'occupied') return left.server === right.server
+  return true
+}
+
+export function hostSnapshotEqual(left: HostView, right: HostView): boolean {
+  return (
+    left.owned === right.owned &&
+    left.pid === right.pid &&
+    left.startedAt === right.startedAt &&
+    left.origin === right.origin &&
+    probeEqual(left.probe, right.probe)
+  )
 }
 
 /** Drop a live session when this window's child died, or an attached Fava missed twice. */
