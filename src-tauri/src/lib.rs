@@ -2,6 +2,7 @@ mod backup;
 mod connection_log;
 mod engine;
 mod ledger_init;
+mod ledger_preset;
 mod mcp;
 mod supervisor;
 #[cfg(desktop)]
@@ -225,7 +226,7 @@ fn start_saved_fava(app: AppHandle, host: State<'_, FavaHost>) -> Result<(), Str
     backup::start_if_enabled(&app);
     if bundled_launch(&saved) {
         let engine = resolve_engine(Some(&app))?;
-        if let Err(code) = init_ledger_tree(Path::new(&saved.directory)) {
+        if let Err(code) = init_ledger_tree(Path::new(&saved.directory), "zh-CN") {
             if code != "ledger-exists" {
                 return Err(code);
             }
@@ -262,7 +263,7 @@ fn fava_host(host: State<'_, FavaHost>) -> HostSnapshot {
 
 #[tauri::command]
 fn init_ledger(app: AppHandle, directory: String) -> Result<(), String> {
-    init_ledger_tree(Path::new(&directory))?;
+    init_ledger_tree(Path::new(&directory), "zh-CN")?;
     backup::start_if_enabled(&app);
     Ok(())
 }

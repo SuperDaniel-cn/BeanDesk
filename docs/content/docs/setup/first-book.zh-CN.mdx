@@ -9,7 +9,7 @@ description: 在空文件夹中初始化新账本并配置数据备份。
 
 ## 2. 初始化账本
 
-在桌面端点击“初始化账本”。应用将在选定目录中建立标准 Beancount 账本骨架（包含 `main.bean`、`config/commodities.bean`、`config/accounts.bean`、`data/`、`documents/` 与 `policies/`）并写入 `.beandesk` 标记。科目默认采用小微企业标准中文模板（连字符规范），记账主币种为人民币 CNY。
+在桌面端点击“初始化账本”。应用将在选定目录中建立标准 Beancount 账本骨架（包含 `main.bean`、`config/`、`data/`、`documents/` 与 `policies/base/`）并写入 `.beandesk` 标记。桌面初始化固定使用中文预设：最小科目（基本户与实收资本）加 `policies/base` 基线，记账主币种为人民币 CNY。通过本机 MCP 调用 `init_ledger` 时可传入 `locale`（省略则为 `zh-CN`；`en` 为美元英文最小骨架）。
 
 后续记账直接使用文本编辑器或外部工具编辑 `data/` 下的月度 `.bean` 文件即可，经营账本负责呈现核算结果。
 

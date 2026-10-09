@@ -38,7 +38,7 @@ export const zhCN = {
 
   compare: {
     delta: '差额',
-    priorUnavailableTitle: '上期数据不可用',
+    priorUnavailableTitle: '上年同期数据不可用',
     priorUnavailable: '仅显示本期数据',
   },
 

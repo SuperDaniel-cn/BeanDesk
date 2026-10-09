@@ -9,7 +9,7 @@ In Settings → Ledger Connection, choose an empty directory. To prevent overwri
 
 ## 2. Initialize Ledger
 
-Click Initialize Ledger. BeanDesk generates the standard Beancount directory structure (`main.bean`, `config/commodities.bean`, `config/accounts.bean`, `data/`, `documents/`, and `policies/`) alongside a `.beandesk` marker. Accounts follow the Chinese hyphen convention; the operating currency is CNY.
+Click Initialize Ledger. BeanDesk generates the standard Beancount directory structure (`main.bean`, `config/`, `data/`, `documents/`, and `policies/base/`) alongside a `.beandesk` marker. The desktop button always uses the zh-CN preset: a minimal chart (checking + paid-in capital) plus `policies/base`, with CNY as the operating currency. MCP `init_ledger` accepts optional `locale` (omit for `zh-CN`; pass `en` for a USD English skeleton).
 
 Subsequent bookkeeping is performed by editing monthly `.bean` files under `data/` in your preferred text editor. BeanDesk provides read-only financial reporting.
 

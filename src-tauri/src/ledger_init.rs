@@ -4,20 +4,9 @@ use std::path::Path;
 
 use time::OffsetDateTime;
 
-const SAMPLE_COMMODITIES: &str = "\
-1970-01-01 commodity CNY
-  name: \"人民币\"
-  precision: 2
+use crate::ledger_preset::preset;
 
-1970-01-01 commodity USD
-  name: \"美元\"
-  precision: 2
-";
-
-const SAMPLE_ACCOUNTS: &str =
-    include_str!("../../skills/fava-beancount-guide/references/accounts-template.bean");
-
-pub fn init_ledger_tree(directory: &Path) -> Result<(), String> {
+pub fn init_ledger_tree(directory: &Path, locale: &str) -> Result<(), String> {
     if !directory.is_absolute() || !directory.is_dir() {
         return Err("directory".to_string());
     }
@@ -27,6 +16,7 @@ pub fn init_ledger_tree(directory: &Path) -> Result<(), String> {
     if !effectively_empty(directory)? {
         return Err("not-empty".to_string());
     }
+    let pack = preset(locale)?;
 
     let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
     let year = now.year();
@@ -35,26 +25,42 @@ pub fn init_ledger_tree(directory: &Path) -> Result<(), String> {
     fs::create_dir_all(directory.join("config")).map_err(|error| error.to_string())?;
     fs::create_dir_all(&year_dir).map_err(|error| error.to_string())?;
     fs::create_dir_all(directory.join("documents")).map_err(|error| error.to_string())?;
-    fs::create_dir_all(directory.join("policies")).map_err(|error| error.to_string())?;
+    fs::create_dir_all(directory.join("policies/base")).map_err(|error| error.to_string())?;
 
     let month_file = format!("{year}-{month:02}.bean");
     let main = format!(
         "option \"title\" \"Ledger\"\n\
-         option \"operating_currency\" \"CNY\"\n\
+         option \"operating_currency\" \"{}\"\n\
          option \"documents\" \"documents\"\n\
          include \"config/commodities.bean\"\n\
          include \"config/accounts.bean\"\n\
-         include \"data/{year}/{year}.bean\"\n"
+         include \"data/{year}/{year}.bean\"\n",
+        pack.operating_currency
     );
     let year_index = format!("include \"{month_file}\"\n");
 
     write_new(directory.join("main.bean"), &main)?;
-    write_new(directory.join("config/commodities.bean"), SAMPLE_COMMODITIES)?;
-    write_new(directory.join("config/accounts.bean"), SAMPLE_ACCOUNTS)?;
+    write_new(directory.join("config/commodities.bean"), pack.commodities)?;
+    write_new(directory.join("config/accounts.bean"), pack.accounts)?;
     write_new(year_dir.join(format!("{year}.bean")), &year_index)?;
     write_new(year_dir.join(&month_file), "")?;
     write_new(directory.join(".gitignore"), BACKUP_GITIGNORE)?;
-    write_new(directory.join("policies/README.md"), POLICIES_README)?;
+    write_new(directory.join("policies/README.md"), pack.policies_readme)?;
+    write_new(
+        directory.join("policies/base/chart-of-accounts.md"),
+        pack.chart_of_accounts,
+    )?;
+    write_new(
+        directory.join("policies/base/document-filing.md"),
+        pack.document_filing,
+    )?;
+    write_new(
+        directory.join("policies/base/bookkeeping-guide.md"),
+        pack.bookkeeping_guide,
+    )?;
+    if let Some(rules) = pack.rules {
+        write_new(directory.join("policies/base/rules.toml"), rules)?;
+    }
     write_new(directory.join(APP_MARKER), "beandesk\n")?;
     Ok(())
 }
@@ -70,30 +76,6 @@ pub const BACKUP_GITIGNORE: &str = "\
 .env
 backups/
 .DS_Store
-";
-
-pub const POLICIES_README: &str = "\
-# Bookkeeping policies
-
-General posting rules are in the bundled handbook. Markdown files in this directory provide additional guidance for local AI agents. This directory is optional; basic bookkeeping works without it.
-
-You can also place `.toml` files here to define automated checks executed during `check_ledger` (after syntax and balance checks). Each rule specifies an effective date range using `from` (inclusive) and optional `until` (exclusive, ending before that date).
-
-# 记账策略与合规指引
-
-通用记账规范请参阅桌面手册。在此目录下放置 Markdown 文件，可为本机 AI 助手提供特定的业务分类与记账指导；未创建此目录时不影响正常记账。
-
-你也可以在此放置 `.toml` 规则文件，用于在 `check_ledger` 完成基础语法与分录平衡检查后执行自动化规则核验。每条规则需配置生效起始日期 `from`（含当天），可选配置失效日期 `until`（不含当天，左闭右开），并指定一项检查动作（require_tag, require_payee, narration_regex, posting_sign, 或 forbidden_accounts）。
-
-```toml
-[[rules]]
-id = \"rd-tag\"
-description = \"研发支出必须附带 #rd 标签\"
-severity = \"error\"
-from = \"2026-01-01\"
-account = \"Expenses:Payroll-员工薪酬:Salary-研发基本工资\"
-require_tag = \"rd\"
-```
 ";
 
 pub fn ensure_backup_gitignore(directory: &Path) -> Result<(), String> {
@@ -139,65 +121,105 @@ fn write_new(path: impl AsRef<Path>, contents: &str) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn writes_a_first_ledger_and_refuses_to_overwrite() {
-        let root = std::env::temp_dir().join(format!("beandesk-init-{}", std::process::id()));
+    fn scratch(tag: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "beandesk-init-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
-        init_ledger_tree(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn writes_a_zh_cn_ledger_and_refuses_to_overwrite() {
+        let root = scratch("zh");
+        init_ledger_tree(&root, "").unwrap();
         assert!(root.join("main.bean").is_file());
         assert!(root.join("config/accounts.bean").is_file());
         assert!(root.join("config/commodities.bean").is_file());
         assert!(root.join("documents").is_dir());
+        assert!(root.join("policies/base/rules.toml").is_file());
         let policies = fs::read_to_string(root.join("policies/README.md")).unwrap();
         assert!(policies.contains("Bookkeeping policies"));
-        assert!(policies.contains("记账策略"));
+        assert!(policies.contains("base/"));
         let main = fs::read_to_string(root.join("main.bean")).unwrap();
         assert!(main.contains("option \"documents\" \"documents\""));
-        assert!(main.contains("include \"config/commodities.bean\""));
+        assert!(main.contains("option \"operating_currency\" \"CNY\""));
         let ignore = fs::read_to_string(root.join(".gitignore")).unwrap();
         assert!(ignore.contains(".backup_key"));
         let commodities = fs::read_to_string(root.join("config/commodities.bean")).unwrap();
         assert!(commodities.contains("commodity CNY"));
         assert!(commodities.contains("commodity USD"));
         let accounts = fs::read_to_string(root.join("config/accounts.bean")).unwrap();
-        assert!(accounts.contains("Assets:Bank-银行存款:Main-XX银行对公户"));
+        assert!(accounts.contains("Assets:Bank-银行存款:Main-基本户"));
+        assert!(accounts.contains("Equity:Capital-实收资本:PaidIn-股东出资"));
         assert!(accounts.contains("cash: TRUE"));
-        assert!(accounts.contains("cashflow: \"sales\""));
+        assert!(!accounts.contains("软件定制开发"));
+        assert!(!accounts.contains("云计算与算力"));
         assert!(app_created_ledger(&root));
         assert_eq!(
-            init_ledger_tree(&root).err().as_deref(),
+            init_ledger_tree(&root, "").err().as_deref(),
             Some("ledger-exists")
         );
         let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
+    fn writes_an_english_usd_ledger() {
+        let root = scratch("en");
+        init_ledger_tree(&root, "en").unwrap();
+        let main = fs::read_to_string(root.join("main.bean")).unwrap();
+        assert!(main.contains("option \"operating_currency\" \"USD\""));
+        let accounts = fs::read_to_string(root.join("config/accounts.bean")).unwrap();
+        assert!(accounts.contains("Assets:Bank:Checking"));
+        assert!(accounts.contains("Equity:Capital:PaidIn"));
+        assert!(!accounts.contains("银行存款"));
+        assert!(!root.join("policies/base/rules.toml").exists());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn unknown_locale_writes_nothing() {
+        let root = scratch("ar");
+        assert_eq!(
+            init_ledger_tree(&root, "ar").err().as_deref(),
+            Some("unsupported-locale")
+        );
+        assert!(!root.join("main.bean").exists());
+        assert!(!root.join(".beandesk").exists());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn rejects_a_relative_directory() {
         assert_eq!(
-            init_ledger_tree(Path::new("relative")).err().as_deref(),
+            init_ledger_tree(Path::new("relative"), "").err().as_deref(),
             Some("directory")
         );
     }
 
     #[test]
     fn refuses_a_folder_that_already_has_files() {
-        let root = std::env::temp_dir().join(format!("beandesk-not-empty-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(&root).unwrap();
+        let root = scratch("not-empty");
         fs::write(root.join("notes.txt"), "keep").unwrap();
-        assert_eq!(init_ledger_tree(&root).err().as_deref(), Some("not-empty"));
+        assert_eq!(
+            init_ledger_tree(&root, "").err().as_deref(),
+            Some("not-empty")
+        );
         assert!(!root.join("main.bean").exists());
         let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
     fn treats_finder_metadata_as_empty() {
-        let root = std::env::temp_dir().join(format!("beandesk-dsstore-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(&root).unwrap();
+        let root = scratch("dsstore");
         fs::write(root.join(".DS_Store"), "").unwrap();
-        init_ledger_tree(&root).unwrap();
+        init_ledger_tree(&root, "").unwrap();
         assert!(root.join("main.bean").is_file());
         let _ = fs::remove_dir_all(&root);
     }

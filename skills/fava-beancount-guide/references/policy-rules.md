@@ -15,9 +15,9 @@
 - until：失效日期（可选，不含当天，左闭右开）。
 - account：目标科目完整路径，支持末尾通配符（如 Assets:Bank-银行存款:*）。
 
-每条规则定义单一核验动作。
+每条规则定义单一核验动作。`account_pattern` 对窗口内每一条分录科目做全串正则匹配，不要与 `account` 或其它动作同时出现。
 
-## 五类动作示范
+## 六类动作示范
 
 ```toml
 # 动作 1：要求交易附带特定标签
@@ -63,4 +63,12 @@ description = "该科目已调整，请使用新规范科目"
 severity = "error"
 from = "2026-01-01"
 forbidden_accounts = ["Expenses:Tax-税金及附加:Surcharges-旧城建税"]
+
+# 动作 6：科目全串正则（无需 account 字段；语言规则写在正则里，不写在引擎里）
+[[rules]]
+id = "localized-account-naming"
+description = "分录科目必须使用英文前缀-中文名称"
+severity = "error"
+from = "2020-01-01"
+account_pattern = '^(Assets|Liabilities|Equity|Income|Expenses)(:[A-Z][A-Za-z0-9]*-[^\s:]*\p{Han}[^\s:]*)+$'
 ```

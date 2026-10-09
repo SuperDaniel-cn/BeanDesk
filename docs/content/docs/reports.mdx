@@ -15,26 +15,26 @@ Aggregates assets, liabilities, and equity, verifying that assets equal liabilit
 
 ## Income Statement
 
-Categorizes operating revenues, costs, and expenses to calculate period net profit, including comparative analysis against the preceding accounting period.
+Categorizes operating revenues, costs, and expenses to calculate period net profit, including year-over-year comparative data against the same period of the prior year (e.g. 2026-03 vs 2025-03, 2026-Q2 vs 2025-Q2, 2026 vs 2025; comparative column is omitted when All time is selected).
 
 ## Cash Flow Statement
 
-Computed via the direct method in pure functions, separating net cash flows across operating, investing, and financing activities. Non-cash accrual entries are excluded automatically.
+Computed via the direct method in pure functions, separating net cash flows across operating, investing, and financing activities with year-over-year comparative data (omitted when All time is selected). Non-cash accrual entries are excluded automatically.
 
 Cash flow mappings rely on metadata on Beancount account opening directives (`open`):
 
 ```beancount
-2020-01-01 open Assets:Bank-银行存款:Main-XX银行对公户 CNY
+2020-01-01 open Assets:Bank:Checking USD
   cash: TRUE
-2020-01-01 open Income:Service-主营业务收入:Tech-软件定制开发 CNY
+2020-01-01 open Income:Service:Consulting USD
   cashflow: "sales"
 ```
 
 - `cash: TRUE`: Designates the account as a cash or bank asset. If no account is marked, the page says “No cash accounts configured” instead of three zero totals.
-- `cashflow: "<line>"`: Maps the counter-account to a statutory cash flow line. Postings without a line mapping are grouped into Unclassified Items.
+- `cashflow: "<line>"`: Maps the counter-account to a standard cash flow line. Postings without a line mapping are grouped into Unclassified Items.
 - `cashflow-in` / `cashflow-out`: Separates line mappings for inflows and outflows on the same account.
 
-Legal line ids, in catalogue order:
+Standard line ids, in catalogue order:
 
 Operating:
 
@@ -51,7 +51,7 @@ Financing:
 - In: `borrowings`, `capital`
 - Out: `debt-principal`, `debt-interest`, `dividends`
 
-Standard ledgers initialized by BeanDesk include preconfigured cash metadata for sample bank, revenue, expense, equity, and owner-advance accounts.
+Standard ledgers initialized by BeanDesk include baseline cash metadata for checking accounts (`cash: TRUE`) and paid-in capital (`cashflow: "capital"`). Open additional operating accounts from `policies/base/chart-of-accounts.md` as needed.
 
 ## Journal & Document Drilldown
 

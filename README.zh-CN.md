@@ -25,7 +25,7 @@ BeanDesk 是一款运行在本地的复式记账桌面软件。不设云端账�
 
 ![试算平衡表](./docs/images/zh/trial-balance.png)
 
-### 法定财务三张表
+### 标准财务三张表
 即时生成资产负债表、利润表与现金流量表，企业经营成果与资金流向一目了然。
 
 ![资产负债表](./docs/images/zh/balance-sheet.png)

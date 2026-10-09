@@ -1,1 +1,1 @@
-Create the first ledger skeleton in the Settings work folder.
+Create the first ledger skeleton in the Settings work folder. Optional locale selects a preset: omit or empty for zh-CN (CNY, Chinese hyphen accounts, policies/base); pass en for a USD English skeleton. Unknown locales are rejected. Writes main.bean, config/, data/, documents/, and policies/base.

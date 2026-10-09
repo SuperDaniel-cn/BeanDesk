@@ -35,7 +35,7 @@ export const en = {
 
   compare: {
     delta: 'Change',
-    priorUnavailableTitle: 'Prior period data unavailable',
+    priorUnavailableTitle: 'Prior year period data unavailable',
     priorUnavailable: 'Showing current period only',
   },
 

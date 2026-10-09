@@ -1,0 +1,7 @@
+;; Minimal general accounts. Open operating accounts from
+;; policies/base/chart-of-accounts.md as needed.
+
+2020-01-01 open Assets:Bank-银行存款:Main-基本户 CNY
+  cash: TRUE
+2020-01-01 open Equity:Capital-实收资本:PaidIn-股东出资 CNY
+  cashflow: "capital"

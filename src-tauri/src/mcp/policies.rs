@@ -185,20 +185,7 @@ fn title_from_markdown(markdown: &str, id: &str) -> String {
 mod tests {
     use super::*;
 
-    use crate::mcp::tools::fixture_store;
-
-    fn temp_dir(tag: &str) -> PathBuf {
-        let path = std::env::temp_dir().join(format!(
-            "beandesk-policy-{tag}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&path).unwrap();
-        path
-    }
+    use crate::mcp::tools::{fixture_store, temp_dir};
 
     #[test]
     fn missing_policies_folder_lists_nothing() {

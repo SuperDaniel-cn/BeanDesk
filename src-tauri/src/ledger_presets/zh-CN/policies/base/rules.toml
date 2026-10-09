@@ -1,0 +1,6 @@
+[[rules]]
+id = "localized-account-naming"
+description = "分录科目必须使用英文前缀-中文名称，连字符后须含汉字"
+severity = "error"
+from = "2020-01-01"
+account_pattern = '^(Assets|Liabilities|Equity|Income|Expenses)(:[A-Z][A-Za-z0-9]*-[^\s:]*\p{Han}[^\s:]*)+$'

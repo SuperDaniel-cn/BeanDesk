@@ -45,7 +45,6 @@ pub(crate) struct CheckBody {
     pub directory: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy_ok: Option<bool>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub violations: Vec<PolicyViolation>,
 }
 
@@ -53,12 +52,15 @@ pub(crate) struct CheckBody {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct EmptyInput {}
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct InitLedgerInput {
     /// Set true after the user agrees to write the first ledger skeleton. False returns a pending card and writes nothing.
     #[serde(default)]
     pub confirm_write: bool,
+    /// Regional preset: omit or empty for zh-CN; pass en for a USD English skeleton.
+    #[serde(default)]
+    pub locale: Option<String>,
 }
 
 pub(crate) enum ResolvedConnection<'a> {
@@ -200,7 +202,7 @@ pub(crate) fn init_ledger_card(
             },
         ));
     }
-    init_ledger_tree(&directory).map_err(explain_write)?;
+    init_ledger_tree(&directory, input.locale.as_deref().unwrap_or("")).map_err(explain_write)?;
     Ok(Card::new(
         "Created the first ledger skeleton in the Settings folder.",
         WriteBody {
@@ -402,8 +404,23 @@ fn explain_write(code: String) -> String {
         "directory" => explain_store("directory"),
         "ledger-exists" => "A ledger (main.bean) already exists in the Settings folder.".into(),
         "not-empty" => "The Settings folder is not empty.".into(),
+        "unsupported-locale" => "Unknown ledger locale. Use zh-CN (default) or en.".into(),
         other => other.into(),
     }
+}
+
+#[cfg(test)]
+pub(crate) fn temp_dir(tag: &str) -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!(
+        "beandesk-mcp-{tag}-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&path).unwrap();
+    path
 }
 
 #[cfg(test)]
@@ -433,19 +450,6 @@ mod tests {
     use super::*;
     use crate::ledger_init::APP_MARKER;
 
-    fn temp_dir(tag: &str) -> PathBuf {
-        let path = std::env::temp_dir().join(format!(
-            "beandesk-mcp-{tag}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&path).unwrap();
-        path
-    }
-
     #[test]
     fn get_connection_keeps_the_path_off_the_card() {
         let path = PathBuf::from("/private/tmp/named-repo-must-not-appear");
@@ -465,13 +469,7 @@ mod tests {
     fn init_ledger_writes_nothing_until_confirmed() {
         let root = temp_dir("pending");
         let store = fixture_store(&root, "local");
-        let pending = init_ledger_card(
-            Some(&store),
-            InitLedgerInput {
-                confirm_write: false,
-            },
-        )
-        .unwrap();
+        let pending = init_ledger_card(Some(&store), InitLedgerInput::default()).unwrap();
         assert!(!pending.body.written);
         assert!(pending.display_block.contains("Not written"));
         assert!(!pending.display_block.contains(root.to_str().unwrap()));
@@ -481,6 +479,7 @@ mod tests {
             Some(&store),
             InitLedgerInput {
                 confirm_write: true,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -503,11 +502,31 @@ mod tests {
             Some(&store),
             InitLedgerInput {
                 confirm_write: true,
+                ..Default::default()
             },
         )
         .err()
         .unwrap();
         assert!(again.contains("already exists"));
+        assert!(root.join("policies/base/rules.toml").is_file());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn init_ledger_unknown_locale_writes_nothing() {
+        let root = temp_dir("init-ar");
+        let store = fixture_store(&root, "local");
+        let err = init_ledger_card(
+            Some(&store),
+            InitLedgerInput {
+                confirm_write: true,
+                locale: Some("ar".into()),
+            },
+        )
+        .err()
+        .unwrap();
+        assert!(err.contains("Unknown ledger locale"));
+        assert!(!root.join("main.bean").exists());
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -560,9 +579,9 @@ mod tests {
             card.display_block,
             "bean-check passed on the Settings folder."
         );
-        let json = serde_json::to_value(&card.body).unwrap();
+        let json = serde_json::to_value(&card).unwrap();
         assert!(json.get("policyOk").is_none());
-        assert!(json.get("violations").is_none());
+        assert_eq!(json["violations"], serde_json::json!([]));
         assert!(!card.display_block.contains(root.to_str().unwrap()));
         let _ = std::fs::remove_dir_all(&root);
     }

@@ -47,6 +47,7 @@ struct RawRule {
     from: DateField,
     until: Option<DateField>,
     account: Option<String>,
+    account_pattern: Option<String>,
     require_tag: Option<String>,
     require_payee: Option<bool>,
     narration_regex: Option<String>,
@@ -67,6 +68,7 @@ enum RuleAction {
     NarrationRegex { account: String, regex: Regex },
     PostingSign { account: String, sign: PostingSign },
     Forbidden(Vec<String>),
+    AccountPattern(Regex),
 }
 
 struct Rule {
@@ -216,6 +218,7 @@ fn compile_rule(file: &str, index: usize, raw: RawRule) -> Result<Rule, String> 
         ));
     }
     let account = raw.account.and_then(nonempty_text);
+    let account_pattern = raw.account_pattern.and_then(nonempty_text);
     let action = match (
         raw.require_tag.and_then(nonempty_text),
         raw.require_payee,
@@ -227,38 +230,43 @@ fn compile_rule(file: &str, index: usize, raw: RawRule) -> Result<Rule, String> 
                 .filter_map(nonempty_text)
                 .collect::<Vec<_>>()
         }),
+        account_pattern,
         account,
     ) {
-        (Some(tag), None, None, None, None, account) => RuleAction::RequireTag {
+        (Some(tag), None, None, None, None, None, account) => RuleAction::RequireTag {
             account: require_account(&where_rule, account)?,
             tag,
         },
-        (None, Some(true), None, None, None, account) => RuleAction::RequirePayee {
+        (None, Some(true), None, None, None, None, account) => RuleAction::RequirePayee {
             account: require_account(&where_rule, account)?,
         },
-        (None, None, Some(pattern), None, None, account) => RuleAction::NarrationRegex {
+        (None, None, Some(pattern), None, None, None, account) => RuleAction::NarrationRegex {
             account: require_account(&where_rule, account)?,
             regex: Regex::new(&pattern)
                 .map_err(|error| format!("{where_rule}: invalid narration_regex ({error})"))?,
         },
-        (None, None, None, Some(sign), None, account) => RuleAction::PostingSign {
+        (None, None, None, Some(sign), None, None, account) => RuleAction::PostingSign {
             account: require_account(&where_rule, account)?,
             sign,
         },
-        (None, None, None, None, Some(accounts), None) if !accounts.is_empty() => {
+        (None, None, None, None, Some(accounts), None, None) if !accounts.is_empty() => {
             RuleAction::Forbidden(accounts)
         }
-        (None, None, None, None, Some(_), None) => {
+        (None, None, None, None, Some(_), None, None) => {
             return Err(format!("{where_rule}: forbidden_accounts is empty."));
         }
-        (None, None, None, None, Some(_), Some(_)) => {
+        (None, None, None, None, Some(_), None, Some(_)) => {
             return Err(format!(
                 "{where_rule}: forbidden_accounts cannot be combined with account."
             ));
         }
+        (None, None, None, None, None, Some(pattern), None) => RuleAction::AccountPattern(
+            Regex::new(&pattern)
+                .map_err(|error| format!("{where_rule}: invalid account_pattern ({error})"))?,
+        ),
         _ => {
             return Err(format!(
-                "{where_rule}: set exactly one of require_tag, require_payee, narration_regex, posting_sign, or forbidden_accounts."
+                "{where_rule}: set exactly one of require_tag, require_payee, narration_regex, posting_sign, forbidden_accounts, or account_pattern."
             ));
         }
     };
@@ -410,6 +418,21 @@ fn apply_rules(rules: &[Rule], txns: &[Txn]) -> Vec<PolicyViolation> {
                                 rule,
                                 format!(
                                     "forbidden account {}. {}",
+                                    posting.account, rule.description
+                                ),
+                            ));
+                        }
+                    }
+                }
+                RuleAction::AccountPattern(regex) => {
+                    for posting in &txn.postings {
+                        if !regex.is_match(&posting.account) {
+                            violations.push(hit(
+                                txn,
+                                posting.line,
+                                rule,
+                                format!(
+                                    "account {} does not match account_pattern. {}",
                                     posting.account, rule.description
                                 ),
                             ));
@@ -980,6 +1003,89 @@ require_payee = true
             "2026-01-10 * \"Vendor\" \"Cloud\" #ok\n  Expenses:Operations:Hosting   10.00 CNY\n  Assets:Bank:Checking        -10.00 CNY\n",
         );
         assert!(checked(&root).is_empty());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn account_pattern_is_a_plain_regex() {
+        let root = temp_dir("account-pattern");
+        write(
+            &root.join("policies/shape.toml"),
+            r#"
+[[rules]]
+id = "assets-only"
+description = "Postings must stay under Assets."
+severity = "error"
+from = "2026-01-01"
+account_pattern = "^Assets:"
+"#,
+        );
+        write(
+            &root.join("data/2026/2026-01.bean"),
+            "2026-01-10 * \"Vendor\" \"Mix\"\n  Expenses:Operations:Hosting   10.00 CNY\n  Assets:Bank:Checking        -10.00 CNY\n",
+        );
+        let violations = checked(&root);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].rule_id, "assets-only");
+        assert_eq!(violations[0].line, 2);
+        assert!(
+            violations[0]
+                .message
+                .contains("Expenses:Operations:Hosting")
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn zh_cn_preset_pattern_accepts_hyphen_chinese_and_rejects_english() {
+        let root = temp_dir("zh-preset");
+        write(
+            &root.join("policies/base/rules.toml"),
+            include_str!("../ledger_presets/zh-CN/policies/base/rules.toml"),
+        );
+        write(
+            &root.join("data/2026/2026-03.bean"),
+            "2026-03-15 * \"Client\" \"Fee\"\n  Assets:Bank-银行存款:Main-XX银行对公户          50000.00 CNY\n  Income:Service-主营业务收入:Tech-软件定制开发  -50000.00 CNY\n",
+        );
+        assert!(checked(&root).is_empty());
+
+        write(
+            &root.join("data/2026/2026-03.bean"),
+            "2026-03-15 * \"Client\" \"Fee\"\n  Assets:Bank:Checking    50000.00 CNY\n  Income:Sales           -50000.00 CNY\n",
+        );
+        let violations = checked(&root);
+        assert_eq!(violations.len(), 2);
+        assert!(
+            violations
+                .iter()
+                .all(|item| item.rule_id == "localized-account-naming")
+        );
+        assert_eq!(violations[0].line, 2);
+        assert!(violations[0].message.contains("Assets:Bank:Checking"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn account_pattern_cannot_mix_with_other_actions() {
+        let root = temp_dir("account-pattern-mix");
+        write(
+            &root.join("policies/mix.toml"),
+            r#"
+[[rules]]
+id = "mixed"
+description = "Invalid combination."
+severity = "error"
+from = "2026-01-01"
+account = "Assets:Bank:*"
+account_pattern = "^Assets:"
+"#,
+        );
+        match lint_policies(&root) {
+            Some(PolicyLint::LoadError(error)) => {
+                assert!(error.contains("exactly one of"), "{error}");
+            }
+            other => panic!("expected a load error, got {other:?}"),
+        }
         let _ = fs::remove_dir_all(&root);
     }
 

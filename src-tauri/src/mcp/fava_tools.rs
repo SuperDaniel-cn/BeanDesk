@@ -11,7 +11,7 @@ use super::tools::{
 const BODY_ROWS: usize = 50;
 const JOURNAL_BQL: &str = "SELECT id, date, flag, payee, narration, account, units(position) as units, tags, links ORDER BY date DESC LIMIT 51";
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct TimeInput {
     #[serde(default)]
@@ -434,6 +434,20 @@ mod tests {
         store
     }
 
+    fn ledger_ok() -> (u16, Vec<(String, String)>, String) {
+        json_ok(
+            r#"{"data":{"options":{"title":"Ledger","operating_currency":["CNY"]},"accounts":["Assets"],"errors":[]}}"#,
+        )
+    }
+
+    fn json_ok(body: &str) -> (u16, Vec<(String, String)>, String) {
+        (
+            200,
+            vec![("Content-Type".into(), "application/json".into())],
+            body.into(),
+        )
+    }
+
     fn start_mock(
         handler: impl Fn(&str) -> (u16, Vec<(String, String)>, String) + Send + 'static,
     ) -> (String, Arc<Mutex<Vec<String>>>) {
@@ -487,17 +501,9 @@ mod tests {
     fn empty_time_is_left_off_the_query() {
         let (origin, seen) = start_mock(|path| {
             if path.ends_with("/api/ledger_data") {
-                (
-                    200,
-                    vec![("Content-Type".into(), "application/json".into())],
-                    r#"{"data":{"options":{"title":"Ledger","operating_currency":["CNY"]},"accounts":["Assets"],"errors":[]}}"#.into(),
-                )
+                ledger_ok()
             } else if path.contains("/api/query") {
-                (
-                    200,
-                    vec![("Content-Type".into(), "application/json".into())],
-                    r#"{"data":{"types":[{"name":"account"}],"rows":[["Assets:Cash"]]}}"#.into(),
-                )
+                json_ok(r#"{"data":{"types":[{"name":"account"}],"rows":[["Assets:Cash"]]}}"#)
             } else {
                 (404, vec![], String::new())
             }
@@ -513,7 +519,7 @@ mod tests {
         .unwrap();
         assert_eq!(card.body.row_count, 1);
         assert_eq!(card.body.time, "");
-        let paths = seen.lock().unwrap().clone();
+        let paths = seen.lock().unwrap();
         assert!(paths.iter().any(|path| path.contains("/api/query")));
         assert!(paths.iter().all(|path| !path.contains("time=")));
         assert!(!card.display_block.contains("named-repo-must-not-appear"));
@@ -530,10 +536,8 @@ mod tests {
                 );
             }
             if path.starts_with("/books/api/ledger_data") {
-                return (
-                    200,
-                    vec![("Content-Type".into(), "application/json".into())],
-                    r#"{"data":{"options":{"title":"Books","operating_currency":["CNY"]},"accounts":["Assets","Income"],"errors":[{"message":"ok","source":{"filename":"/secret/main.bean"}}]}}"#.into(),
+                return json_ok(
+                    r#"{"data":{"options":{"title":"Books","operating_currency":["CNY"]},"accounts":["Assets","Income"],"errors":[{"message":"ok","source":{"filename":"/secret/main.bean"}}]}}"#,
                 );
             }
             (404, vec![], String::new())
@@ -558,11 +562,7 @@ mod tests {
     fn default_slug_json_error_does_not_probe_root() {
         let (origin, seen) = start_mock(|path| {
             if path.ends_with("/api/ledger_data") {
-                (
-                    200,
-                    vec![("Content-Type".into(), "application/json".into())],
-                    r#"{"error":"file missing"}"#.into(),
-                )
+                json_ok(r#"{"error":"file missing"}"#)
             } else {
                 (200, vec![], String::new())
             }
@@ -598,10 +598,8 @@ mod tests {
     fn ledger_counts_every_loader_error() {
         let (origin, _) = start_mock(|path| {
             if path.ends_with("/api/ledger_data") {
-                (
-                    200,
-                    vec![("Content-Type".into(), "application/json".into())],
-                    r#"{"data":{"options":{"title":"Ledger","operating_currency":["CNY"]},"accounts":[],"errors":[{},{"message":"late"}]}}"#.into(),
+                json_ok(
+                    r#"{"data":{"options":{"title":"Ledger","operating_currency":["CNY"]},"accounts":[],"errors":[{},{"message":"late"}]}}"#,
                 )
             } else {
                 (404, vec![], String::new())
@@ -613,20 +611,88 @@ mod tests {
     }
 
     #[test]
+    fn report_tools_read_the_named_fava_endpoints() {
+        let (origin, seen) = start_mock(|path| {
+            if path.ends_with("/api/ledger_data") {
+                ledger_ok()
+            } else if path.contains("/api/trial_balance")
+                || path.contains("/api/balance_sheet")
+                || path.contains("/api/income_statement")
+            {
+                json_ok(r#"{"data":{"trees":[{"account":"Assets"},{"account":"Equity"}]}}"#)
+            } else {
+                (404, vec![], String::new())
+            }
+        });
+        let store = store_for(&origin);
+        for card in [
+            get_trial_balance_card(Some(&store), TimeInput::default()).unwrap(),
+            get_balance_sheet_card(Some(&store), TimeInput::default()).unwrap(),
+            get_income_statement_card(Some(&store), TimeInput::default()).unwrap(),
+        ] {
+            assert_eq!(card.body.roots, ["Assets", "Equity"]);
+            assert_eq!(card.body.time, "");
+        }
+        let paths = seen.lock().unwrap();
+        assert!(paths.iter().any(|path| path.contains("trial_balance")));
+        assert!(paths.iter().any(|path| path.contains("balance_sheet")));
+        assert!(paths.iter().any(|path| path.contains("income_statement")));
+    }
+
+    #[test]
+    fn journal_returns_query_rows() {
+        let (origin, seen) = start_mock(|path| {
+            if path.ends_with("/api/ledger_data") {
+                ledger_ok()
+            } else if path.contains("/api/query") {
+                json_ok(r#"{"data":{"types":[{"name":"id"}],"rows":[["txn-1"]]}}"#)
+            } else {
+                (404, vec![], String::new())
+            }
+        });
+        let card = get_journal_card(
+            Some(&store_for(&origin)),
+            TimeInput {
+                time: "2026".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(card.body.row_count, 1);
+        assert_eq!(card.body.time, "2026");
+        assert!(
+            seen.lock()
+                .unwrap()
+                .iter()
+                .any(|path| path.contains("query_string=") && path.contains("time=2026"))
+        );
+    }
+
+    #[test]
+    fn documents_lists_catalogue_rows() {
+        let (origin, _) = start_mock(|path| {
+            if path.ends_with("/api/ledger_data") {
+                ledger_ok()
+            } else if path.ends_with("/api/documents") {
+                json_ok(
+                    r#"{"data":[{"date":"2026-03-01","account":"Assets:Bank","filename":"a.pdf"}]}"#,
+                )
+            } else {
+                (404, vec![], String::new())
+            }
+        });
+        let card = list_documents_card(Some(&store_for(&origin))).unwrap();
+        assert_eq!(card.body.count, 1);
+        assert_eq!(card.body.documents[0].filename, "a.pdf");
+        assert!(!card.display_block.contains("named-repo-must-not-appear"));
+    }
+
+    #[test]
     fn documents_rejects_a_non_list() {
         let (origin, _) = start_mock(|path| {
             if path.ends_with("/api/ledger_data") {
-                (
-                    200,
-                    vec![("Content-Type".into(), "application/json".into())],
-                    r#"{"data":{"options":{"title":"Ledger","operating_currency":["CNY"]},"accounts":[],"errors":[]}}"#.into(),
-                )
+                ledger_ok()
             } else if path.ends_with("/api/documents") {
-                (
-                    200,
-                    vec![("Content-Type".into(), "application/json".into())],
-                    r#"{"data":{}}"#.into(),
-                )
+                json_ok(r#"{"data":{}}"#)
             } else {
                 (404, vec![], String::new())
             }

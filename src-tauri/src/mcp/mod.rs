@@ -7,6 +7,9 @@ mod policy_lint;
 mod store;
 mod tools;
 
+#[cfg(test)]
+mod output_schema;
+
 use std::path::PathBuf;
 
 use rmcp::handler::server::wrapper::Parameters;

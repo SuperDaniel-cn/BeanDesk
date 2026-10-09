@@ -1,0 +1,7 @@
+;; Minimal general accounts. Open operating accounts from
+;; policies/base/chart-of-accounts.md as needed.
+
+2020-01-01 open Assets:Bank:Checking USD
+  cash: TRUE
+2020-01-01 open Equity:Capital:PaidIn USD
+  cashflow: "capital"

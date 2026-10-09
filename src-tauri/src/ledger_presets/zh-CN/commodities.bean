@@ -1,0 +1,7 @@
+1970-01-01 commodity CNY
+  name: "人民币"
+  precision: 2
+
+1970-01-01 commodity USD
+  name: "美元"
+  precision: 2

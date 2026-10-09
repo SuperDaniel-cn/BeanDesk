@@ -16,7 +16,7 @@ Clear removes the current source and leaves the month empty.
 
 ## Local copy
 
-The desktop app keeps one local copy of the active calendar and shows it as soon as the page opens. A subscription is checked again once the copy is older than 24 hours, or older than the interval the feed declares with `REFRESH-INTERVAL` or `X-PUBLISHED-TTL` (at least one hour). The check sends the last ETag, so an unchanged feed is not downloaded again. Refresh checks right away. A failed check keeps the copy, and the dialog shows when it was last updated. A local file is read again every time the page opens.
+The desktop app keeps one local copy of the active calendar and shows it as soon as the page opens. A subscription is checked again once the copy is older than 24 hours, or older than the interval the feed declares with `REFRESH-INTERVAL` or `X-PUBLISHED-TTL` (at least one hour). The check sends the last ETag and If-Modified-Since headers, so an unchanged feed is not downloaded again. Refresh checks right away. A failed check keeps the copy, and the dialog shows when it was last updated. A local file is read again every time the page opens.
 
 ## Notices
 
