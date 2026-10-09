@@ -4,7 +4,6 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import { ShieldAlert } from 'lucide-react'
 
 import { useDesktop } from '@/components/desktop-gate'
-import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -28,7 +27,7 @@ const BANNER_COPY: Record<Exclude<PolicyIntegrity, 'ok'>, MessageKey> = {
   'store-corrupt': 'policy.bannerStoreCorrupt',
 }
 
-export function PolicyBanner() {
+export function PolicyBanner({ className }: { className?: string }) {
   const { t } = useI18n()
   const desktop = useDesktop()
   const queryClient = useQueryClient()
@@ -67,16 +66,40 @@ export function PolicyBanner() {
 
   return (
     <>
-      <Alert variant="warning">
-        <ShieldAlert />
-        <AlertTitle>{t('policy.bannerTitle')}</AlertTitle>
-        <AlertDescription>{t(bannerKey)}</AlertDescription>
-        <AlertAction>
-          <Button type="button" size="xs" variant="outline" onClick={() => setOpen(true)}>
+      <aside
+        role="status"
+        aria-live="polite"
+        className={cn(
+          'pointer-events-none fixed inset-x-0 bottom-4 z-40 mx-auto w-full max-w-7xl px-3 sm:px-6 lg:px-8',
+          className,
+        )}
+      >
+        <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-xl border border-warning/35 bg-background/95 p-3 shadow-xl backdrop-blur-md dark:bg-card/95 sm:px-4 sm:py-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <ShieldAlert className="size-4 shrink-0 text-warning" />
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+              <span className="shrink-0 text-xs font-medium text-foreground sm:text-sm">
+                {t('policy.bannerTitle')}
+              </span>
+              <span className="hidden text-muted-foreground/40 sm:inline" aria-hidden>
+                ·
+              </span>
+              <span className="min-w-0 truncate text-xs text-muted-foreground">
+                {t(bannerKey)}
+              </span>
+            </div>
+          </div>
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            className="h-6 shrink-0 bg-background/50 hover:bg-background"
+            onClick={() => setOpen(true)}
+          >
             {t('policy.review')}
           </Button>
-        </AlertAction>
-      </Alert>
+        </div>
+      </aside>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="min-w-0 overflow-hidden sm:max-w-2xl">
           <DialogHeader>

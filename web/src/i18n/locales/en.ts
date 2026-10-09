@@ -384,15 +384,15 @@ export const en = {
     createFirstLedgerNotEmpty:
       'Directory is not empty. Select an empty folder or connect an existing ledger',
     missingLedger:
-      'Initialize the ledger first and choose a locale pack in the dialog',
+      'Initialize the ledger first and choose an accounting standard in the dialog',
     createFirstLedgerHint:
-      'Writes the ledger skeleton into an empty folder. The locale pack must be chosen explicitly, the same as MCP. Operating currency comes with the pack.',
-    ledgerPackLanguage: 'Ledger language',
+      'Writes the ledger skeleton into an empty folder. The accounting standard must be chosen explicitly; operating currency comes with it.',
+    ledgerPackLanguage: 'Accounting standard',
     ledgerPackCurrency: 'Operating currency',
     ledgerPackHint:
-      'Changing language fills that pack\'s currency. Changing currency switches to the matching pack.',
-    packZhCN: 'Simplified Chinese',
-    packEn: 'English',
+      'Changing the standard fills its default currency. Changing currency switches to the matching standard.',
+    packZhCN: 'China Accounting Standards (CNY · Chinese)',
+    packEn: 'International / US Standards (USD · English)',
     upgradeLedger: 'Upgrade ledger skeleton',
     upgradeLedgerDone: 'Ledger skeleton upgraded',
     upgradeSnapshotWarn: 'The ledger was upgraded, but a Git snapshot could not be written.',
@@ -505,28 +505,29 @@ export const en = {
   },
 
   policy: {
-    bannerTitle: 'Policy review needed',
+    bannerTitle: 'Accounting policy review needed',
     bannerUnseeded:
-      'This computer has not seeded policy integrity. Confirm the language pack in Settings. Custom TOML is not applied until approved here.',
+      'This ledger has not been registered on this computer. Confirm its accounting policy in Settings; custom rules stay inactive until registration is complete.',
     bannerUnapproved:
-      'Custom policy files on disk differ from the last approved copies. Disk files are not being applied.',
+      'Custom rules in the ledger differ from the last approved version. Those changes are not in effect.',
     bannerLocaleMismatch:
-      'The .beandesk locale does not match BeanDesk. Built-in rules still follow the BeanDesk language pack. Switch the pack in Settings, or revert.',
+      'The accounting policy in the ledger does not match the one registered in BeanDesk; checks still follow BeanDesk. Select it again in Settings, or restore the last approved version.',
     bannerStoreCorrupt:
-      'Approved policy copies could not be parsed. Built-in baseline rules still run. Custom disk files were not used.',
-    bannerRestore: 'This ledger was just restored. Review and approve or revert policies.',
+      'The approved accounting policy could not be read. Only built-in rules ran; custom rules in the ledger were not applied.',
+    bannerRestore:
+      'This ledger was just restored from a backup. Review the accounting policy and approve or restore the last approved version.',
     review: 'Review',
-    dialogTitle: 'Policy review',
+    dialogTitle: 'Accounting policy review',
     approve: 'Approve as new baseline',
-    revert: 'Revert to last approved',
-    emptyDiff: 'No custom policy file differences.',
-    approveFailed: 'Could not approve. Every custom TOML file must parse.',
-    revertFailed: 'Could not revert policies.',
-    switchLocale: 'Switch language pack',
-    switchLocaleHint:
-      'Writes the chosen pack into .beandesk and policies/base/rules.toml. Approved custom rules are kept. Markdown under base/ is not rewritten.',
-    switchLocaleDone: 'Language pack switched',
-    switchLocaleConfirm: 'Switch',
+    revert: 'Restore last approved version',
+    emptyDiff: 'No changes in custom rules.',
+    approveFailed:
+      'Could not approve: a custom rule file could not be read. Check it and retry.',
+    revertFailed: 'Could not restore. Please retry.',
+    switchLocale: 'Change accounting standard',
+    switchLocaleHint: 'Changes the accounting standard for this ledger. Your approved custom rules are kept.',
+    switchLocaleDone: 'Accounting standard changed',
+    switchLocaleConfirm: 'Change',
   },
 
   update: {

@@ -218,9 +218,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         }
       >
         {hideLedgerErrors ? null : <LedgerErrors />}
-        <PolicyBanner />
         {children}
       </main>
+
+      <PolicyBanner />
     </div>
   )
 }

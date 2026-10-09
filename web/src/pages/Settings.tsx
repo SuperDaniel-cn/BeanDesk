@@ -13,11 +13,11 @@ import {
   FilePlus2,
   FolderInput,
   FolderOpen,
-  Globe,
   Info,
   Link2,
   Plug,
   Settings as SettingsIcon,
+  SlidersHorizontal,
   Terminal,
 } from 'lucide-react'
 
@@ -788,7 +788,7 @@ function ConnectionSettings() {
                   disabled={folderLocked || !directory}
                   className="shrink-0"
                 >
-                  <Globe data-icon="inline-start" />
+                  <SlidersHorizontal data-icon="inline-start" />
                   {t('policy.switchLocale')}
                 </Button>
               ) : null}
