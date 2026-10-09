@@ -28,6 +28,7 @@ export const zhCN = {
     unreachable: '无法连接 Fava 服务。请在设置中检查账本连接。',
     slug: '无法确定账套标识。请确认账本服务已就绪。',
     slugInvalid: '账套标识无效。',
+    ledgerData: '账本服务返回的数据格式无法识别。',
   },
 
   ledger: {
@@ -308,6 +309,9 @@ export const zhCN = {
     backupErrorArchiveDir: '请选择本地备份目录。',
     backupErrorArchiveDirGone: '指定的备份目录已不存在，请重新选择。',
     backupErrorArchiveNested: '备份目录不能位于账本目录内部。',
+    backupErrorRestoreNested: '不能恢复到当前正在使用的账本目录，请另选一个空文件夹。',
+    backupErrorRestoreNotEmpty: '请选择一个空文件夹作为恢复目标。',
+    backupErrorRestoreMove: '恢复的文件无法移动到所选文件夹。',
     backupKey: '加密密钥',
     backupKeySave: '保存密钥',
     backupKeyConfirmTitle: '确认密钥',
@@ -381,6 +385,7 @@ export const zhCN = {
     packEn: '英语',
     upgradeLedger: '升级账本骨架',
     upgradeLedgerDone: '账本骨架已升级',
+    upgradeSnapshotWarn: '账本已升级，但未能写入 Git 快照。',
     upgradeLedgerHint:
       '当前目录是旧版 BeanDesk 账本。升级会补齐缺失的 policies/base 并刷新标记，不会改动 data/ 中的分录。',
     upgradeLedgerConfirm: '升级',

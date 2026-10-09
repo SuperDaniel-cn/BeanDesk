@@ -1,6 +1,6 @@
 use std::fs;
 use std::io::{ErrorKind, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -11,6 +11,7 @@ pub const SKELETON_VERSION: u32 = 2;
 pub const APP_MARKER: &str = ".beandesk";
 pub const BACKUP_GITIGNORE: &str = "\
 .backup_key
+.backup_key.new
 .env
 backups/
 .DS_Store
@@ -40,6 +41,7 @@ pub struct UpgradeReport {
     pub written: Vec<String>,
     pub version: u32,
     pub locale: String,
+    pub warnings: Vec<String>,
 }
 
 pub fn init_ledger_tree(directory: &Path, locale: &str) -> Result<(), String> {
@@ -54,6 +56,21 @@ pub fn init_ledger_tree(directory: &Path, locale: &str) -> Result<(), String> {
         return Err("not-empty".to_string());
     }
 
+    let extra_roots = ["config", "data", "documents", "policies"].map(|name| directory.join(name));
+    let mut created = Vec::new();
+    let result = write_new_ledger(directory, locale, &pack, &mut created);
+    if result.is_err() {
+        revert_created(&created, &extra_roots);
+    }
+    result
+}
+
+fn write_new_ledger(
+    directory: &Path,
+    locale: &str,
+    pack: &LedgerPreset,
+    created: &mut Vec<PathBuf>,
+) -> Result<(), String> {
     let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
     let year = now.year();
     let month = u8::from(now.month());
@@ -75,17 +92,45 @@ pub fn init_ledger_tree(directory: &Path, locale: &str) -> Result<(), String> {
     );
     let year_index = format!("include \"{month_file}\"\n");
 
-    write_new(directory.join("main.bean"), &main)?;
-    write_new(directory.join("config/commodities.bean"), pack.commodities)?;
-    write_new(directory.join("config/accounts.bean"), pack.accounts)?;
-    write_new(year_dir.join(format!("{year}.bean")), &year_index)?;
-    write_new(year_dir.join(&month_file), "")?;
-    write_new(directory.join(".gitignore"), BACKUP_GITIGNORE)?;
+    write_new_tracked(
+        created,
+        directory.join("config/commodities.bean"),
+        pack.commodities,
+    )?;
+    write_new_tracked(
+        created,
+        directory.join("config/accounts.bean"),
+        pack.accounts,
+    )?;
+    write_new_tracked(created, year_dir.join(format!("{year}.bean")), &year_index)?;
+    write_new_tracked(created, year_dir.join(&month_file), "")?;
+    write_new_tracked(created, directory.join(".gitignore"), BACKUP_GITIGNORE)?;
     for (rel, contents) in baseline_files(pack) {
-        write_new(directory.join(rel), contents)?;
+        write_new_tracked(created, directory.join(rel), contents)?;
     }
+    created.push(directory.join(APP_MARKER));
     write_marker(directory, locale.trim())?;
+    write_new_tracked(created, directory.join("main.bean"), &main)?;
     Ok(())
+}
+
+fn write_new_tracked(
+    created: &mut Vec<PathBuf>,
+    path: PathBuf,
+    contents: &str,
+) -> Result<(), String> {
+    write_new(&path, contents)?;
+    created.push(path);
+    Ok(())
+}
+
+fn revert_created(files: &[PathBuf], roots: &[PathBuf]) {
+    for path in files.iter().rev() {
+        let _ = fs::remove_file(path);
+    }
+    for root in roots.iter().rev() {
+        let _ = fs::remove_dir_all(root);
+    }
 }
 
 pub fn inspect_ledger(directory: &Path) -> Result<LedgerInspect, String> {
@@ -141,19 +186,26 @@ pub fn upgrade_ledger_tree(directory: &Path, locale: &str) -> Result<UpgradeRepo
             written: Vec::new(),
             version: SKELETON_VERSION,
             locale: inspect.locale.unwrap_or_else(|| locale.to_string()),
+            warnings: Vec::new(),
         });
     }
     let adopted = inspect.kind == "foreign";
-    let _ = crate::backup::git_snapshot(directory);
+    let before = crate::backup::git_snapshot(directory).is_err();
     let mut written = write_missing_baseline(directory, pack)?;
     write_marker(directory, locale)?;
     written.push(APP_MARKER.to_string());
-    let _ = crate::backup::git_snapshot(directory);
+    let after = crate::backup::git_snapshot(directory).is_err();
+    let warnings = if before || after {
+        vec!["git-snapshot".to_string()]
+    } else {
+        Vec::new()
+    };
     Ok(UpgradeReport {
         adopted,
         written,
         version: SKELETON_VERSION,
         locale: locale.to_string(),
+        warnings,
     })
 }
 
@@ -166,18 +218,22 @@ pub fn ensure_backup_gitignore(directory: &Path) -> Result<bool, String> {
     let current = if path.is_file() {
         fs::read_to_string(&path).map_err(|error| error.to_string())?
     } else {
-        write_new(path, BACKUP_GITIGNORE)?;
+        write_new(&path, BACKUP_GITIGNORE)?;
         return Ok(true);
     };
-    if gitignore_covers(&current) {
+    let missing = gitignore_missing_lines(&current);
+    if missing.is_empty() {
         return Ok(false);
     }
     let mut next = current;
     if !next.ends_with('\n') && !next.is_empty() {
         next.push('\n');
     }
-    next.push_str(BACKUP_GITIGNORE);
-    fs::write(&path, next).map_err(|error| error.to_string())?;
+    for line in missing {
+        next.push_str(line);
+        next.push('\n');
+    }
+    atomic_write(&path, &next)?;
     Ok(true)
 }
 
@@ -240,7 +296,32 @@ fn gitignore_needs_update(directory: &Path) -> bool {
 }
 
 fn gitignore_covers(text: &str) -> bool {
-    text.contains(".backup_key") && text.contains("backups/")
+    gitignore_missing_lines(text).is_empty()
+}
+
+fn gitignore_missing_lines(text: &str) -> Vec<&'static str> {
+    BACKUP_GITIGNORE
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter(|line| !text.lines().map(str::trim).any(|got| got == *line))
+        .collect()
+}
+
+fn atomic_write(path: &Path, contents: &str) -> Result<(), String> {
+    let Some(name) = path.file_name() else {
+        return Err("directory".to_string());
+    };
+    let tmp = path.with_file_name(format!("{}.beandesk-tmp", name.to_string_lossy()));
+    fs::write(&tmp, contents).map_err(|error| error.to_string())?;
+    if fs::rename(&tmp, path).is_err() {
+        let _ = fs::remove_file(path);
+        if let Err(error) = fs::rename(&tmp, path) {
+            let _ = fs::remove_file(&tmp);
+            return Err(error.to_string());
+        }
+    }
+    Ok(())
 }
 
 fn read_marker(directory: &Path) -> Option<LedgerMarker> {
@@ -537,5 +618,30 @@ mod tests {
             Some("main-bean")
         );
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn revert_created_removes_files_and_new_roots() {
+        let root = scratch("revert");
+        let config = root.join("config");
+        fs::create_dir_all(config.join("inner")).unwrap();
+        let main = root.join("main.bean");
+        fs::write(&main, "partial\n").unwrap();
+        revert_created(&[main.clone()], &[config.clone()]);
+        assert!(!main.exists());
+        assert!(!config.exists());
+        assert!(root.is_dir());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn gitignore_appends_only_missing_lines() {
+        let existing = ".backup_key\n.env\n.DS_Store\n";
+        assert_eq!(
+            gitignore_missing_lines(existing),
+            vec![".backup_key.new", "backups/"]
+        );
+        assert!(gitignore_covers(BACKUP_GITIGNORE));
+        assert!(!gitignore_covers(".backup_key.new\nbackups/\n"));
     }
 }

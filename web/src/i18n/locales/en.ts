@@ -23,6 +23,7 @@ export const en = {
     unreachable: 'Unable to reach Fava. Check the ledger connection in Settings.',
     slug: 'Unable to determine the ledger slug. Check that the ledger service is ready.',
     slugInvalid: 'The ledger slug is invalid.',
+    ledgerData: 'The ledger service returned a payload this version cannot read.',
   },
 
   ledger: {
@@ -309,6 +310,9 @@ export const en = {
     backupErrorArchiveDir: 'Please select a local backup directory.',
     backupErrorArchiveDirGone: 'Selected backup directory no longer exists. Please reselect.',
     backupErrorArchiveNested: 'Backup directory cannot be inside the ledger directory.',
+    backupErrorRestoreNested: 'Restore into the current ledger folder is not allowed. Choose another empty folder.',
+    backupErrorRestoreNotEmpty: 'Choose an empty folder for restore.',
+    backupErrorRestoreMove: 'The restored files could not be moved into the chosen folder.',
     backupKey: 'Encryption Key',
     backupKeySave: 'Save Key',
     backupKeyConfirmTitle: 'Confirm Key',
@@ -391,6 +395,7 @@ export const en = {
     packEn: 'English',
     upgradeLedger: 'Upgrade ledger skeleton',
     upgradeLedgerDone: 'Ledger skeleton upgraded',
+    upgradeSnapshotWarn: 'The ledger was upgraded, but a Git snapshot could not be written.',
     upgradeLedgerHint:
       'This folder is an older BeanDesk ledger. Upgrade adds missing policies/base files and refreshes the marker. It does not change data/ entries.',
     upgradeLedgerConfirm: 'Upgrade',

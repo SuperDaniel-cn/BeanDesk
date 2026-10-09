@@ -5,6 +5,7 @@ import type { MessageKey } from '@/i18n/locales/en'
 export const FAVA_UNREACHABLE = 'fava-unreachable'
 export const FAVA_SLUG = 'fava-slug'
 export const FAVA_SLUG_INVALID = 'fava-slug-invalid'
+export const FAVA_LEDGER_DATA = 'ledger-data'
 
 export function explainFavaError(
   error: unknown,
@@ -15,6 +16,7 @@ export function explainFavaError(
   if (code === FAVA_UNREACHABLE) return t('fava.unreachable')
   if (code === FAVA_SLUG) return t('fava.slug')
   if (code === FAVA_SLUG_INVALID) return t('fava.slugInvalid')
+  if (code === FAVA_LEDGER_DATA) return t('fava.ledgerData')
   if (error instanceof Error && error.message) return error.message
   return t(fallback)
 }

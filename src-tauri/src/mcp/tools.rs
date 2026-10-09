@@ -48,6 +48,7 @@ pub(crate) struct UpgradeBody {
     pub files: Vec<String>,
     pub version: u32,
     pub locale: String,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -264,17 +265,21 @@ pub(crate) fn upgrade_ledger_card(
                 files: Vec::new(),
                 version: SKELETON_VERSION,
                 locale: locale.to_string(),
+                warnings: Vec::new(),
             },
         ));
     }
     let report = upgrade_ledger_tree(&directory, locale).map_err(explain_write)?;
-    let display = if report.written.is_empty() {
+    let mut display = if report.written.is_empty() {
         "Ledger skeleton is already current.".to_string()
     } else if report.adopted {
         "Adopted the Settings folder as a BeanDesk ledger. Missing baseline files were added. data/ entries were not changed.".to_string()
     } else {
         "Upgraded the Settings folder ledger skeleton. Missing baseline files were added. data/ entries were not changed.".to_string()
     };
+    if !report.warnings.is_empty() {
+        display.push_str(" A Git snapshot could not be written.");
+    }
     Ok(Card::new(
         display,
         UpgradeBody {
@@ -284,6 +289,7 @@ pub(crate) fn upgrade_ledger_card(
             files: report.written,
             version: report.version,
             locale: report.locale,
+            warnings: report.warnings,
         },
     ))
 }

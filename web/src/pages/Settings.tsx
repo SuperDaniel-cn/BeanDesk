@@ -503,10 +503,16 @@ function ConnectionSettings() {
         await invoke('init_ledger', { directory, locale: packLocale })
         desktop.appendLog(t('settings.createFirstLedgerDone'))
       } else {
-        await invoke('upgrade_ledger', { directory, locale: packLocale })
+        const report = await invoke<{ warnings: string[] }>('upgrade_ledger', {
+          directory,
+          locale: packLocale,
+        })
         desktop.appendLog(
           t(action === 'adopt' ? 'settings.adoptLedgerDone' : 'settings.upgradeLedgerDone'),
         )
+        if (report.warnings.length > 0) {
+          desktop.appendLog(t('settings.upgradeSnapshotWarn'), 'error')
+        }
       }
       setLedgerDialog(null)
       setInspectGen((gen) => gen + 1)

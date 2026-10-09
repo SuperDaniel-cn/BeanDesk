@@ -93,6 +93,7 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
   const blocking = work === 'backup' || work === 'restore' || work === 'list'
   const settingsRef = useRef(settings)
   const writeLock = useRef(Promise.resolve())
+  const loadWarned = useRef(false)
   const ready = Boolean(workDirectory)
   const waitingInit = statusLoaded && ready && !status.hasLedgerFile
   const foreign = statusLoaded && ready && status.hasLedgerFile && !status.appLedger
@@ -118,14 +119,19 @@ export function BackupSettingsPanel({ workDirectory }: { workDirectory: string }
   }
 
   useEffect(() => {
+    const warnOnce = (error: unknown) => {
+      if (loadWarned.current) return
+      loadWarned.current = true
+      toast.error(explainBackupError(error, t))
+    }
     void invoke<BackupSettings>('load_backup_settings')
       .then((next) => {
         const saved = { ...emptyBackupSettings(), ...next }
         settingsRef.current = saved
         setSettings(saved)
       })
-      .catch(() => undefined)
-    void refreshStatus().catch(() => undefined)
+      .catch(warnOnce)
+    void refreshStatus().catch(warnOnce)
     const id = window.setInterval(() => {
       void refreshStatus().catch(() => undefined)
     }, 2000)

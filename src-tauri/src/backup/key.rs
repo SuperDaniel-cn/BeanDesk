@@ -2,10 +2,14 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use super::settings::KEY_FILE;
+use super::settings::{KEY_FILE, NEXT_KEY_FILE};
 
 pub fn key_path(directory: &Path) -> PathBuf {
     directory.join(KEY_FILE)
+}
+
+pub fn next_key_path(directory: &Path) -> PathBuf {
+    directory.join(NEXT_KEY_FILE)
 }
 
 pub fn has_key(directory: &Path) -> bool {
@@ -16,21 +20,24 @@ pub fn write_key(directory: &Path, password: &str) -> Result<(), String> {
     if !directory.is_absolute() || !directory.is_dir() {
         return Err("directory".to_string());
     }
+    write_secret_path(&key_path(directory), password)
+}
+
+pub fn write_secret_path(path: &Path, password: &str) -> Result<(), String> {
     let password = password.trim();
     if password.is_empty() {
         return Err("backup-key-missing".to_string());
     }
-    let path = key_path(directory);
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
-        .open(&path)
+        .open(path)
         .map_err(|error| error.to_string())?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
             .map_err(|error| error.to_string())?;
     }
     file.write_all(password.as_bytes())
@@ -39,8 +46,11 @@ pub fn write_key(directory: &Path, password: &str) -> Result<(), String> {
 }
 
 pub fn read_key(directory: &Path) -> Result<String, String> {
-    let raw =
-        fs::read_to_string(key_path(directory)).map_err(|_| "backup-key-missing".to_string())?;
+    read_secret_path(&key_path(directory))
+}
+
+pub fn read_secret_path(path: &Path) -> Result<String, String> {
+    let raw = fs::read_to_string(path).map_err(|_| "backup-key-missing".to_string())?;
     let line = raw.lines().next().unwrap_or("").trim_end_matches('\r');
     if line.is_empty() {
         return Err("backup-key-missing".to_string());

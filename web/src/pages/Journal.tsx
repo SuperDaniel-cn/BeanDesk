@@ -101,7 +101,7 @@ export function Journal() {
   const activeRoot = rootFilters.some((filter) => filter.value === selectedRoot) ? selectedRoot : ''
   const { data: journal, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['transactions', timeFilter],
-    queryFn: () => fetchTransactions(timeFilter),
+    queryFn: ({ signal }) => fetchTransactions(timeFilter, signal),
   })
   const transactions = journal?.entries
 

@@ -7,6 +7,7 @@ pub const SNAPSHOT_PATHS: [&str; 5] = ["main.bean", "config", "data", "documents
 /// Git stays on the ledger text. Voucher files belong in the restic repositories.
 pub const GIT_PATHS: [&str; 4] = ["main.bean", "config", "data", "policies"];
 pub const KEY_FILE: &str = ".backup_key";
+pub const NEXT_KEY_FILE: &str = ".backup_key.new";
 pub const DEFAULT_DEBOUNCE_SECS: u32 = 5;
 pub const HOST: &str = "beandesk";
 
@@ -563,6 +564,10 @@ pub fn archive_nests_ledger(workdir: &Path, dest: &Path) -> bool {
     let workdir = normalize_path(workdir);
     let dest = normalize_path(dest);
     dest == workdir || dest.starts_with(&workdir)
+}
+
+pub fn same_path(left: &Path, right: &Path) -> bool {
+    normalize_path(left) == normalize_path(right)
 }
 
 fn normalize_path(path: &Path) -> PathBuf {

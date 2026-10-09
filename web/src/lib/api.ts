@@ -153,8 +153,8 @@ function accountMetaList(details: Record<string, FavaAccountDetail> | undefined)
   )
 }
 
-export async function fetchTransactions(time?: string) {
-  return favaClient.getTransactions(time)
+export async function fetchTransactions(time?: string, signal?: AbortSignal) {
+  return favaClient.getTransactions(time, signal)
 }
 
 export async function fetchDocuments(signal?: AbortSignal): Promise<LedgerDocument[]> {

@@ -8,6 +8,8 @@ use time::{Date, Month};
 
 const MAX_BYTES: u64 = 256 * 1024;
 const MAX_DEPTH: usize = 2;
+const MAX_BEAN_DEPTH: usize = 4;
+const MAX_BEAN_BYTES: u64 = 2 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
@@ -493,20 +495,27 @@ fn scan_data_dir(work_dir: &Path) -> Result<Vec<Txn>, String> {
         return Ok(Vec::new());
     }
     let mut files = Vec::new();
-    collect_bean(&data, "data", &mut files)?;
+    collect_bean(&data, "data", 1, &mut files)?;
     files.sort_by(|left, right| left.0.cmp(&right.0));
     let mut txns = Vec::new();
     for (rel, path) in files {
-        let text =
-            fs::read_to_string(&path).map_err(|_| format!("{rel}: could not read ledger file."))?;
-        txns.extend(scan_bean_text(&rel, &text));
+        txns.extend(scan_bean_text(&rel, &read_bean_file(&rel, &path)?));
     }
     Ok(txns)
+}
+
+fn read_bean_file(rel: &str, path: &Path) -> Result<String, String> {
+    let metadata = fs::metadata(path).map_err(|_| format!("{rel}: could not read ledger file."))?;
+    if metadata.len() > MAX_BEAN_BYTES {
+        return Err(format!("{rel}: ledger file is too large."));
+    }
+    fs::read_to_string(path).map_err(|_| format!("{rel}: could not read ledger file."))
 }
 
 fn collect_bean(
     dir: &Path,
     prefix: &str,
+    depth: usize,
     files: &mut Vec<(String, PathBuf)>,
 ) -> Result<(), String> {
     for entry in fs::read_dir(dir).map_err(|error| error.to_string())? {
@@ -518,7 +527,13 @@ fn collect_bean(
             continue;
         }
         if file_type.is_dir() {
-            collect_bean(&entry.path(), &posix_join(prefix, &name), files)?;
+            if depth >= MAX_BEAN_DEPTH {
+                return Err(format!(
+                    "{}: ledger files are nested too deeply.",
+                    posix_join(prefix, &name)
+                ));
+            }
+            collect_bean(&entry.path(), &posix_join(prefix, &name), depth + 1, files)?;
             continue;
         }
         if file_type.is_file() && name.ends_with(".bean") {
@@ -1133,5 +1148,32 @@ require_tag = "rd"
         );
         assert!(checked(&root).is_empty());
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn data_dir_rejects_deep_nests_and_huge_files() {
+        let deep = temp_dir("deep-bean");
+        let nested = deep.join("data/a/b/c/d/e");
+        write(
+            &nested.join("x.bean"),
+            "2026-01-01 * \"a\" \"b\"\n  Assets:Cash  1 CNY\n  Equity:Open -1 CNY\n",
+        );
+        let err = match scan_data_dir(&deep) {
+            Err(error) => error,
+            Ok(_) => panic!("deep nests should fail"),
+        };
+        assert!(err.contains("nested too deeply"), "{err}");
+        let _ = fs::remove_dir_all(&deep);
+
+        let huge = temp_dir("huge-bean");
+        let path = huge.join("data/2026/2026-01.bean");
+        write(&path, "ok");
+        fs::write(&path, vec![b'x'; (MAX_BEAN_BYTES as usize) + 1]).unwrap();
+        let err = match scan_data_dir(&huge) {
+            Err(error) => error,
+            Ok(_) => panic!("huge files should fail"),
+        };
+        assert!(err.contains("too large"), "{err}");
+        let _ = fs::remove_dir_all(&huge);
     }
 }

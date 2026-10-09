@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager};
 
-use super::key::{has_key, key_path};
+use super::key::{
+    has_key, key_path, next_key_path, read_key, read_secret_path, write_key, write_secret_path,
+};
 use super::settings::{
     ArchiveDest, BackupSettings, BackupSnapshot, CHECK_GROUPS, HOST, KEEP_WITHIN,
     KEEP_WITHIN_DAILY, KEEP_WITHIN_MONTHLY, KEEP_WITHIN_WEEKLY, ReadyDest, S3Settings,
@@ -166,6 +168,15 @@ impl Repo {
         }
     }
 
+    fn config_code(&self, password_file: &Path) -> Result<Option<i32>, String> {
+        let output = self
+            .command_unlocked(password_file)
+            .args(["cat", "config"])
+            .output()
+            .map_err(|_| "missing-restic".to_string())?;
+        Ok(output.status.code())
+    }
+
     fn run(&self, args: &[&str]) -> Result<Output, String> {
         let output = self
             .command()
@@ -199,6 +210,13 @@ pub fn backup_dests(
     directory: &Path,
     settings: &BackupSettings,
 ) -> BackupOutcome {
+    if let Err(error) = finish_pending_rekey(app, directory, settings) {
+        return BackupOutcome {
+            written: Vec::new(),
+            pending_checks: settings.pending_checks.clone(),
+            error: Some(error),
+        };
+    }
     let dests = settings.ready_dests();
     if dests.is_empty() {
         return BackupOutcome {
@@ -355,6 +373,7 @@ pub fn list_repos(
     directory: &Path,
     settings: &BackupSettings,
 ) -> Result<Vec<RepoSnapshots>, String> {
+    finish_pending_rekey(app, directory, settings)?;
     let dests = settings.ready_dests();
     if dests.is_empty() {
         return Ok(Vec::new());
@@ -389,15 +408,18 @@ pub fn rekey_existing(
     if new_password.is_empty() {
         return Err("backup-key-missing".to_string());
     }
-    let old = super::key::read_key(directory).ok();
-    if old.as_deref() == Some(new_password) || settings.ready_dests().is_empty() || old.is_none() {
-        return super::key::write_key(directory, new_password);
+    finish_pending_rekey(app, directory, settings)?;
+    let old = read_key(directory).ok();
+    let dests = settings.ready_dests();
+    if old.as_deref() == Some(new_password) || dests.is_empty() || old.is_none() {
+        return write_key(directory, new_password);
     }
     let binary = resolve_restic(app)?;
-    let next = write_secret_file(new_password)?;
+    let next = next_key_path(directory);
+    write_secret_path(&next, new_password)?;
     let mut changed: Vec<ArchiveDest> = Vec::new();
     let result = (|| {
-        for dest in settings.ready_dests() {
+        for dest in dests {
             let repo = Repo::from_dest(binary.clone(), directory, &dest.dest)?;
             let output = repo.run(&["cat", "config"])?;
             match output.status.code() {
@@ -409,43 +431,77 @@ pub fn rekey_existing(
                 _ => return Err(map_restic(&output)),
             }
         }
-        super::key::write_key(directory, new_password)
+        write_key(directory, new_password)
     })();
-    if result.is_err() {
-        let old_path = super::key::key_path(directory);
-        for dest in &changed {
-            if let Ok(repo) = Repo::from_dest(binary.clone(), directory, dest) {
-                let _ = repo.passwd(&next, &old_path);
+    if result.is_ok() {
+        let _ = std::fs::remove_file(&next);
+        return result;
+    }
+    let old_path = key_path(directory);
+    let mut rolled = true;
+    for dest in &changed {
+        match Repo::from_dest(binary.clone(), directory, dest) {
+            Ok(repo) => {
+                if repo.passwd(&next, &old_path).is_err() {
+                    rolled = false;
+                }
             }
+            Err(_) => rolled = false,
         }
     }
-    let _ = std::fs::remove_file(&next);
+    if rolled {
+        let _ = std::fs::remove_file(&next);
+    }
     result
 }
 
-fn write_secret_file(password: &str) -> Result<PathBuf, String> {
-    let path = std::env::temp_dir().join(format!(
-        "beandesk-newkey-{}-{}",
-        std::process::id(),
-        unix_days()
-    ));
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(&path)
-        .map_err(|error| error.to_string())?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
-            .map_err(|error| error.to_string())?;
+fn finish_pending_rekey(
+    app: Option<&AppHandle>,
+    directory: &Path,
+    settings: &BackupSettings,
+) -> Result<(), String> {
+    let next = next_key_path(directory);
+    if !next.is_file() {
+        return Ok(());
     }
-    use std::io::Write;
-    file.write_all(password.as_bytes())
-        .and_then(|_| file.write_all(b"\n"))
-        .map_err(|error| error.to_string())?;
-    Ok(path)
+    let pending = match read_secret_path(&next) {
+        Ok(value) => value,
+        Err(_) => {
+            let _ = std::fs::remove_file(&next);
+            return Ok(());
+        }
+    };
+    if read_key(directory).ok().as_deref() == Some(pending.as_str()) {
+        let _ = std::fs::remove_file(&next);
+        return Ok(());
+    }
+    let dests = settings.ready_dests();
+    if dests.is_empty() {
+        return Ok(());
+    }
+    let binary = resolve_restic(app)?;
+    let old_path = key_path(directory);
+    for dest in dests {
+        let repo = Repo::from_dest(binary.clone(), directory, &dest.dest)?;
+        match repo.config_code(&next)? {
+            Some(0) | Some(10) => continue,
+            _ => {}
+        }
+        if old_path.is_file() {
+            match repo.config_code(&old_path)? {
+                Some(0) => {
+                    repo.passwd(&old_path, &next)?;
+                    continue;
+                }
+                Some(10) => continue,
+                _ => {}
+            }
+        }
+        return Err("encrypt".to_string());
+    }
+    write_key(directory, &pending)?;
+    let _ = std::fs::remove_file(&next);
+    Ok(())
 }
 
 pub fn restore_snapshot(
@@ -458,23 +514,65 @@ pub fn restore_snapshot(
     if snapshot.trim().is_empty() {
         return Err("snapshot".to_string());
     }
+    check_restore_output(directory, output)?;
+    let parent = output
+        .parent()
+        .filter(|path| path.is_dir())
+        .ok_or_else(|| "directory".to_string())?;
+    let staging = unique_staging(parent);
+    std::fs::create_dir_all(&staging).map_err(|error| error.to_string())?;
+    let result = (|| {
+        let repo = Repo::from_dest(resolve_restic(app)?, directory, dest)?;
+        let target = format!("{snapshot}:.");
+        let restored = repo
+            .command()
+            .args(["restore", &target, "--target"])
+            .arg(&staging)
+            .arg("--json")
+            .output()
+            .map_err(|_| "missing-restic".to_string())?;
+        if !restored.status.success() {
+            return Err(map_restic(&restored));
+        }
+        if output.exists() {
+            std::fs::remove_dir(output).map_err(|_| "restore-not-empty".to_string())?;
+        }
+        std::fs::rename(&staging, output).map_err(|_| "restore-move".to_string())?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_dir_all(&staging);
+    }
+    result
+}
+
+fn unique_staging(parent: &Path) -> PathBuf {
+    let path = parent.join(format!(".beandesk-restore-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&path);
+    path
+}
+
+fn check_restore_output(ledger: &Path, output: &Path) -> Result<(), String> {
     if !output.is_absolute() {
         return Err("directory".to_string());
     }
-    std::fs::create_dir_all(output).map_err(|error| error.to_string())?;
-    let repo = Repo::from_dest(resolve_restic(app)?, directory, dest)?;
-    let target = format!("{snapshot}:.");
-    let result = repo
-        .command()
-        .args(["restore", &target, "--target"])
-        .arg(output)
-        .arg("--json")
-        .output()
-        .map_err(|_| "missing-restic".to_string())?;
-    if result.status.success() {
+    if super::settings::same_path(ledger, output) {
+        return Err("restore-nested".to_string());
+    }
+    if !output.exists() {
+        return Ok(());
+    }
+    if !output.is_dir() {
+        return Err("directory".to_string());
+    }
+    let empty = std::fs::read_dir(output)
+        .map_err(|error| error.to_string())?
+        .next()
+        .is_none();
+    if empty {
         Ok(())
     } else {
-        Err(map_restic(&result))
+        Err("restore-not-empty".to_string())
     }
 }
 
@@ -700,6 +798,41 @@ mod tests {
         assert_eq!(crate::backup::key::read_key(&root).unwrap(), "other-pass");
         let snaps = list_snapshots(None, &root, &ArchiveDest::Local(dest.clone())).unwrap();
         assert!(!snaps.is_empty());
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    fn restore_refuses_the_ledger_tree_and_a_nonempty_folder() {
+        let (root, dest) = scratch("restore-guard");
+        assert_eq!(
+            check_restore_output(&root, &root).err().as_deref(),
+            Some("restore-nested")
+        );
+        assert_eq!(
+            check_restore_output(&root, &root.join("documents"))
+                .err()
+                .as_deref(),
+            Some("restore-not-empty")
+        );
+        assert_eq!(
+            check_restore_output(&root, Path::new("relative"))
+                .err()
+                .as_deref(),
+            Some("directory")
+        );
+        let elsewhere = root
+            .parent()
+            .unwrap()
+            .join(format!("beandesk-restore-out-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&elsewhere);
+        fs::create_dir_all(&elsewhere).unwrap();
+        fs::write(elsewhere.join("keep.txt"), "keep").unwrap();
+        assert_eq!(
+            check_restore_output(&root, &elsewhere).err().as_deref(),
+            Some("restore-not-empty")
+        );
+        let _ = fs::remove_dir_all(&elsewhere);
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&dest);
     }

@@ -25,7 +25,7 @@ export function TimeFilterProvider({ children }: { children: ReactNode }) {
 
   const postingYears = useQuery({
     queryKey: ['postingYears'],
-    queryFn: () => favaClient.getPostingYears(),
+    queryFn: ({ signal }) => favaClient.getPostingYears(signal),
     staleTime: 60_000,
   })
 

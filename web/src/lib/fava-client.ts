@@ -10,7 +10,7 @@
  */
 
 import { apiUrl, readLedgerSlug } from './config'
-import { FAVA_SLUG, FAVA_UNREACHABLE } from './fava-error'
+import { FAVA_LEDGER_DATA, FAVA_SLUG, FAVA_UNREACHABLE } from './fava-error'
 import { assembleJournalRows, journalQuery, type JournalPage } from './journal'
 import {
   operatingCurrency,
@@ -262,7 +262,7 @@ export class FavaClient {
 
   private async loadLedgerData(): Promise<FavaLedgerData> {
     const json = await this.fetchJson('/api/ledger_data')
-    return json.data as FavaLedgerData
+    return parseLedgerData(json.data)
   }
 
   async query(bql: string, time?: string, signal?: AbortSignal): Promise<BQLQueryResult> {
@@ -332,12 +332,23 @@ export class FavaClient {
     return json.data as LedgerDocument[]
   }
 
-  async getTransactions(time?: string): Promise<JournalPage> {
-    const ledgerData = await this.getLedgerData()
+  async getTransactions(time?: string, signal?: AbortSignal): Promise<JournalPage> {
+    const ledgerData = await this.getLedgerData(signal)
     const currency = operatingCurrency(ledgerData.options.operating_currency)
-    const result = await this.query(journalQuery(), time)
+    const result = await this.query(journalQuery(), time, signal)
     return assembleJournalRows(result.rows ?? [], currency)
   }
+}
+
+export function parseLedgerData(data: unknown): FavaLedgerData {
+  if (data == null || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(FAVA_LEDGER_DATA)
+  }
+  const options = (data as { options?: unknown }).options
+  if (options == null || typeof options !== 'object' || Array.isArray(options)) {
+    throw new Error(FAVA_LEDGER_DATA)
+  }
+  return data as FavaLedgerData
 }
 
 function documentType(filename: string, header: string | null): string {

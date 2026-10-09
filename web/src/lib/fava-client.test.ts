@@ -4,9 +4,10 @@ import type { MessageKey } from '@/i18n/locales/en'
 import { en } from '@/i18n/locales/en'
 import { zhCN } from '@/i18n/locales/zh-CN'
 import { readLedgerSlug } from './config'
-import { FavaClient, isAirPlayServer } from './fava-client'
+import { FavaClient, isAirPlayServer, parseLedgerData } from './fava-client'
 import {
   explainFavaError,
+  FAVA_LEDGER_DATA,
   FAVA_SLUG,
   FAVA_SLUG_INVALID,
   FAVA_UNREACHABLE,
@@ -23,6 +24,23 @@ afterEach(() => {
   delete (globalThis as { window?: unknown }).window
 })
 
+describe('parseLedgerData', () => {
+  test('rejects a missing or empty payload instead of throwing later', () => {
+    expect(() => parseLedgerData(null)).toThrow(FAVA_LEDGER_DATA)
+    expect(() => parseLedgerData({})).toThrow(FAVA_LEDGER_DATA)
+  })
+
+  test('reads a Fava ledger_data body', () => {
+    const ledger = parseLedgerData({
+      accounts: ['Assets:Cash'],
+      options: { title: 'Ledger', operating_currency: ['CNY'] },
+    })
+    expect(ledger.options.title).toBe('Ledger')
+    expect(ledger.options.operating_currency).toEqual(['CNY'])
+    expect(ledger.accounts).toEqual(['Assets:Cash'])
+  })
+})
+
 describe('isAirPlayServer', () => {
   test('recognizes the macOS receiver that shares port 5000', () => {
     expect(isAirPlayServer('AirTunes/980.77.5')).toBe(true)
@@ -37,6 +55,7 @@ describe('explainFavaError', () => {
     expect(explainFavaError(new Error(FAVA_UNREACHABLE), catalogueKey)).toBe('fava.unreachable')
     expect(explainFavaError(new Error(FAVA_SLUG), catalogueKey)).toBe('fava.slug')
     expect(explainFavaError(new Error(FAVA_SLUG_INVALID), catalogueKey)).toBe('fava.slugInvalid')
+    expect(explainFavaError(new Error(FAVA_LEDGER_DATA), catalogueKey)).toBe('fava.ledgerData')
   })
 
   test('keeps an upstream message and falls back otherwise', () => {

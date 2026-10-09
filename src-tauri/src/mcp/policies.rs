@@ -107,8 +107,7 @@ fn collect_md(
         }
         if file_type.is_file() && name.ends_with(".md") {
             let id = posix_join(prefix, &name);
-            let markdown = fs::read_to_string(entry.path()).unwrap_or_default();
-            let title = title_from_markdown(&markdown, &id);
+            let title = list_title(entry.path(), &id);
             rows.push(PolicyRow { id, title });
         }
     }
@@ -162,6 +161,16 @@ fn read_policy_markdown(root: &Path, id: &str) -> Result<String, String> {
         return Err("Policy file is too large.".into());
     }
     fs::read_to_string(&file_canon).map_err(|_| UNKNOWN.to_string())
+}
+
+fn list_title(path: impl AsRef<Path>, id: &str) -> String {
+    let path = path.as_ref();
+    let markdown = fs::metadata(path)
+        .ok()
+        .filter(|metadata| metadata.len() <= MAX_BYTES)
+        .and_then(|_| fs::read_to_string(path).ok())
+        .unwrap_or_default();
+    title_from_markdown(&markdown, id)
 }
 
 fn title_from_markdown(markdown: &str, id: &str) -> String {
@@ -259,6 +268,20 @@ mod tests {
             assert!(err.contains("Unknown policy"), "{name}: {err}");
             assert!(!err.contains(root.to_str().unwrap()));
         }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn list_uses_the_filename_when_markdown_is_too_large() {
+        let root = temp_dir("huge-md");
+        fs::create_dir_all(root.join("policies")).unwrap();
+        let mut body = String::from("# Secret title\n");
+        body.extend(std::iter::repeat_n('x', MAX_BYTES as usize));
+        fs::write(root.join("policies/huge.md"), body).unwrap();
+        let store = fixture_store(&root, "local");
+        let card = list_policies_card(Some(&store)).unwrap();
+        assert_eq!(card.body.policies[0].id, "huge.md");
+        assert_eq!(card.body.policies[0].title, "huge");
         let _ = fs::remove_dir_all(&root);
     }
 }

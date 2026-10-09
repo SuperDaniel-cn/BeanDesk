@@ -181,6 +181,14 @@ fn lock(host: &FavaHost) -> std::sync::MutexGuard<'_, Supervisor> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+async fn spawn_heavy<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|error| error.to_string())?
+}
+
 fn connection_record(app: &AppHandle) -> Result<serde_json::Value, String> {
     let store = app
         .store(CONNECTION_FILE)
@@ -229,38 +237,47 @@ fn local_project(value: &serde_json::Value) -> Result<SavedLocal, String> {
 /// Start the local project saved in the store. The command is not taken from
 /// this call. If a process started earlier is still alive, keep it.
 #[tauri::command]
-fn start_saved_fava(app: AppHandle, host: State<'_, FavaHost>) -> Result<(), String> {
-    let saved = saved_local(&app)?;
-    if !accepts_local_origin(&saved.origin) {
-        return Err("loopback".to_string());
-    }
-    backup::start_if_enabled(&app);
-    if bundled_launch(&saved) {
-        let engine = resolve_engine(Some(&app))?;
-        require_main_bean(&saved.directory)?;
-        #[cfg(windows)]
-        {
-            return lock(&host).start_program(
-                Path::new(&saved.directory),
-                &engine,
-                &engine_args(&saved.origin)?,
-            );
+async fn start_saved_fava(app: AppHandle) -> Result<(), String> {
+    spawn_heavy(move || {
+        let saved = saved_local(&app)?;
+        if !accepts_local_origin(&saved.origin) {
+            return Err("loopback".to_string());
         }
-        #[cfg(not(windows))]
-        {
-            return lock(&host).start(
-                Path::new(&saved.directory),
-                &sidecar_command(&engine, &saved.origin)?,
-            );
+        backup::start_if_enabled(&app);
+        let host = app.state::<FavaHost>();
+        if bundled_launch(&saved) {
+            let engine = resolve_engine(Some(&app))?;
+            require_main_bean(&saved.directory)?;
+            #[cfg(windows)]
+            {
+                return lock(&host).start_program(
+                    Path::new(&saved.directory),
+                    &engine,
+                    &engine_args(&saved.origin)?,
+                );
+            }
+            #[cfg(not(windows))]
+            {
+                return lock(&host).start(
+                    Path::new(&saved.directory),
+                    &sidecar_command(&engine, &saved.origin)?,
+                );
+            }
         }
-    }
-    lock(&host).start(Path::new(&saved.directory), &saved.command)
+        lock(&host).start(Path::new(&saved.directory), &saved.command)
+    })
+    .await
 }
 
 /// Stop the process group this window started.
 #[tauri::command]
-fn stop_saved_fava(host: State<'_, FavaHost>) {
-    lock(&host).stop();
+async fn stop_saved_fava(app: AppHandle) {
+    let _ = spawn_heavy(move || {
+        let host = app.state::<FavaHost>();
+        lock(&host).stop();
+        Ok(())
+    })
+    .await;
 }
 
 #[tauri::command]
@@ -269,10 +286,13 @@ fn fava_host(host: State<'_, FavaHost>) -> HostSnapshot {
 }
 
 #[tauri::command]
-fn init_ledger(app: AppHandle, directory: String, locale: String) -> Result<(), String> {
-    init_ledger_tree(Path::new(&directory), &locale)?;
-    backup::start_if_enabled(&app);
-    Ok(())
+async fn init_ledger(app: AppHandle, directory: String, locale: String) -> Result<(), String> {
+    spawn_heavy(move || {
+        init_ledger_tree(Path::new(&directory), &locale)?;
+        backup::start_if_enabled(&app);
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -281,14 +301,17 @@ fn inspect_ledger(directory: String) -> Result<ledger_init::LedgerInspect, Strin
 }
 
 #[tauri::command]
-fn upgrade_ledger(
+async fn upgrade_ledger(
     app: AppHandle,
     directory: String,
     locale: String,
 ) -> Result<ledger_init::UpgradeReport, String> {
-    let report = upgrade_ledger_tree(Path::new(&directory), &locale)?;
-    backup::start_if_enabled(&app);
-    Ok(report)
+    spawn_heavy(move || {
+        let report = upgrade_ledger_tree(Path::new(&directory), &locale)?;
+        backup::start_if_enabled(&app);
+        Ok(report)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -297,8 +320,12 @@ fn list_ledger_packs() -> Vec<ledger_preset::ReadyPack> {
 }
 
 #[tauri::command]
-fn start_if_enabled(app: AppHandle) {
-    backup::start_if_enabled(&app);
+async fn start_if_enabled(app: AppHandle) {
+    let _ = spawn_heavy(move || {
+        backup::start_if_enabled(&app);
+        Ok(())
+    })
+    .await;
 }
 
 /// Read a user-chosen absolute file. Used for a local ICS calendar.
@@ -337,8 +364,16 @@ fn open_url(url: String) -> Result<(), String> {
     open_external_url(&url)
 }
 
-fn open_external_url(url: &str) -> Result<(), String> {
+fn http_url_allowed(url: &str) -> bool {
     if !url.starts_with("https://") && !url.starts_with("http://") {
+        return false;
+    }
+    !url.bytes()
+        .any(|byte| byte < 0x20 || byte == 0x7f || byte == b'"')
+}
+
+fn open_external_url(url: &str) -> Result<(), String> {
+    if !http_url_allowed(url) {
         return Err("invalid protocol".into());
     }
     #[cfg(target_os = "macos")]
@@ -350,10 +385,7 @@ fn open_external_url(url: &str) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd")
-            .args(["/c", "start", "", url])
-            .status()
-            .map_err(|error| error.to_string())?;
+        open_windows_url(url)?;
     }
     #[cfg(target_os = "linux")]
     {
@@ -365,11 +397,52 @@ fn open_external_url(url: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
+fn open_windows_url(url: &str) -> Result<(), String> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr::{null, null_mut};
+
+    #[link(name = "shell32")]
+    extern "system" {
+        fn ShellExecuteW(
+            hwnd: *mut core::ffi::c_void,
+            lp_operation: *const u16,
+            lp_file: *const u16,
+            lp_parameters: *const u16,
+            lp_directory: *const u16,
+            n_show_cmd: i32,
+        ) -> isize;
+    }
+
+    fn wide(value: &str) -> Vec<u16> {
+        OsStr::new(value).encode_wide().chain(Some(0)).collect()
+    }
+
+    let operation = wide("open");
+    let file = wide(url);
+    let code = unsafe {
+        ShellExecuteW(
+            null_mut(),
+            operation.as_ptr(),
+            file.as_ptr(),
+            null(),
+            null(),
+            1,
+        )
+    };
+    if (code as usize) <= 32 {
+        Err("open-url".into())
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        bundled_launch, directory_from_connection, local_project, open_external_url,
-        read_user_text_file_at, require_main_bean,
+        bundled_launch, directory_from_connection, http_url_allowed, local_project,
+        open_external_url, read_user_text_file_at, require_main_bean,
     };
 
     #[test]
@@ -518,5 +591,9 @@ mod tests {
             open_external_url("javascript:alert(1)").err().as_deref(),
             Some("invalid protocol")
         );
+        assert!(!http_url_allowed("https://example.com/\ncmd"));
+        assert!(!http_url_allowed("https://example.com/\"&calc.exe"));
+        assert!(http_url_allowed("https://example.com/path?a=1&b=2"));
+        assert!(http_url_allowed("https://superdaniel.cn/"));
     }
 }
