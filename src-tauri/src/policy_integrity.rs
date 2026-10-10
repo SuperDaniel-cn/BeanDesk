@@ -510,30 +510,6 @@ fn atomic_write(path: &Path, contents: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn integrity_sentence(status: &PolicyStatus) -> String {
-    if status.review_reason.as_deref() == Some("restore")
-        && status.integrity == Integrity::Unapproved
-    {
-        return "The ledger was restored. Review and approve or revert policies in BeanDesk."
-            .into();
-    }
-    match status.integrity {
-        Integrity::Ok => String::new(),
-        Integrity::Unseeded => {
-            "Policy integrity is not seeded on this computer. Open BeanDesk to confirm the locale pack, or call upgrade_ledger with confirmWrite. Custom TOML is not applied until approved in BeanDesk.".into()
-        }
-        Integrity::Unapproved => {
-            "Custom policy files on disk differ from the last approved copies. Those disk files were not applied. Approve or revert them in BeanDesk.".into()
-        }
-        Integrity::LocaleMismatch => {
-            "The .beandesk locale does not match the locale stored in BeanDesk. Built-in rules still follow the BeanDesk locale. Switch the language pack in Settings, or revert policies.".into()
-        }
-        Integrity::StoreCorrupt => {
-            "Approved policy copies in BeanDesk could not be parsed. Built-in baseline rules still ran. Custom disk files were not used.".into()
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

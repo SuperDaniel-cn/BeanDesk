@@ -7,10 +7,11 @@ use serde::{Deserialize, Serialize};
 use crate::directory_from_connection;
 use crate::engine::resolve_engine;
 use crate::ledger_init::{SKELETON_VERSION, init_ledger_tree, inspect_ledger, upgrade_ledger_tree};
-use crate::policy_integrity::{Integrity, PolicyDb, PolicyStatus, integrity_sentence};
+use crate::policy_integrity::{Integrity, PolicyDb, PolicyStatus};
 use crate::supervisor::accepts_local_origin;
 
 use super::card::Card;
+use super::copy::{self, CardLang};
 use super::policy_lint::{PolicyLint, PolicyViolation, Severity};
 use super::store::{connection_value, load_saved_connection};
 
@@ -183,34 +184,32 @@ pub(crate) fn get_connection_card(
             .unwrap_or_default(),
         has_policies_dir,
     };
+    let lang = CardLang::from_tag(body.locale.as_deref().unwrap_or(""));
     let display = if directory.is_none() && body.active == "none" {
-        "No connection saved in Settings.".to_string()
+        copy::display_error(lang, "No connection saved in Settings.")
     } else {
-        sentences([
-            if body.has_local_directory {
-                "Settings has a local folder."
-            } else {
-                "Settings has no local folder."
-            },
-            match body.skeleton.as_str() {
-                "outdated" => "The ledger skeleton is outdated.",
-                "foreign" => "This folder already had a ledger.",
-                "current" => "This is a BeanDesk-created ledger.",
-                _ if body.has_local_directory => "main.bean is missing.",
-                _ => "",
-            },
-            if body.has_policies_dir {
-                "A policies folder is present."
-            } else {
-                ""
-            },
-            &format!(
-                "Active mode is {}. Origin is {}. Launch is {}.",
-                body.active, body.origin_kind, body.launch
-            ),
-        ])
+        copy::connection_display(
+            lang,
+            body.has_local_directory,
+            &body.skeleton,
+            body.has_policies_dir,
+            &body.active,
+            &body.origin_kind,
+            &body.launch,
+        )
     };
     Ok(Card::new(display, body))
+}
+
+pub(crate) fn card_lang_from_connection(connection: &serde_json::Value) -> CardLang {
+    CardLang::from_workdir(directory_from_connection(connection).ok().as_deref())
+}
+
+pub(crate) fn card_lang_from_store(store: Option<&serde_json::Value>) -> CardLang {
+    match resolve_connection(store) {
+        Ok(resolved) => card_lang_from_connection(resolved.value()),
+        Err(_) => CardLang::En,
+    }
 }
 
 pub(crate) fn init_ledger_card(
@@ -219,20 +218,22 @@ pub(crate) fn init_ledger_card(
 ) -> Result<Card<WriteBody>, String> {
     let connection = resolve_connection(store).map_err(explain_store)?;
     let directory = directory_from_connection(connection.value()).map_err(explain_store)?;
+    let locale = input.locale.trim();
+    let lang = CardLang::from_tag(locale);
     if !input.confirm_write {
-        crate::ledger_preset::preset(input.locale.trim()).map_err(explain_write)?;
+        crate::ledger_preset::preset(locale).map_err(explain_write)?;
         return Ok(Card::new(
-            "Not written. Call again with confirmWrite true after the user agrees to create the first ledger in the Settings folder.",
+            copy::init_pending(lang),
             WriteBody {
                 written: false,
                 directory: directory.to_string_lossy().into_owned(),
             },
         ));
     }
-    init_ledger_tree(&directory, input.locale.trim()).map_err(explain_write)?;
-    PolicyDb::seed_current(&directory, input.locale.trim())?;
+    init_ledger_tree(&directory, locale).map_err(explain_write)?;
+    PolicyDb::seed_current(&directory, locale)?;
     Ok(Card::new(
-        "Created the first ledger skeleton in the Settings folder.",
+        copy::init_written(lang),
         WriteBody {
             written: true,
             directory: directory.to_string_lossy().into_owned(),
@@ -247,22 +248,15 @@ pub(crate) fn upgrade_ledger_card(
     let connection = resolve_connection(store).map_err(explain_store)?;
     let directory = directory_from_connection(connection.value()).map_err(explain_store)?;
     let locale = input.locale.trim();
+    let lang = CardLang::from_tag(locale);
     if !input.confirm_write {
         crate::ledger_preset::preset(locale).map_err(explain_write)?;
         let inspect = inspect_ledger(&directory).map_err(explain_write)?;
         if matches!(inspect.kind.as_str(), "empty" | "occupied") {
             return Err(explain_write("main-bean".into()));
         }
-        let intent = match inspect.kind.as_str() {
-            "foreign" => "adopt the existing Beancount folder",
-            "outdated" => "upgrade the ledger skeleton",
-            "current" => "upgrade (already current)",
-            other => other,
-        };
         return Ok(Card::new(
-            format!(
-                "Not written. Call again with confirmWrite true after the user agrees to {intent} in the Settings folder. locale={locale}. Does not change data/ entries."
-            ),
+            copy::upgrade_pending(lang, &inspect.kind, locale),
             UpgradeBody {
                 written: false,
                 adopted: false,
@@ -276,18 +270,13 @@ pub(crate) fn upgrade_ledger_card(
     }
     let report = upgrade_ledger_tree(&directory, locale).map_err(explain_write)?;
     PolicyDb::seed_current(&directory, locale)?;
-    let mut display = if report.written.is_empty() {
-        "Ledger skeleton is already current.".to_string()
-    } else if report.adopted {
-        "Adopted the Settings folder as a BeanDesk ledger. Missing baseline files were added. data/ entries were not changed.".to_string()
-    } else {
-        "Upgraded the Settings folder ledger skeleton. Missing baseline files were added. data/ entries were not changed.".to_string()
-    };
-    if !report.warnings.is_empty() {
-        display.push_str(" A Git snapshot could not be written.");
-    }
     Ok(Card::new(
-        display,
+        copy::upgrade_written(
+            lang,
+            report.written.is_empty(),
+            report.adopted,
+            !report.warnings.is_empty(),
+        ),
         UpgradeBody {
             written: !report.written.is_empty(),
             adopted: report.adopted,
@@ -323,12 +312,10 @@ fn assemble_check_card_with(
     db: Option<&PolicyDb>,
 ) -> Card<CheckBody> {
     let directory_text = directory.to_string_lossy().into_owned();
+    let lang = CardLang::from_workdir(Some(directory));
     if !outcome.ok {
         return Card::new(
-            format!(
-                "bean-check failed on the Settings folder (exit {}).",
-                outcome.code
-            ),
+            copy::bean_check_failed(lang, outcome.code),
             CheckBody {
                 ok: false,
                 code: outcome.code,
@@ -351,10 +338,7 @@ fn assemble_check_card_with(
         };
         return check_body_card(
             directory_text,
-            format!(
-                "bean-check passed on the Settings folder. {}",
-                integrity_sentence(&status)
-            ),
+            copy::check_passed_with_integrity(lang, &copy::integrity_sentence(lang, &status)),
             1,
             outcome.preview,
             false,
@@ -363,15 +347,13 @@ fn assemble_check_card_with(
         );
     };
     let (status, lint) = db.review(directory);
-    let sentence = integrity_sentence(&status);
+    let sentence = copy::integrity_sentence(lang, &status);
     match lint {
         PolicyLint::LoadError(error) => {
             let preview = preview_output(&error);
             check_body_card(
                 directory_text,
-                format!(
-                    "bean-check passed on the Settings folder. Policy rules could not be loaded.\n{preview}\n{sentence}"
-                ),
+                copy::policy_load_failed(lang, &preview, &sentence),
                 1,
                 preview,
                 false,
@@ -390,15 +372,11 @@ fn assemble_check_card_with(
                 Some(preview_output(&format_violations(&violations)))
             };
             let preview = formatted.clone().unwrap_or_else(|| outcome.preview.clone());
-            let mut display = "bean-check passed on the Settings folder.".to_string();
-            if let Some(body) = formatted {
-                let label = if rule_ok { "warnings" } else { "errors" };
-                display = format!("{display} Policy {label}:\n{body}");
-            }
-            if !sentence.is_empty() {
-                display.push(' ');
-                display.push_str(&sentence);
-            }
+            let display = if let Some(body) = formatted {
+                copy::check_with_violations(lang, !rule_ok, &body, &sentence)
+            } else {
+                copy::check_passed_with_integrity(lang, &sentence)
+            };
             check_body_card(
                 directory_text,
                 display,
@@ -516,14 +494,6 @@ pub(crate) fn active_origin(connection: &serde_json::Value) -> Result<String, St
     Ok(origin.to_string())
 }
 
-fn sentences<const N: usize>(parts: [&str; N]) -> String {
-    parts
-        .into_iter()
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 pub(crate) fn explain_store(code: impl AsRef<str>) -> String {
     match code.as_ref() {
         "directory" => "No working directory in Settings.".into(),
@@ -617,7 +587,9 @@ mod tests {
         )
         .unwrap();
         assert!(!pending.body.written);
-        assert!(pending.display_block.contains("Not written"));
+        assert!(pending.display_block.contains("尚未写入"));
+        assert!(pending.display_block.contains("confirmWrite true"));
+        assert!(pending.display_block.contains("中国大陆会计准则"));
         assert!(!pending.display_block.contains(root.to_str().unwrap()));
         assert!(!root.join("main.bean").exists());
 
@@ -640,11 +612,8 @@ mod tests {
         assert_eq!(connected.body.skeleton, "current");
         assert_eq!(connected.body.skeleton_version, Some(SKELETON_VERSION));
         assert_eq!(connected.body.locale.as_deref(), Some("zh-CN"));
-        assert!(
-            connected
-                .display_block
-                .contains("A policies folder is present.")
-        );
+        assert!(connected.display_block.contains("含 policies"));
+        assert!(connected.display_block.contains("内置引擎"));
         assert!(!connected.display_block.contains(root.to_str().unwrap()));
 
         let again = init_ledger_card(
@@ -814,10 +783,7 @@ mod tests {
         assert_eq!(card.body.policy_ok, Some(true));
         assert_eq!(card.body.integrity, Some(Integrity::Ok));
         assert!(card.body.violations.is_empty());
-        assert_eq!(
-            card.display_block,
-            "bean-check passed on the Settings folder."
-        );
+        assert_eq!(card.display_block, "bean-check passed.");
         let json = serde_json::to_value(&card).unwrap();
         assert_eq!(json["integrity"], "ok");
         assert_eq!(json["violations"], serde_json::json!([]));
@@ -932,6 +898,47 @@ narration_regex = "还股东借款|还垫付款"
         assert_eq!(card.body.violations[0].file, "data/2026/2026-03.bean");
         assert!(card.display_block.contains("Policy errors"));
         assert!(card.display_block.contains("repay-narration"));
+        assert!(!card.display_block.contains(root.to_str().unwrap()));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn get_connection_card_follows_the_ledger_locale() {
+        let root = temp_dir("conn-zh");
+        crate::ledger_init::write_marker(&root, "zh-CN").unwrap();
+        let store = fixture_store(&root, "local");
+        let card = get_connection_card(Some(&store)).unwrap();
+        assert!(card.display_block.contains("已配置本机目录"));
+        assert!(card.display_block.contains("内置引擎"));
+        assert!(card.display_block.contains("本机回环"));
+        assert!(!card.display_block.contains("Launch is"));
+        assert!(!card.display_block.contains(root.to_str().unwrap()));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn get_connection_card_stays_english_without_a_ready_pack() {
+        let root = temp_dir("conn-jp");
+        crate::ledger_init::write_marker(&root, "JP").unwrap();
+        let store = fixture_store(&root, "local");
+        let card = get_connection_card(Some(&store)).unwrap();
+        assert!(card.display_block.contains("Using the local folder."));
+        assert!(card.display_block.contains("bundled engine"));
+        assert!(!card.display_block.contains("内置引擎"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn check_ledger_zh_cn_card_uses_chinese() {
+        let root = temp_dir("check-zh");
+        std::fs::create_dir_all(root.join("policies")).unwrap();
+        std::fs::write(root.join("policies/README.md"), "# 财税策略\n").unwrap();
+        let db = PolicyDb::at(root.join("policy.json"));
+        crate::ledger_init::write_marker(&root, "zh-CN").unwrap();
+        db.seed_if_absent(&root, "zh-CN").unwrap();
+        let card = assemble_check_card_with(&root, passed(), Some(&db));
+        assert!(card.body.ok);
+        assert_eq!(card.display_block, "bean-check 已通过。");
         assert!(!card.display_block.contains(root.to_str().unwrap()));
         let _ = std::fs::remove_dir_all(&root);
     }

@@ -8,6 +8,7 @@ BeanDesk operates as a standard stdio MCP server. In Settings → General, click
 ## Operating Principles
 
 - Shared Configuration: Automatically resolves the ledger working directory and active Fava address configured in Settings, eliminating the need to hardcode paths in AI prompts.
+- Card language: `displayBlock` follows the ready pack in `.beandesk` (`zh-CN` or `en`). `init_ledger` and `upgrade_ledger` use the request `locale`. A missing or reserved marker stays English. The OS language is not used. `get_handbook` still takes its own `locale`.
 - Read-Only Forwarding: Ledger tools forward read-only requests. If the underlying service is offline, tools return a descriptive status error rather than spawning processes in the background.
 - Ledger Entries: Creating and editing transactions is handled by a local agent that can write monthly `.bean` files under the work folder; MCP does not expose entry write endpoints.
 - Local vs cloud: Cloud-hosted models send invoices in the conversation off this machine. Invoices stay local only when both the model and the client that writes the work folder run on this computer.

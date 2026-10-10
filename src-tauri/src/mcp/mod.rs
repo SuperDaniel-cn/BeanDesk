@@ -1,4 +1,5 @@
 mod card;
+mod copy;
 mod fava;
 mod fava_tools;
 mod handbook;

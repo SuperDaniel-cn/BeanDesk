@@ -5,6 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use super::card::Card;
+use super::copy::{self, CardLang};
 use super::tools::{explain_store, resolve_connection};
 use crate::directory_from_connection;
 
@@ -40,24 +41,18 @@ pub(crate) struct PolicyBody {
     pub markdown: String,
 }
 
-fn policies_root(store: Option<&serde_json::Value>) -> Result<PathBuf, String> {
+fn ledger_directory(store: Option<&serde_json::Value>) -> Result<PathBuf, String> {
     let connection = resolve_connection(store).map_err(explain_store)?;
-    let directory = directory_from_connection(connection.value()).map_err(explain_store)?;
-    Ok(directory.join("policies"))
+    directory_from_connection(connection.value()).map_err(explain_store)
 }
 
 pub(crate) fn list_policies_card(
     store: Option<&serde_json::Value>,
 ) -> Result<Card<PoliciesBody>, String> {
-    let policies = list_policy_files(&policies_root(store)?)?;
-    let display = if policies.is_empty() {
-        "No policy Markdown files in the Settings folder.".to_string()
-    } else {
-        format!(
-            "{} policy Markdown files in the Settings folder.",
-            policies.len()
-        )
-    };
+    let directory = ledger_directory(store)?;
+    let policies = list_policy_files(&directory.join("policies"))?;
+    let display =
+        copy::policies_list_display(CardLang::from_workdir(Some(&directory)), policies.len());
     Ok(Card::new(display, PoliciesBody { policies }))
 }
 
@@ -66,7 +61,7 @@ pub(crate) fn get_policy_card(
     input: PolicyInput,
 ) -> Result<Card<PolicyBody>, String> {
     let id = normalize_policy_id(&input.name)?;
-    let markdown = read_policy_markdown(&policies_root(store)?, &id)?;
+    let markdown = read_policy_markdown(&ledger_directory(store)?.join("policies"), &id)?;
     let title = title_from_markdown(&markdown, &id);
     Ok(Card::new(
         markdown.clone(),

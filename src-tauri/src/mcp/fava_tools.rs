@@ -3,9 +3,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::card::Card;
+use super::copy::{self, QueryCardKind};
 use super::fava::{FavaHttp, operating_currency, query_time, quote_commodity};
 use super::tools::{
-    PREVIEW_LINES, active_origin, explain_store, preview_output, resolve_connection,
+    PREVIEW_LINES, active_origin, card_lang_from_connection, card_lang_from_store, explain_store,
+    preview_output, resolve_connection,
 };
 
 const BODY_ROWS: usize = 50;
@@ -101,9 +103,10 @@ pub(crate) struct DocumentRow {
     pub filename: String,
 }
 
-fn fava_from(store: Option<&Value>) -> Result<FavaHttp, String> {
+fn fava_from(store: Option<&Value>) -> Result<(FavaHttp, copy::CardLang), String> {
     let resolved = resolve_connection(store).map_err(explain_store)?;
-    Ok(FavaHttp::new(active_origin(resolved.value())?))
+    let lang = card_lang_from_connection(resolved.value());
+    Ok((FavaHttp::new(active_origin(resolved.value())?), lang))
 }
 
 fn down_fava(message: impl Into<String>, origin: String) -> Card<FavaStatusBody> {
@@ -121,9 +124,14 @@ fn down_fava(message: impl Into<String>, origin: String) -> Card<FavaStatusBody>
 }
 
 pub(crate) fn get_fava_card(store: Option<&Value>) -> Result<Card<FavaStatusBody>, String> {
-    let fava = match fava_from(store) {
-        Ok(fava) => fava,
-        Err(error) => return Ok(down_fava(error, String::new())),
+    let (fava, lang) = match fava_from(store) {
+        Ok(session) => session,
+        Err(error) => {
+            return Ok(down_fava(
+                copy::display_error(card_lang_from_store(store), &error),
+                String::new(),
+            ));
+        }
     };
     match fava.resolve_ledger() {
         Ok((slug, data)) => {
@@ -135,9 +143,7 @@ pub(crate) fn get_fava_card(store: Option<&Value>) -> Result<Card<FavaStatusBody
                 .unwrap_or(0);
             let error_count = error_count(&data);
             Ok(Card::new(
-                format!(
-                    "Fava is answering. Title is {title}. {account_count} accounts. {error_count} loader errors."
-                ),
+                copy::fava_answering(lang, &title, account_count, error_count),
                 FavaStatusBody {
                     answering: true,
                     slug,
@@ -148,12 +154,15 @@ pub(crate) fn get_fava_card(store: Option<&Value>) -> Result<Card<FavaStatusBody
                 },
             ))
         }
-        Err(error) => Ok(down_fava(error, fava.origin().to_string())),
+        Err(error) => Ok(down_fava(
+            copy::display_error(lang, &error),
+            fava.origin().to_string(),
+        )),
     }
 }
 
 pub(crate) fn get_ledger_card(store: Option<&Value>) -> Result<Card<LedgerBody>, String> {
-    let fava = fava_from(store)?;
+    let (fava, lang) = fava_from(store)?;
     let (slug, data) = fava.resolve_ledger()?;
     let accounts = data.get("accounts").and_then(Value::as_array);
     let account_count = accounts.map(Vec::len).unwrap_or(0);
@@ -172,7 +181,7 @@ pub(crate) fn get_ledger_card(store: Option<&Value>) -> Result<Card<LedgerBody>,
     let currency = operating_currency(data.get("options")).to_string();
     let error_count = error_count(&data);
     Ok(Card::new(
-        format!("{title} uses {currency}. {account_count} accounts. {error_count} loader errors."),
+        copy::ledger_summary(lang, &title, &currency, account_count, error_count),
         LedgerBody {
             title,
             currency,
@@ -193,18 +202,23 @@ pub(crate) fn run_bql_card(
     if query.is_empty() {
         return Err("queryString is required".into());
     }
-    query_card(store, query, &input.time)
+    query_card(store, query, &input.time, QueryCardKind::Bql)
 }
 
 pub(crate) fn get_journal_card(
     store: Option<&Value>,
     input: TimeInput,
 ) -> Result<Card<QueryBody>, String> {
-    query_card(store, JOURNAL_BQL, &input.time)
+    query_card(store, JOURNAL_BQL, &input.time, QueryCardKind::Journal)
 }
 
-fn query_card(store: Option<&Value>, query: &str, time: &str) -> Result<Card<QueryBody>, String> {
-    let fava = fava_from(store)?;
+fn query_card(
+    store: Option<&Value>,
+    query: &str,
+    time: &str,
+    kind: QueryCardKind,
+) -> Result<Card<QueryBody>, String> {
+    let (fava, lang) = fava_from(store)?;
     let (slug, _) = fava.resolve_ledger()?;
     let time = query_time(time)?;
     let mut params = vec![("query_string", query)];
@@ -234,15 +248,7 @@ fn query_card(store: Option<&Value>, query: &str, time: &str) -> Result<Card<Que
         .map(Value::to_string)
         .collect::<Vec<_>>()
         .join("\n");
-    let display = if row_count == 0 {
-        "BQL returned no rows.".to_string()
-    } else {
-        format!(
-            "BQL returned {row_count} rows{}. {}",
-            if truncated { " (truncated)" } else { "" },
-            preview_output(&preview)
-        )
-    };
+    let display = copy::query_display(lang, kind, row_count, truncated, &preview_output(&preview));
     Ok(Card::new(
         display,
         QueryBody {
@@ -282,7 +288,7 @@ fn report_card(
     endpoint: &str,
     time: &str,
 ) -> Result<Card<ReportBody>, String> {
-    let fava = fava_from(store)?;
+    let (fava, lang) = fava_from(store)?;
     let (slug, ledger) = fava.resolve_ledger()?;
     let currency = quote_commodity(operating_currency(ledger.get("options")))?;
     let time = query_time(time)?;
@@ -292,16 +298,7 @@ fn report_card(
     }
     let data = fava.get_data(&format!("/{slug}/api/{endpoint}"), &params)?;
     let roots = tree_roots(&data);
-    let display = format!(
-        "{} for {}. Roots: {}.",
-        endpoint.replace('_', " "),
-        time.unwrap_or("all time"),
-        if roots.is_empty() {
-            "none".into()
-        } else {
-            roots.join(", ")
-        }
-    );
+    let display = copy::report_display(lang, endpoint, time, &roots);
     Ok(Card::new(
         display,
         ReportBody {
@@ -314,7 +311,7 @@ fn report_card(
 }
 
 pub(crate) fn list_documents_card(store: Option<&Value>) -> Result<Card<DocumentsBody>, String> {
-    let fava = fava_from(store)?;
+    let (fava, lang) = fava_from(store)?;
     let (slug, _) = fava.resolve_ledger()?;
     let data = fava.get_data(&format!("/{slug}/api/documents"), &[])?;
     let items = data
@@ -344,7 +341,7 @@ pub(crate) fn list_documents_card(store: Option<&Value>) -> Result<Card<Document
         })
         .collect::<Vec<_>>();
     Ok(Card::new(
-        format!("{count} documents in the Fava catalogue."),
+        copy::documents_display(lang, count),
         DocumentsBody {
             count,
             truncated,
@@ -519,6 +516,7 @@ mod tests {
         .unwrap();
         assert_eq!(card.body.row_count, 1);
         assert_eq!(card.body.time, "");
+        assert!(card.display_block.contains("BQL returned"));
         let paths = seen.lock().unwrap();
         assert!(paths.iter().any(|path| path.contains("/api/query")));
         assert!(paths.iter().all(|path| !path.contains("time=")));
@@ -625,14 +623,20 @@ mod tests {
             }
         });
         let store = store_for(&origin);
-        for card in [
-            get_trial_balance_card(Some(&store), TimeInput::default()).unwrap(),
-            get_balance_sheet_card(Some(&store), TimeInput::default()).unwrap(),
-            get_income_statement_card(Some(&store), TimeInput::default()).unwrap(),
-        ] {
+        let trial = get_trial_balance_card(Some(&store), TimeInput::default()).unwrap();
+        let sheet = get_balance_sheet_card(Some(&store), TimeInput::default()).unwrap();
+        let income = get_income_statement_card(Some(&store), TimeInput::default()).unwrap();
+        for card in [&trial, &sheet, &income] {
             assert_eq!(card.body.roots, ["Assets", "Equity"]);
             assert_eq!(card.body.time, "");
         }
+        assert!(trial.display_block.contains("Trial balance for all time"));
+        assert!(sheet.display_block.contains("Balance sheet for all time"));
+        assert!(
+            income
+                .display_block
+                .contains("Income statement for all time")
+        );
         let paths = seen.lock().unwrap();
         assert!(paths.iter().any(|path| path.contains("trial_balance")));
         assert!(paths.iter().any(|path| path.contains("balance_sheet")));
@@ -659,6 +663,7 @@ mod tests {
         .unwrap();
         assert_eq!(card.body.row_count, 1);
         assert_eq!(card.body.time, "2026");
+        assert!(card.display_block.contains("Journal query returned"));
         assert!(
             seen.lock()
                 .unwrap()

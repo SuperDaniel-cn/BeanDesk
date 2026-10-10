@@ -27,6 +27,6 @@ describe('formatPeriodLabel', () => {
 
   test('uses the all-time label for an empty filter', () => {
     expect(formatPeriodLabel('', tFor(en as Catalog, 'en'))).toBe('All time')
-    expect(formatPeriodLabel('', tFor(zhCN as Catalog, 'zh-CN'))).toBe('全部时期')
+    expect(formatPeriodLabel('', tFor(zhCN as Catalog, 'zh-CN'))).toBe('全部期间')
   })
 })

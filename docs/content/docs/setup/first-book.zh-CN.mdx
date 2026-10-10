@@ -9,7 +9,7 @@ description: 在空文件夹中初始化新账本并配置数据备份。
 
 ## 2. 初始化账本
 
-在桌面端点击“初始化账本”，会弹出语言包与记账币种（默认简体中文 / CNY）。确认后应用在选定目录中建立标准 Beancount 账本骨架（包含 `main.bean`、`config/`、`data/`、`documents/` 与 `policies/base/`）并写入版本化 `.beandesk` 标记。这与 MCP `init_ledger` 相同：必须显式传入 `locale`（`zh-CN` 或 `en`），币种随语言包带入，不能省略。若所选目录是带旧版标记的经营账本，同一页会提供“升级账本骨架”，弹窗同样选择语言包与币种：只补缺失的 `policies/base`，不改 `data/` 中的分录。
+在桌面端点击“初始化企业账套”，会弹出会计准则与记账币种（默认简体中文 / CNY）。确认后应用在选定目录中建立标准 Beancount 账套结构（包含 `main.bean`、`config/`、`data/`、`documents/` 与 `policies/base/`）并写入版本化 `.beandesk` 标记。这与 MCP `init_ledger` 相同：必须显式传入 `locale`（`zh-CN` 或 `en`），币种随语言包带入，不能省略。若所选目录是带旧版标记的经营账本，同一页会提供“升级账套结构”，弹窗同样选择语言包与币种：只补缺失的 `policies/base`，不改 `data/` 中的记账分录。
 
 后续记账直接使用文本编辑器或外部工具编辑 `data/` 下的月度 `.bean` 文件即可，经营账本负责呈现核算结果。
 
