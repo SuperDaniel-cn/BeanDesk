@@ -39,7 +39,7 @@ When a standard ledger is initialized, the workspace contains the following hier
 - data/YYYY/YYYY-MM.bean: Monthly transaction postings. The annual index data/YYYY/YYYY.bean imports each month.
 - documents/: Source vouchers, electronic invoices, bank slips, and contract scans.
 - policies/: Accounting policy workspace. The base/ directory provides default account dictionaries, document filing rules, and routine bookkeeping guidelines. Optional machine rules (such as policies/base/rules.toml in zh-CN ledgers, or custom user-defined TOML rules) can enforce naming or posting conventions.
-- .gitignore: Version control ignore rules, excluding backup keys (.backup_key), environment files (.env), and backup archives (backups/).
+- .gitignore: Version control ignore rules, excluding the backup passphrase (.backup_key), environment files (.env), and backup archives (backups/).
 
 ## How account names appear on reports
 

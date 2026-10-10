@@ -23,7 +23,7 @@ In Settings → Backup, configure dual local backup protections:
 
 - Git Auto-Snapshot: Watches core ledger files (`main.bean`, `config/`, `data/`, and `policies/`). Takes an initial snapshot when watching begins, then creates local commits with debounce upon file modifications. Commits remain strictly local; credentials and receipt files are excluded from Git and never pushed.
 - restic Encrypted Backup: Client-side encrypted incremental backups to local folders or S3-compatible buckets, covering the ledger, `documents/` receipts, and `policies/`.
-  - Passphrase: Setting an encryption key requires confirmation; lost keys cannot be recovered.
+  - Passphrase: Setting a passphrase requires confirmation; a lost passphrase cannot decrypt historical archives.
   - Backup Now: Manually triggers an on-demand incremental backup.
   - Automatic Backup: When enabled, file changes automatically sync to all ready destinations.
   - Retention Policy: Keeps all snapshots from the past 48 hours, then thins older snapshots to daily for 30 days, weekly for 12 weeks, and monthly for 24 months. Unchanged ledgers are skipped.

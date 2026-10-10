@@ -11,7 +11,7 @@ description: 连接本地既有 Beancount 账本目录。
 
 为保护已有文件，系统禁止在已存在 `main.bean` 的目录下执行初始化。缺少 `.beandesk` 标记时，备份与恢复面板保持停用。
 
-若要把这本既有账本当标准账本使用（打开备份并补齐 `policies/base`），在账本连接页选择“接管为标准账本”，并在弹窗里显式选择语言包与记账币种（与 MCP 相同）。这只会写入 `.beandesk`、补缺失的 `policies/base` 与备份 gitignore 条目，不改 `data/` 中的分录。本机 MCP 的 `upgrade_ledger` 在确认写入并显式传入 `locale` 后做同样的事。
+若要把这本既有账本当标准账套使用（开启数据备份并补齐 `policies/base`），在账本连接页选择“接管为标准账套”，并在弹窗里显式选择会计准则与记账币种（与 MCP 相同）。这只会写入 `.beandesk` 标记、补齐缺失的 `policies/base` 与备份 gitignore 条目，不会改动 `data/` 中的记账分录。本机 MCP 的 `upgrade_ledger` 在确认写入并显式传入 `locale` 后做同样的事。
 
 ## 可用功能
 

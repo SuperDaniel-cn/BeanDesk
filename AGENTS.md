@@ -2,69 +2,80 @@
 
 BeanDesk 前端与桌面端工程规范。
 
-记账引导见 skills/fava-beancount-guide/SKILL.md。该技能只读写用户点名的工作目录；本仓库不附带账本，也不记录任何账本路径、科目、分录、凭证或备份信息。
+记账引导见 skills/fava-beancount-guide/SKILL.md。该技能仅读写用户显式指定的工作目录；本仓库不附带账本数据，亦不记录任何账套路径、会计科目、记账分录、原始凭证或备份配置信息。
 
 ## 1. 架构定位与职责边界
 
-本项目是界面：只读报表工作台，直连 **一个** Fava，无自建后端、数据库或云账号。提供 Web 与 Tauri 2 桌面两种形态。
+本项目是界面层：只读财务报表工作台，直连单个 Fava 引擎实例，无自建后端、中心化数据库或云端用户体系。提供 Web 与 Tauri 2 桌面两种形态。
 
-- 零定制后端：报表与查询只通过 HTTP 问 Fava。不算账，不自建会计引擎。
-- 文件是用户的：`.bean` 与 `documents/` 在用户选定的工作目录。应用不托管云同步。需要时只写下第一本账的结构，不做网页账本编辑器。
-- 一个服务：桌面只拉起或连接一个 Fava。多本账是 Fava 多个根文件与 slug（`fava a.bean b.bean`），不是应用级换仓库、换连接。
-- 引擎可换：外行空启动命令走发布包里的冻结 sidecar。极客填自己的启动命令，或只填已有地址。不解析、不改写用户命令。不内置生 Python。
-- 前端核心：React 19、TypeScript、Vite、Tailwind CSS、shadcn/ui，代码在 web。
-- 桌面端：src-tauri，窗口、HTTP 插件、这一个 Fava 进程的看管。主窗口创建时隐藏；主题和手册窗在内存里热好再 `show()`，不等 Fava。语言 `invoke` 必须有超时。Rust 只在几秒后仍看不见时兜底，避免再把显示挂在页面 Finished 上。托盘常驻：关主窗口或手册窗只隐藏；左键托盘或菜单“显示”聚焦主窗口；“退出”才结束进程并停 Fava。不办登录时启动。
-- 职责隔离：本规范约束这份界面。复式记账与记分录由技能在用户目录里完成。
+- 零定制后端：财务报表核算与明细查询统一通过 HTTP 协议请求 Fava 接口。前端不执行独立做账逻辑，不自建会计核算引擎。
+- 数据资产归属用户：`.bean` 账目源文件与 `documents/` 原始凭证完全保存在用户选定的本地工作目录中。应用本身不提供云同步服务。需要时仅在空工作目录中写入初始账套结构，不提供网页端账本源码编辑器。
+- 单服务托管模型：桌面端仅负责拉起或连接单个 Fava 服务进程。多账套场景依赖 Fava 原生支持的多入口文件与 slug 路由机制（例如 `fava a.bean b.bean`），而非在应用层面切换代码仓库或网络连接。
+- 引擎解耦与可替换性：未配置自定义启动命令时，默认调用安装包内置分发的冻结 sidecar 引擎（onedir 模式）；高级用户可自定义系统启动命令，或直接配置已有服务的网络地址。系统对用户传入的启动命令原样执行，不进行任何形式的语法解析或参数改写。应用严禁内置动态 Python 解释器。
+- 前端核心技术栈：React 19、TypeScript、Vite、Tailwind CSS、shadcn/ui，源码位于 `web/` 目录。
+- 桌面端架构职责：基于 `src-tauri`，负责多窗口管理、HTTP 插件通道代理以及单一 Fava 服务进程的生命周期监管。主窗口创建时保持隐藏状态；应用主题状态与用户手册窗口在内存中完成预热就绪后再调用 `show()` 显示，主窗口展示不阻塞于 Fava 引擎连通状态。系统语言探测相关的 `invoke` 调用必须配置超时保护。Rust 端设立超时保底展示机制，避免因等待页面 Finished 事件而导致界面白屏假死。系统托盘常驻策略：关闭主窗口或手册窗口时仅执行隐藏操作；左键点击托盘图标或托盘菜单项“显示”时聚焦主窗口；仅当在托盘菜单中显式点击“退出”时，方可终止应用程序进程并同步停止所托管的 Fava 进程。应用不实现登录时启动功能。
+- 职责隔离原则：本规范严格约束界面与桌面宿主工程。复式记账法实施、科目开立与记账分录编写由独立技能在用户指定的工作目录中执行。
 
 ## 2. 接口通信与双通道规范
 
-前端请求分两条通道处理，保持上层页面调用一致：
+前端请求分两条通道处理，保持上层页面调用逻辑完全一致：
 
-- 浏览器环境：开发阶段由 Vite 代理将 /api/fava 转发至 5000 端口；生产环境由 Caddy 等反向代理剥离前缀后转发。
-- Tauri 桌面环境：使用 @tauri-apps/plugin-http 的 fetch 直接向用户配置的 Fava 根地址发请求，绕过浏览器跨域与混合内容拦截，不使用窗口内的原生 window.fetch 直连 Fava。
-- 防御性解析：Fava 接口不返回自身版本号。适配层通过字段存在性校验与空值防护处理差异，不硬编码版本号。
-- 状态管理与缓存联动：使用 TanStack Query 管理远程请求。受时间切片影响的 Query Key 带上当前片段记号：空字符串表示全部时期，其余为年份、季度或月份字符串。切换记号时刷新数据，不拆分起止日期字段。
-- BQL 支持：查询控制台直接向 Fava 发送原生 BQL 并呈现数据，不增设私有查询方言。
+- 浏览器环境：开发阶段由 Vite 开发服务器将 `/api/fava` 路径代理转发至本地 5000 端口；生产环境由 Caddy 等反向代理服务器剥离前缀后转发至上游服务。
+- Tauri 桌面环境：使用 `@tauri-apps/plugin-http` 提供的 `fetch` 客户端，直接向用户配置的 Fava 根服务地址发起请求，彻底规避浏览器同源策略（CORS）与混合内容拦截，严禁在窗口内直接使用原生 `window.fetch` 直连 Fava 服务。
+- 防御性响应解析：由于 Fava HTTP 接口不返回自身版本标识，前端适配层必须通过字段存在性校验与空值防御逻辑处理多版本差异，严禁硬编码兼容特定版本号。
+- 状态管理与缓存联动：使用 TanStack Query 统一管理远程数据请求。受时间切片影响的 Query Key 必须携带当前会计期间记号：空字符串表示全部期间，其余格式为规范的年份、季度或月份字符串。切换期间筛选时整体刷新缓存数据，严禁在业务层拆分起止日期字段。
+- BQL 原生支持：查询控制台直接向 Fava 发送原生 Beancount Query Language (BQL) 语句并呈现结果数据集，严禁增设任何私有查询语法。
 
 ## 3. 报表与现金流解耦契约
 
-- 纯函数计算：现金流量表在 web/src/lib/cash-flow.ts 中实现为纯函数。输入分录与开户元数据，输出三类活动报表。
-- 目录与账本解耦：法定行次目录留在前端代码中；科目归属严格通过 ledger_data.account_details 提取 open 指令上的 cash、cashflow、cashflow-in 与 cashflow-out 元数据。严禁在前端硬编码特定账本的私有科目路径。
+- 纯函数计算：现金流量表在 `web/src/lib/cash-flow.ts` 中完全实现为无副作用的纯函数。输入原始记账分录与开户元数据，输出经营、投资与筹资三类活动报表。
+- 报表目录与账套解耦：法定报表行次目录固化于前端代码中；科目归属严格通过 `ledger_data.account_details` 解析 `open` 指令上声明的 `cash`、`cashflow`、`cashflow-in` 与 `cashflow-out` 元数据标签。严禁在前端代码中硬编码任何特定账套的私有科目路径。
 
 ## 4. 桌面设置与进程托管契约
 
-- 配置持久化：桌面端连接地址与本机命令使用 @tauri-apps/plugin-store 存储在本机，不提交进 Git，也不写入 web/public/config.js。策略完整性（语言包与上次批准的自定义 TOML 副本）在本机 `policy.json`，不进工作目录。同一份记录里 `active` 只有 `local` 或 `remote`。切到仅连接不会清掉本机目录和启动命令，切到本机项目也不会清掉仅连接的地址。启动进程只看当前生效的本机项目。
-- 进程看管原则：启动本机项目前先检测端口。已通则仅连接；未通则在独立进程组执行用户命令，等待就绪后再进入界面。退出时仅终止本次拉起的进程组。设置页展示的是现场快照（会话、端口探测、本窗口是否拥有进程）。Stop 只对 `owned`；PID 只存在本窗口内存里，不写入 store。图形界面只运行一个实例，再次启动只把已有主窗口拉到前面。带 `mcp` 参数的进程不进入这个限制。
-- 运行环境：发布包装冻结的 `beandesk-engine` 目录（onedir：可执行文件加 `_internal`，不是单文件）。账本连接里三种方式互斥。内置引擎把 `launch` 写成 `engine`，已保存的命令留在记录里但不执行。外部命令把 `launch` 写成 `shell`，启动命令原样交给 shell，不解析、不改写，命令为空则不启动。地址直连只记 origin，不启动进程。已连接或正在启动时切换方式要先确认，确认后断开当前会话，不自动连上新的一条。没有冻品时报 `missing-engine`。不内置生 Python 解释器。
-- 第一本账：`init_ledger` 只在用户选定的工作目录写预设结构，并写下版本化 `.beandesk` 标记（`version` 与 `locale` 的 JSON；旧的纯文本 `beandesk` 视为第 1 版）。已有 `main.bean` 则报 `ledger-exists`。不开放通用写盘。结构带上忽略 `.backup_key`、`.env` 与 `backups/` 的 `.gitignore`，并写入 `policies/README.md` 与 `policies/base/`（科目指引、归档、SOP，zh-CN 附带机器命名规则 rules.toml）。桌面初始化、升级与接管弹出语言包和记账币种（与 MCP 相同：显式传 `locale`；币种来自语言包，改币种即改语言包）。弹窗默认选中 `zh-CN` / CNY，升级时若标记里已有就绪语言包则带入。MCP 必须显式传 `locale`（`zh-CN` 或 `en`，不能省略；未知值报 `unsupported-locale`，表中预留但未合并的国家码报 `missing-pack`）。不读操作系统语言。写结构只走设置弹窗或 MCP，均须显式 `locale`；空目录点连接也打开同一弹窗，启动引擎时不静默写入。语言包目录在 `src-tauri/src/ledger_presets/`，参数表是 `locales.toml`。没有这个标记的目录是已有账本，备份页默认停用；设置页可“接管为标准账本”（`upgrade_ledger`）：只补缺失的 `policies/base`、gitignore 条目与标记，Git 快照打在写入前后，不改 `data/` 分录。旧版标记或缺失基线文件时提供“升级账套结构”，同样只加不改。桌面升级/接管弹窗预填标记里的就绪语言包，没有则预填 `zh-CN`，确认后才写入。MCP `upgrade_ledger` 必须确认写入并显式传 `locale`。
-- 工作目录备份：设置 Backup 页。Git 自动保存只在工作目录里做快照（只纳入 `main.bean`、`config/`、`data/`、`policies/`），靠监听和防抖，没有额外的快照按钮。有 `.beandesk` 且开启 Git 自动保存时，启动监听并立刻打一份快照，之后仍按防抖。凭证不进 Git。加密备份走随包装的 restic 0.19.1：设口令后点备份；自动备份关闭时只在点备份时写；开启后写入已添加且就绪的目的地。目的地是确认后的条目，不是两个热槽位：本地目录和 S3 兼容桶（R2 / MinIO / AWS，字段对齐 PicGo S3）都可以加多条。添加或编辑都在对话框里确认后才写入 `backup.json`。旧的“一个本地 + 一个云端”槽位在加载时迁进 `dests[]`。每次都打 `main.bean`、`config/`、`data/`、`documents/`、`policies/`，只传新增或改动的数据块。改口令时给已经存在的仓库换钥匙。抽查失败会记在本机，下次即使内容没变也会再查。保留最近 48 小时的每一次快照，再按 30 天/12 周/24 个月变稀。内容没变时 `--skip-if-unchanged` 不另写一份。仓库不能嵌在账本目录里。备份、恢复、保存设置和测试存储这类可能等磁盘或网络的命令走 `spawn_blocking`，不占主线程；监听线程里不碰 `watch` 锁。口令经 restic `--password-file` 指向工作目录 `.backup_key`，S3 凭证走环境变量，都不进进程参数。不办 BeanDesk 云、不代管桶、不自动 `git push`。备份配置在本机 `backup.json`，口令在工作目录 `.backup_key`，都不进 `connection.json`，也不进本仓库。日志不打密钥。开发机用 `make restic` 拉当前平台的二进制；发布时按目标 triple 拉同一版本并用发行 SHA256 校验。
-- 启动命令：仓库根没有 package.json。浏览器使用 `make dev`，页面在 http://127.0.0.1:5188。桌面使用 `make desktop`，即 `bunx @tauri-apps/cli dev`。不要改成 `npm run tauri dev`，也不要在仓库根新建 Node 工程。
-- 配置目录：CLI 会先进入 `src-tauri`。`beforeDevCommand` 和 `beforeBuildCommand` 用 `cwd: "../web"` 再执行 `bun run ensure-docs && bun run dev` / `bun run ensure-docs && bun run build`。不要把 `../web` 写进命令本身：从仓库根启动时前端目录是 `web/`，从 `src-tauri` 启动时前端目录会退回仓库根，命令里的 `../web` 会找不到目录。devUrl 与 Vite 的 host、port 保持一致。打包读取 `web/dist`。
-- 连接日志：设置页上的每一行同时经 log 插件写入本机日志目录。单个文件上限 10MB，超过后从文件开头丢掉最旧的行，最近的内容留在原文件，不按日期另存。页面上的清除只清空当前窗口里的显示。
-- 桌面更新：安装包只覆盖 macOS、Windows 和 Linux。推送与 `tauri.conf.json`、`web/package.json`、`src-tauri/Cargo.toml` 版本一致的 `v*` 标签才触发 `.github/workflows/release.yml`。先在一台小的 Ubuntu 上核对版本、签名密钥和前端构建，再开五个平台任务。产物写入草稿 Release，五个任务都成功后再手动发布；草稿不会成为 updater 的 latest。更新说明来自 `latest.json` 的 `notes`：发布或改 Release 正文时由 `updater-notes.yml` 写入，不要给 `tauri-action` 填 `releaseBody`。Linux 用 `ubuntu-22.04` 和公开仓库的 `ubuntu-22.04-arm`，不要换成模拟的 Arm 环境。Intel Mac 的引擎冻品跑在 `macos-15-intel` 上；Apple Silicon 跑 `macos-latest`。不要在 ARM runner 上用 Rosetta 硬凑 x86_64 Python。更新签名的私钥只放在 GitHub Secret，公钥写在 `tauri.conf.json`。不提交私钥。这个版本不构建 Android 或 iOS。
-- 日历订阅：日历页 `/calendar`，不进报表通道，也不进设置。来源在日历页的弹窗里，不在设置。不附带征期目录。同一时间只有一份来源：本机 `.ics`，或用户粘贴的 HTTPS ICS（`webcal://` 保存成 `https://`）。这两条只在桌面可用；浏览器打开日历页是空的。弹窗里的清除会把来源写回空的。读到不认识的来源，就当作还没选。配置在本机 `calendar.json`，不进 `connection.json` / `backup.json`。本机留一份副本在 `calendar-copy.json`：打开先显示副本；订阅过了 24 小时（或源声明的 `REFRESH-INTERVAL` / `X-PUBLISHED-TTL`，最短 1 小时）才带 ETag / If-Modified-Since 查一次，页面的刷新按钮立即查；查失败仍显示副本，弹窗里写上次更新时间；本地文件每次打开重读；页面和启动提醒共用同一次加载。7 天内到期的事项每条 UID+日期只弹一次 Sonner 和系统横幅。关到托盘时进程还在；从托盘退出后不再提醒。不办提醒云、不轮询、不写 CalDAV、不把账本当日历。读本机文件只走 `read_user_text_file`，只读用户选中的绝对路径。未连 Fava 也能打开日历页。
-- 用户手册：桌面第二个窗口（label `handbook`），不进报表通道，也不进设置。主窗口就绪后先隐藏创建该窗口，手册图标只显示或聚焦，主窗口不离开当前页。关手册窗或主窗口都只隐藏；从托盘退出再一起拆掉。窗口加载随包装的 Fumadocs 静态导出（`/docs/index.html` 或 `/docs/zh-CN/index.html`），初始宽高与主窗口相同。未连 Fava 也能打开。不跑 DesktopProvider 启动或 AppUpdate 检查。不要把 Next 放进 `web/`。不办在线文档站。
-- 本机 MCP：同一桌面二进制，参数只认独立的 `mcp`（不是 `--mcp`，也不看 argv0）。stdio JSON-RPC。读本机 `connection.json`，与设置页同一份工作目录和 Fava origin。目录工具：`get_connection`、`init_ledger`（写入必须 `confirmWrite`，`locale` 必填：`zh-CN` 或 `en`）、`upgrade_ledger`（同样必须确认写入并显式传 `locale`；有 `main.bean` 时接管或升级，不改 `data/`）、`check_ledger`。`check_ledger` 先跑 bean-check 校验语法与平衡；机器规则的执行源不在工作目录：基线来自随包装语言包，自定义只执行本机 `policy.json` 里上次批准的副本（磁盘 TOML 只用来算指纹）。`init_ledger` / `upgrade_ledger` 确认写入后幂等播种；未播种或未批准的自定义不参与 lint。批准、回滚、切换语言包只在桌面，MCP 不提供这些工具。`error` 报错拦截，`warning` 仅提示。业务指引由 `list_policies` / `get_policy` 读取 Markdown（含 `policies/base`），不将 TOML 作为文本正文输出。校验通过仅表示格式与规则匹配，不作为法定税务鉴定。只读 Fava 工具转发界面已在用的 GET：`get_fava`、`get_ledger`、`run_bql`、三张表、`get_journal`、`list_documents`。手册工具 `get_handbook` 读随包装的 `docs/content` MDX：不传 `page` 列出目录，传入 slug 或标题读一页；`locale` 为 `en` 或 `zh-CN`。用于界面、备份、日历与报表，不是过账规范源。卡片 `displayBlock` 跟账本就绪包（`zh-CN` / `en`）：`init_ledger` / `upgrade_ledger` 用请求里的 `locale`，其余读 `.beandesk`；无标记或未就绪的国家码用英文，不读操作系统语言。不需要 Fava。策略工具 `list_policies`、`get_policy` 只读工作目录 `policies/` 下最多两层的 Markdown，不写盘。记分录仍由技能写月文件，不转发 `add_entries` / `source`。不猜账本仓库名，不开放备份、日历或凭证字节。设置页只复制 `{ command: 当前可执行文件, args: ["mcp"] }`。不办云 MCP，不监听 HTTP。
+- 配置持久化契约：桌面端连接地址与本地启动命令使用 `@tauri-apps/plugin-store` 持久化存储于用户本机，严禁提交至 Git 仓库，亦不得写入 `web/public/config.js`。合规策略完整性数据（会计准则基线与上次审核批准的自定义 TOML 规则副本）统一维护于本机 `policy.json`，严禁写入账套工作目录。同一配置记录中 `active` 状态仅允许为 `local` 或 `remote`。切换为仅连接模式不会清除已保存的本地目录与启动命令配置，切换为本地项目模式亦不会清除仅连接的服务地址。启动本地引擎进程时，仅依据当前激活的本地项目配置执行。
+- 进程看管原则：启动本地项目前，必须先行探测目标端口的连通性。若端口已连通，则仅建立网络连接；若未连通，则在独立操作系统进程组中启动用户配置的命令，待服务完全就绪后再切换至主操作界面。退出应用时，仅终止本次会话拉起的进程组。设置页面展示的数据为实时状态快照（包括当前会话、端口探测状态、本窗口是否持有进程句柄）。停止（Stop）操作仅对当前窗口持有的托管进程生效；进程 PID 仅存在于本窗口运行内存中，严禁写入持久化 store。桌面图形界面强制单实例运行，重复启动时仅将已有主窗口激活并置于前台。携带 `mcp` 启动参数的进程不进入此单实例互斥限制。
+- 运行环境模式：应用发布包内打包冻结的 `beandesk-engine` 运行时目录（onedir 模式：可执行主程序与 `_internal` 依赖同级存放，非单文件自解压形态）。账本连接的三种方式互斥生效：内置引擎模式将 `launch` 标记为 `engine`，已保存的用户自定义命令予以保留但不执行；外部命令模式将 `launch` 标记为 `shell`，启动命令原样传递给系统 shell 执行，不解析、不改写，命令为空时不启动进程；服务直连模式仅记录目标 origin 地址，不拉起任何本地进程。当处于已连接或正在启动状态时，切换连接模式必须先弹出二次确认对话框，确认后主动断开当前活动会话，严禁自动连接至新模式。未检测到冻结引擎文件时返回 `missing-engine` 错误。应用严禁在运行时动态内置或释放独立 Python 解释器。
+- 标准账套初始化与接管：`init_ledger` 指令仅在用户显式选定的工作目录中写入预设的标准账套结构，并写入版本化的 `.beandesk` 标识文件（包含 `version` 与 `locale` 的标准 JSON 格式；兼容历史纯文本 `beandesk` 并视为第 1 版）。若目标目录已存在 `main.bean`，则拒绝执行并返回 `ledger-exists`，应用不开放通用磁盘写入接口。账套结构初始化时自动包含忽略 `.backup_key`、`.env` 与 `backups/` 的 `.gitignore` 文件，并写入 `policies/README.md` 与 `policies/base/` 制度目录（包含会计科目指南、凭证归档规范、日常记账 SOP，其中 `zh-CN` 准则附带自动化规则 `rules.toml`）。
+  - 准则与写入确认契约：桌面端初始化、结构升级与接管均必须弹出确认弹窗；在空目录点击“连接”时同样拉起该弹窗，启动引擎过程中严禁静默写入账套结构。操作必须显式指定会计准则与记账币种（二者联动绑定，更改币种即同步切换准则）。弹窗默认预选 `zh-CN` / CNY，已有有效标记时继承现有准则。系统严禁隐式读取操作系统语言作为账套准则。系统预设准则包存放于 `src-tauri/src/ledger_presets/`，清单文件为 `locales.toml`。MCP 调用 `init_ledger` 与 `upgrade_ledger` 必须显式传递 `locale`（`zh-CN` 或 `en`，不可缺省；未支持值返回 `unsupported-locale`，未就绪国家码返回 `missing-pack`），且仅在显式传递 `confirmWrite: true` 时方可执行写盘。
+  - 接管与升级：未包含 `.beandesk` 标识的目录判定为外部既有账本，备份功能默认停用；设置页提供“接管为标准账套”（`upgrade_ledger`）功能。目录存在历史版本标识或缺失基线文件时提供“升级账套结构”。两类操作均仅增量补充缺失的 `policies/base`、`.gitignore` 规则项与标识文件，写入前后自动生成 Git 快照，严禁改动 `data/` 下的记账分录。
+- 工作目录备份契约：位于设置页的“数据备份”模块。
+  - Git 自动快照：仅在工作目录内部执行本地版本记录（纳入版本控制的文件严格限定为 `main.bean`、`config/`、`data/`、`policies/`），依赖文件监听与防抖机制自动触发，不提供额外的无状态快照按钮。当目录包含 `.beandesk` 标记且用户启用了 Git 自动保存时，启动监听时立即生成首份基线快照，后续变动按防抖时间窗触发本地提交。原始凭证文件严禁纳入 Git 跟踪。
+  - restic 加密备份：基于随应用内置分发的 restic 0.19.1 执行。用户配置加密口令后可手动触发备份；开启自动备份后增量归档至所有已配置且就绪的目标存储。目标存储支持添加多个本地目录或 S3 兼容对象存储桶（兼容 Cloudflare R2、MinIO、AWS S3，配置字段严格对齐 PicGo S3 规范）。新增或编辑目的地均须在对话框中确认后方写入 `backup.json`；历史“单本地 + 单云端”槽位在数据加载时平滑迁移至 `dests[]` 数组。备份范围完整覆盖 `main.bean`、`config/`、`data/`、`documents/`、`policies/`，利用 restic 内容分块机制仅上传新增或修改的数据块。用户修改加密口令时，系统为所有已初始化的仓库执行密钥轮转。快照完整性抽查失败的状态持久化记录于本机，后续执行备份时即使内容未发生变更亦会强制重新抽查。快照保留淘汰策略：保留最近 48 小时内的全部快照，超出部分按 30 天 / 12 周 / 24 个月梯度稀释。当文件内容未发生变动时，追加 `--skip-if-unchanged` 参数以避免生成冗余快照。备份仓库存储路径严禁嵌套在账套工作目录内部。
+  - 异步执行与凭证隔离：备份、恢复、配置保存与连通性测试等高耗时操作必须通过 `spawn_blocking` 异步执行，严禁阻塞主线程；文件监听线程内部严禁持有 `watch` 互斥锁。认证口令通过 restic `--password-file` 参数指向工作目录内的 `.backup_key` 文件，S3 访问密钥通过子进程环境变量注入，严禁将敏感凭据作为命令行参数传递。
+  - 数据边界原则：不提供中心化云存储服务，不代管用户对象存储桶，不自动向远程仓库执行 `git push`。备份配置存储于本机 `backup.json`，加密口令存储于工作目录 `.backup_key`，均不得写入 `connection.json`，亦严禁提交进本仓库。运行日志中严禁打印加密口令与 S3 访问密钥明文。开发环境使用 `make restic` 下载当前平台的二进制可执行文件；构建发布流程严格按目标平台的 triple 拉取对应版本并基于官方发布 SHA256 校验和进行完整性校验。
+- 启动命令规范：仓库根目录严禁创建 `package.json`。浏览器开发环境执行 `make dev`，本地调试服务监听于 `http://127.0.0.1:5188`。桌面端开发环境执行 `make desktop`（等价于 `bunx @tauri-apps/cli dev`）。严禁将其修改为 `npm run tauri dev`，亦不得在仓库根目录新建 Node 工程。
+- 前端配置与构建目录契约：Tauri CLI 启动后工作目录默认进入 `src-tauri`。`beforeDevCommand` 与 `beforeBuildCommand` 配置中必须指定 `cwd: "../web"` 再执行构建命令（`bun run ensure-docs && bun run dev` 与 `bun run ensure-docs && bun run build`）。严禁在命令字符串本身拼接 `../web` 前缀，以防在不同层级目录下执行时路径寻址失效。`devUrl` 必须与 Vite 服务的 host 和 port 保持严格一致。桌面端打包构建直接读取 `web/dist` 产物。
+- 连接日志契约：设置页展示的每行连接日志均通过 log 插件同步持久化至本机日志目录。单日志文件大小上限为 10MB，超出上限后从文件头部丢弃最旧的历史日志行，最新日志保留在原文件中，不按日期滚动拆分文件。前端页面上的清除日志操作仅清空当前渲染窗口的状态展示，不删除磁盘上的物理日志文件。
+- 桌面版本更新与发布流程：桌面安装包仅覆盖 macOS、Windows 和 Linux 三大平台。仅当推送到远端的 Git 标签（`v*`）与 `tauri.conf.json`、`web/package.json` 及 `src-tauri/Cargo.toml` 中的版本号严格保持一致时，方可触发 `.github/workflows/release.yml` 发布工作流。流水线首先在轻量 Ubuntu 运行器上核验版本号一致性、签名密钥配置与前端构建产物，完全通过后再并行分发五个目标平台的编译流水线。构建产物统一发布至 Draft Release 草稿，待五个平台的构建任务全部执行成功后方可手动正式发布；草稿状态的 Release 不会被桌面更新器识别为 latest 版本。更新日志内容来自 `latest.json` 中的 `notes` 字段，由 `updater-notes.yml` 自动化写入，严禁向 `tauri-action` 传入 `releaseBody` 参数。Linux 构建必须使用官方 `ubuntu-22.04` 与公开仓库的 `ubuntu-22.04-arm` 运行器，严禁使用仿真模拟 Arm 环境。Intel Mac 运行环境构建运行于 `macos-15-intel` 实例，Apple Silicon 运行于 `macos-latest` 实例，严禁在 ARM 运行器上通过 Rosetta 交叉编译 x86_64 Python 运行时。桌面更新签名的私钥严格保存在 GitHub Secret 中，公钥配置于 `tauri.conf.json`，严禁向代码仓库提交私钥文件。当前版本不提供 Android 与 iOS 移动端支持。
+- 日历订阅服务契约：日历模块路由位于 `/calendar`，独立于财务报表请求链路，亦不纳入系统设置模块。数据源配置入口位于日历页内部的弹窗中。应用不随附任何法定纳税征期等日程目录。同一时段仅允许激活单一数据源：本地 `.ics` 文件，或用户粘贴的 HTTPS ICS 订阅地址（`webcal://` 协议自动规范化为 `https://`）。此两项数据源能力仅在桌面端可用，浏览器环境访问日历页为空状态。弹窗内的清除操作将数据源重置为空；读取到未识别的数据源结构时视为未配置。日历配置存储于本机 `calendar.json`，与 `connection.json` 及 `backup.json` 保持物理隔离。本机维护缓存副本 `calendar-copy.json`：页面打开时优先呈现缓存数据；订阅源更新策略遵循 24 小时检查周期（或遵循订阅源声明的 `REFRESH-INTERVAL` / `X-PUBLISHED-TTL`，最小刷新间隔限制为 1 小时），携带 ETag 与 If-Modified-Since 请求头进行条件请求，页面手动刷新按钮可立即触发检查；网络请求失败时平滑降级呈现缓存副本，并在弹窗内展示上次成功同步时间；本地文件每次展示时重新读取；页面渲染与应用打开时的待办提醒共享同一次数据加载结果。距到期时间 7 天内的待办事项，按 UID 与到期日组合维度仅弹出一次 Sonner 消息与系统通知横幅。主窗口关闭隐藏至系统托盘时后台待办提醒保持有效；自托盘退出应用后终止全部提醒。日历边界原则：不提供中心化日历提醒服务，不采用后台轮询机制，不支持 CalDAV 双向同步协议，不将财务账套解析为日历数据。读取本机文件仅通过 `read_user_text_file` API，且仅允许访问用户通过对话框显式选中的绝对路径。未连接 Fava 服务时日历模块仍可正常打开与查阅。
+- 用户手册窗口契约：桌面端维护独立的二级窗口（label 为 `handbook`），独立于报表请求链路与系统设置。主窗口初始化就绪后，在隐藏状态下预热创建该手册窗口，用户点击手册图标时仅执行显示或聚焦操作，主窗口保持当前页面路由不变。关闭手册窗口或主窗口时均仅执行隐藏逻辑；自托盘退出应用时统一销毁所有窗口。手册窗口加载打包随附的 Fumadocs 静态导出产物（`/docs/index.html` 或 `/docs/zh-CN/index.html`），初始窗口尺寸与主窗口保持一致。未连接 Fava 服务状态下手册窗口仍可独立打开与查阅。手册窗口不加载 DesktopProvider 启动逻辑，亦不执行 AppUpdate 版本检查流程。严禁将 Next.js 运行依赖引入 `web/` 目录。不提供独立的线上文档站点。
+- 本机 MCP 服务契约：基于桌面端同一可执行文件构建，仅接受独立的 `mcp` 启动参数（严禁配置为 `--mcp`，亦不校验 argv0）。通过 stdio 管道提供标准 JSON-RPC 通信。MCP 读取本机 `connection.json`，与桌面设置页共享同一份账套工作目录与 Fava origin 地址。系统不提供云端 MCP 服务，亦不监听外部 HTTP 端口。设置页复制的 MCP 配置严格对齐 `{ command: 当前可执行文件路径, args: ["mcp"] }`。
+  - 账套管理工具集：包含 `get_connection`、`init_ledger`（执行写入必须显式传递 `confirmWrite: true`，且 `locale` 字段为必填项：支持 `zh-CN` 或 `en`）、`upgrade_ledger`（同样必须包含显式写入确认并传递 `locale`；目录已存在 `main.bean` 时执行标准账套接管或结构升级，严禁改动 `data/` 下的记账分录）、`check_ledger`。
+  - 合规核查工具（check_ledger）：首先调用 `bean-check` 核验 Beancount 语法完整性与借贷平衡；自动化规则的执行基线源于随打包分发的会计准则包，自定义规则仅执行本机 `policy.json` 中上次经审核批准的副本（磁盘上的 TOML 规则文件仅用于计算校验指纹）。`init_ledger` 与 `upgrade_ledger` 在用户确认写入后幂等完成规则播种；未播种或未获审核批准的自定义规则不参与合规检查。规则的审核批准、版本回滚与会计准则切换操作仅限在桌面端图形界面中完成，MCP 端不提供此类写入工具。检查结果中 `error` 级别触发拦截报错，`warning` 级别仅作提示。核验通过仅代表账表格式与自动化规则匹配，不构成法定税务与审计鉴定。
+  - 只读报表与业务指引工具：只读 Fava 工具透明转发前端界面已使用的 GET 请求（`get_fava`、`get_ledger`、`run_bql`、三张主表、`get_journal`、`list_documents`）。业务策略工具 `list_policies` 与 `get_policy` 仅读取工作目录 `policies/` 下最多两层深度的 Markdown 文件（包含 `policies/base`），不向外输出 TOML 机器规则的原始文本，不提供写盘接口，亦不依赖 Fava 服务存活。记账分录录入仍由专用记账技能编辑月度文件完成，MCP 服务不代理 `add_entries` 或 `source` 写入接口。严禁推测或篡改账套路径，不向外部暴露加密口令、日历私有地址或凭证文件原始字节。
+  - 手册查询工具（get_handbook）：读取打包随附的 `docs/content` MDX 内容，不依赖 Fava 服务存活：不传 `page` 参数时返回手册目录，传入 slug 或文章标题时返回具体章节内容；支持的 `locale` 为 `en` 或 `zh-CN`。手册工具主要用于辅助查询操作界面、数据备份、日历订阅与财务报表功能，不作为记账分录的业务规范来源。
+  - 响应渲染约定：MCP 卡片渲染（`displayBlock`）与账套已启用的会计准则包绑定（`zh-CN` 或 `en`）：`init_ledger` 与 `upgrade_ledger` 工具依据请求中传入的 `locale` 呈现，其余工具依据工作目录 `.beandesk` 标记呈现；未标记或未就绪的准则统一回退至英文呈现，不读取操作系统语言。
 
 ## 5. 技术栈与包管理约束
 
 - 包管理器：必须使用 Bun 1.1 或更高版本，严禁使用 npm、yarn 或 pnpm 执行依赖安装或脚本运行。
-- 组件库：基于 shadcn/ui，原子组件存放于 src/components/ui/。
-- 国际化支持：文案由 src/i18n/ 统一管理，禁止在页面和组件中硬编码文本。新增键名需在 en.ts 与 zh-CN.ts 保持严格对齐。没有手动选择时，浏览器用 `navigator.languages`，桌面端用操作系统的首选语言。未本地化的桌面包里，WebView 的 `navigator.language` 会停在英语，不能当成用户的本机语言。
-- 中文引号：本仓库所有中文只用 “”。界面、手册、README、技能和本规范都一样。不要用「」或『』。
+- 组件库：基于 shadcn/ui，原子组件存放于 `src/components/ui/`。
+- 国际化支持：文案由 `src/i18n/` 统一管理，严禁在页面和组件中硬编码文本。新增键名必须在 `en.ts` 与 `zh-CN.ts` 之间保持严格双向对齐。用户未手动选择语言时，浏览器环境采用 `navigator.languages`，桌面端采用操作系统的首选语言。未完全本地化的桌面打包环境中，WebView 的 `navigator.language` 可能回退为英语，不得将其直接作为用户的本机首选语言依据。
+- 中文引号规范：本仓库所有中文文本严格统一使用全角双引号 “”，严禁使用 「」 或 『』。此规范全面适用于用户界面、技术手册、README 说明、外部技能及本规范文档。
 
 ## 6. 界面设计规范
 
-- 响应式布局：桌面端以紧凑表格呈现明细，移动端折叠为卡片流。顶栏导航在移动端自动折叠为侧边抽屉。
-- 凭证穿透：交易分录与原始凭证在居中弹窗内预览。在桌面端通过 HTTP 插件获取凭证字节后做成本地对象预览。
-- 图表克制：不引入图表与重型动画库，所有财务报表使用表格呈现。
+- 响应式布局：桌面端以紧凑表格呈现明细，移动端自动折叠为卡片流。顶栏导航在移动端自动折叠为侧边抽屉。
+- 凭证穿透：记账分录与原始凭证在居中弹窗内联动预览。桌面端通过 HTTP 插件安全获取凭证文件字节并在本地构建对象 URL 预览。
+- 图表克制：不引入大型图表与重型动画库，所有财务报表与经营分析严格使用结构化表格呈现。
 
 ## 7. 质量校验与交付标准
 
-代码提交前在仓库根执行并通过 `make test`。它会跑 oxlint、应用源码与测试文件的类型检查、`bun test` 和 `cargo test`。`make build` 会类型检查页面代码和测试，再构建前端。推送到 `main` 的检查与此相同。
+- 代码提交前必须在仓库根目录执行并通过 `make test` 全量检查。该指令按序执行 oxlint 静态检查、应用源码与单元测试的 TypeScript 类型检查、bun 单元测试以及 cargo 单元测试。执行 `make build` 时，系统将先核验页面源码与测试代码的类型安全，随后完成前端工程构建。向 `main` 分支推送代码前的自动化流水线执行相同的验证标准。
 
-## 8. 用户手册
+## 8. 用户手册规范
 
-- 用户手册在 `docs/`（独立 Fumadocs 包）。桌面手册窗口加载 `docs/out` 同步到 `web/public/docs` 的静态导出；MCP `get_handbook` 仍读同一份 MDX。用 `make docs` 在 http://127.0.0.1:3200/docs 预览。`make docs-sync` 或桌面 `ensure-docs` 负责导出。不办在线文档站。
-- 仓库根不要新建 package.json。
-- 不要把 Next 放进 `web/`。
+- 用户手册源码存放于 `docs/`（独立 Fumadocs 工程）。桌面端手册窗口加载由 `docs/out` 导出并同步至 `web/public/docs` 的静态构建产物；本机 MCP `get_handbook` 工具直接读取同一套底层 MDX 源码。本地预览可通过在项目根目录执行 `make docs` 访问 `http://127.0.0.1:3200/docs`。手册静态导出与资产同步由 `make docs-sync` 或桌面构建预检指令 `ensure-docs` 统一处理。系统不提供独立的线上文档站点。
+- 仓库根目录严禁新建 `package.json`。
+- 严禁将 Next.js 依赖或配置文件引入 `web/` 目录。

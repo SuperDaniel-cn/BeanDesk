@@ -61,7 +61,7 @@ Download the installer for your operating system from the [Releases](https://git
 - Linux: x86_64 and ARM64 packages (.deb / .AppImage)
 
 After launching the app:
-1. New ledger: Select a folder to initialize a standard ledger skeleton with one click
+1. New ledger: Select a folder to initialize a standard ledger structure with one click
 2. Existing ledger: Select your existing ledger directory to open directly
 3. Remote connection: Enter the URL of an existing accounting service to connect directly
 

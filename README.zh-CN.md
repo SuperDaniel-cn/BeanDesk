@@ -34,7 +34,7 @@ BeanDesk 是一款运行在本地的复式记账桌面软件。不设云端账�
 ![利润表](./docs/images/zh/income-statement.png)
 ![现金流量表](./docs/images/zh/cash-flow.png)
 
-### 单据核对与凭证留存
+### 原始凭证留存与穿透核对
 日记账可预览关联的发票与银行回单。
 
 ![交易明细账与凭证穿透](./docs/images/zh/journal.png)

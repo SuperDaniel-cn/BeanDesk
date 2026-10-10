@@ -29,10 +29,10 @@ from = "2026-01-01"
 account = "Expenses:Payroll-员工薪酬:Salary-研发基本工资"
 require_tag = "rd"
 
-# 动作 2：要求交易对手 Payee 非空
+# 动作 2：要求往来单位 Payee 非空
 [[rules]]
 id = "bank-payee-required"
-description = "银行对公流水必须记录交易对手"
+description = "银行对公流水必须记录往来单位"
 severity = "error"
 from = "2026-01-01"
 account = "Assets:Bank-银行存款:*"
