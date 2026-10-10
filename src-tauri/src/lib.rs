@@ -458,7 +458,7 @@ fn open_windows_url(url: &str) -> Result<(), String> {
     use std::ptr::{null, null_mut};
 
     #[link(name = "shell32")]
-    extern "system" {
+    unsafe extern "system" {
         fn ShellExecuteW(
             hwnd: *mut core::ffi::c_void,
             lp_operation: *const u16,
