@@ -7,7 +7,7 @@ use time::OffsetDateTime;
 
 use crate::ledger_preset::{LedgerPreset, preset};
 
-pub const SKELETON_VERSION: u32 = 2;
+pub const SKELETON_VERSION: u32 = 3;
 pub const APP_MARKER: &str = ".beandesk";
 pub const BACKUP_GITIGNORE: &str = "\
 .backup_key
@@ -191,7 +191,7 @@ pub fn upgrade_ledger_tree(directory: &Path, locale: &str) -> Result<UpgradeRepo
     }
     let adopted = inspect.kind == "foreign";
     let before = crate::backup::git_snapshot(directory).is_err();
-    let mut written = write_missing_baseline(directory, pack)?;
+    let mut written = sync_baseline(directory, pack)?;
     write_marker(directory, locale)?;
     written.push(APP_MARKER.to_string());
     let after = crate::backup::git_snapshot(directory).is_err();
@@ -250,9 +250,8 @@ fn needs_upgrade(directory: &Path, version: Option<u32>, locale: Option<&str>) -
     }
 }
 
-fn baseline_files(pack: &LedgerPreset) -> Vec<(&'static str, &'static str)> {
+fn base_files(pack: &LedgerPreset) -> Vec<(&'static str, &'static str)> {
     let mut files = vec![
-        ("policies/README.md", pack.policies_readme),
         ("policies/base/chart-of-accounts.md", pack.chart_of_accounts),
         ("policies/base/document-filing.md", pack.document_filing),
         ("policies/base/bookkeeping-guide.md", pack.bookkeeping_guide),
@@ -260,6 +259,12 @@ fn baseline_files(pack: &LedgerPreset) -> Vec<(&'static str, &'static str)> {
     if let Some(rules) = pack.rules {
         files.push(("policies/base/rules.toml", rules));
     }
+    files
+}
+
+fn baseline_files(pack: &LedgerPreset) -> Vec<(&'static str, &'static str)> {
+    let mut files = vec![("policies/README.md", pack.policies_readme)];
+    files.extend(base_files(pack));
     files
 }
 
@@ -271,7 +276,7 @@ fn baseline_missing(directory: &Path, pack: &LedgerPreset) -> bool {
         || !directory.join("documents").is_dir()
 }
 
-fn write_missing_baseline(directory: &Path, pack: &LedgerPreset) -> Result<Vec<String>, String> {
+fn sync_baseline(directory: &Path, pack: &LedgerPreset) -> Result<Vec<String>, String> {
     let mut written = Vec::new();
     let documents = directory.join("documents");
     if !documents.is_dir() {
@@ -282,9 +287,18 @@ fn write_missing_baseline(directory: &Path, pack: &LedgerPreset) -> Result<Vec<S
         written.push(".gitignore".into());
     }
     fs::create_dir_all(directory.join("policies/base")).map_err(|error| error.to_string())?;
-    for (rel, contents) in baseline_files(pack) {
-        if write_missing(&directory.join(rel), contents)? {
+    if write_missing(&directory.join("policies/README.md"), pack.policies_readme)? {
+        written.push("policies/README.md".into());
+    }
+    for (rel, contents) in base_files(pack) {
+        if write_if_changed(&directory.join(rel), contents)? {
             written.push(rel.to_string());
+        }
+    }
+    if pack.rules.is_none() {
+        let stale_rules = directory.join("policies/base/rules.toml");
+        if stale_rules.is_file() {
+            fs::remove_file(&stale_rules).map_err(|error| error.to_string())?;
         }
     }
     Ok(written)
@@ -386,6 +400,16 @@ fn write_missing(path: &Path, contents: &str) -> Result<bool, String> {
         Err(error) if error.kind() == ErrorKind::AlreadyExists => Ok(false),
         Err(error) => Err(error.to_string()),
     }
+}
+
+fn write_if_changed(path: &Path, contents: &str) -> Result<bool, String> {
+    if let Ok(current) = fs::read_to_string(path) {
+        if current == contents {
+            return Ok(false);
+        }
+    }
+    atomic_write(path, contents)?;
+    Ok(true)
 }
 
 fn effectively_empty(directory: &Path) -> Result<bool, String> {
@@ -574,7 +598,7 @@ mod tests {
         assert!(root.join("policies/base/rules.toml").is_file());
         let marker: LedgerMarker =
             serde_json::from_str(&fs::read_to_string(root.join(APP_MARKER)).unwrap()).unwrap();
-        assert_eq!(marker.version, 2);
+        assert_eq!(marker.version, SKELETON_VERSION);
         assert_eq!(marker.locale, "zh-CN");
         assert_eq!(inspect_ledger(&root).unwrap().kind, "current");
         assert!(
@@ -583,6 +607,72 @@ mod tests {
                 .written
                 .is_empty()
         );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn upgrades_a_v2_ledger_and_refreshes_base_guides_without_touching_custom_files() {
+        let root = scratch("upgrade-v2");
+        init_ledger_tree(&root, "zh-CN").unwrap();
+        fs::write(
+            root.join(APP_MARKER),
+            "{\"version\":2,\"locale\":\"zh-CN\"}\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("policies/base/bookkeeping-guide.md"),
+            "old-v2-bookkeeping-guide\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("policies/base/document-filing.md"),
+            "old-v2-document-filing\n",
+        )
+        .unwrap();
+        fs::write(root.join("policies/README.md"), "keep-user-readme\n").unwrap();
+        fs::write(root.join("policies/travel.md"), "keep-custom-policy\n").unwrap();
+        fs::write(root.join("data/2026-03.bean"), "keep-entry\n").unwrap();
+
+        let inspect = inspect_ledger(&root).unwrap();
+        assert_eq!(inspect.kind, "outdated");
+        assert_eq!(inspect.version, Some(2));
+
+        let report = upgrade_ledger_tree(&root, "zh-CN").unwrap();
+        assert!(!report.adopted);
+        assert_eq!(report.version, SKELETON_VERSION);
+        assert!(
+            report
+                .written
+                .contains(&"policies/base/bookkeeping-guide.md".into())
+        );
+        assert!(
+            report
+                .written
+                .contains(&"policies/base/document-filing.md".into())
+        );
+        assert!(
+            !report
+                .written
+                .contains(&"policies/base/chart-of-accounts.md".into())
+        );
+        assert!(
+            fs::read_to_string(root.join("policies/base/bookkeeping-guide.md"))
+                .unwrap()
+                .contains("入账前查重")
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("policies/README.md")).unwrap(),
+            "keep-user-readme\n"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("policies/travel.md")).unwrap(),
+            "keep-custom-policy\n"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("data/2026-03.bean")).unwrap(),
+            "keep-entry\n"
+        );
+        assert_eq!(inspect_ledger(&root).unwrap().kind, "current");
         let _ = fs::remove_dir_all(&root);
     }
 
